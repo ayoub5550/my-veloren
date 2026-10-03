@@ -19,3 +19,4 @@ Artifacts/
 native/touch-tests/src/touch.rs
 native/touch-tests/target/
 native/touch-tests/Cargo.lock
+native/touch-tests/src/mobile_gpu.rs

@@ -1,7 +1,8 @@
 #!/bin/bash
 # Firebase Test Lab Game Loop run for the native Veloren APK (dev2+).
 #   FTL_DEVICE=r8q FTL_VERSION=33 FTL_TIMEOUT=15m FTL_SCENARIOS=1,2 tools/ftl.sh native/out/my-veloren-dev3.apk dev3-r8q
-# dev.3 scenarios: 1 = touch-injected play + all checks, 2 = relaunch, layout restored + reset.
+# Scenarios: 1 = touch-injected play + all dev.3 checks, 2 = relaunch, layout restored + reset,
+# 3 = dev.4 graphics-tier benchmark (desktop/high/medium/low, 40 s each) + 10-min soak (use FTL_TIMEOUT=35m).
 # Results: grep 'VEL-CHECK\|VEL-SCENARIO' in <OUT>/<device>/logcat.
 # Project ayoub-261d7 (Spark: ~5 physical tests/day). Never enable billing; never cancel a running matrix.
 # Needs a service-account key (FIREBASE_SA_JSON, never committed). Run as a background job (~15 min with upload).
