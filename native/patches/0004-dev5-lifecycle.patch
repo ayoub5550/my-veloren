@@ -1,0 +1,1676 @@
+diff --git a/server/src/lib.rs b/server/src/lib.rs
+index e78fe3874..27131e692 100644
+--- a/server/src/lib.rs
++++ b/server/src/lib.rs
+@@ -1575,6 +1575,15 @@ impl Server {
+         info!("SQL log mode changed to {:?}", sql_log_mode);
+     }
+ 
++    /// my-veloren dev.5: persist all logged-in characters on the next tick
++    /// (singleplayer autosave when the Android app goes to the background).
++    pub fn request_persistence(&mut self) {
++        self.state
++            .ecs()
++            .write_resource::<sys::PersistenceScheduler>()
++            .force();
++    }
++
+     pub fn disconnect_all_clients(&mut self) {
+         info!("Disconnecting all clients due to local console command");
+         self.disconnect_all_clients_requested = true;
+diff --git a/server/src/sys/mod.rs b/server/src/sys/mod.rs
+index 8fa45bf21..b2149bf40 100644
+--- a/server/src/sys/mod.rs
++++ b/server/src/sys/mod.rs
+@@ -63,6 +63,8 @@ pub fn run_sync_systems(ecs: &mut specs::World) {
+ pub struct SysScheduler<S> {
+     interval: Duration,
+     last_run: Instant,
++    /// my-veloren dev.5: run on the next check regardless of the interval.
++    forced: bool,
+     _phantom: PhantomData<S>,
+ }
+ 
+@@ -71,12 +73,16 @@ impl<S> SysScheduler<S> {
+         Self {
+             interval,
+             last_run: Instant::now(),
++            forced: false,
+             _phantom: PhantomData,
+         }
+     }
+ 
++    /// my-veloren dev.5: make the next `should_run` return true.
++    pub fn force(&mut self) { self.forced = true; }
++
+     pub fn should_run(&mut self) -> bool {
+-        if self.last_run.elapsed() > self.interval {
++        if std::mem::take(&mut self.forced) || self.last_run.elapsed() > self.interval {
+             self.last_run = Instant::now();
+ 
+             true
+@@ -91,6 +97,7 @@ impl<S> Default for SysScheduler<S> {
+         Self {
+             interval: Duration::from_secs(30),
+             last_run: Instant::now(),
++            forced: false,
+             _phantom: PhantomData,
+         }
+     }
+diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
+index 4cdf71b91..0c7963eef 100644
+--- a/voxygen/src/android.rs
++++ b/voxygen/src/android.rs
+@@ -9,19 +9,27 @@
+ //! * JNI (dev.3): vibration (`VelorenActivity.vibrate`) and ending a Test Lab
+ //!   game loop (`VelorenActivity.finishLoop`).
+ //! * Test Lab game loop scenarios (dev.3) drive the game by injecting touches.
++//! * dev.5: lifecycle (see `crate::lifecycle`), Back = Escape, asset extraction
++//!   with a progress dialog while the event loop keeps running, crash reports.
+ #![allow(unsafe_code)]
+ 
+ use std::{
++    cell::RefCell,
+     collections::{BTreeSet, HashMap},
+-    io::{BufRead, BufReader, Write},
++    io::{BufRead, BufReader, Read, Write},
+     path::{Path, PathBuf},
+-    sync::{Mutex, OnceLock, mpsc},
++    sync::{
++        Arc, Mutex, OnceLock,
++        atomic::{AtomicBool, AtomicU64, Ordering},
++        mpsc,
++    },
+     time::{Duration, Instant},
+ };
+ use winit::{
+     application::ApplicationHandler,
+     event::{DeviceId, ElementState, Event, MouseButton, TouchPhase, WindowEvent},
+     event_loop::ActiveEventLoop,
++    keyboard::{Key, KeyCode, NamedKey, PhysicalKey},
+     platform::{
+         android::{EventLoopBuilderExtAndroid, activity::AndroidApp},
+         pump_events::EventLoopExtPumpEvents,
+@@ -59,9 +67,29 @@ pub(crate) fn alog(prio: i32, msg: &str) {
+ macro_rules! ainfo { ($($t:tt)*) => { alog(4, &format!($($t)*)) } }
+ macro_rules! aerror { ($($t:tt)*) => { alog(6, &format!($($t)*)) } }
+ 
+-/// Bumped whenever the shipped asset tarball changes.
++/// Fallback asset version when the APK has no `assets/assets.version` (the
++/// build script writes the tarball's sha256 there, dev.5).
+ const ASSET_VERSION: &str = env!("CARGO_PKG_VERSION");
+ 
++/// True if this launch extracted the asset tree (first launch / new assets).
++static EXTRACTED_THIS_LAUNCH: AtomicBool = AtomicBool::new(false);
++
++thread_local! {
++    /// dev.5: the winit event loop is created before asset extraction and
++    /// pumped while it runs (keeps the Android UI thread responsive: it waits
++    /// on this thread for every lifecycle callback). `bool` = window resumed.
++    static EARLY_LOOP: RefCell<Option<(crate::window::EventLoop, bool)>> = const { RefCell::new(None) };
++}
++
++struct WaitResumed(bool);
++impl ApplicationHandler for WaitResumed {
++    fn resumed(&mut self, _: &ActiveEventLoop) { self.0 = true; }
++
++    fn suspended(&mut self, _: &ActiveEventLoop) { self.0 = false; }
++
++    fn window_event(&mut self, _: &ActiveEventLoop, _: winit::window::WindowId, _: WindowEvent) {}
++}
++
+ pub fn autostart_enabled() -> bool { std::env::var_os("VELOREN_ANDROID_AUTOSTART").is_some() }
+ 
+ pub fn app() -> &'static AndroidApp { APP.get().expect("android app not set") }
+@@ -70,24 +98,10 @@ pub fn app() -> &'static AndroidApp { APP.get().expect("android app not set") }
+ /// native window exists), so the window + wgpu surface can be created
+ /// immediately afterwards like on desktop.
+ pub fn build_event_loop() -> crate::window::EventLoop {
+-    let mut event_loop = winit::event_loop::EventLoop::builder()
+-        .with_android_app(app().clone())
+-        .build()
+-        .expect("failed to build android event loop");
+-
+-    struct WaitResumed(bool);
+-    impl ApplicationHandler for WaitResumed {
+-        fn resumed(&mut self, _: &ActiveEventLoop) { self.0 = true; }
+-
+-        fn window_event(
+-            &mut self,
+-            _: &ActiveEventLoop,
+-            _: winit::window::WindowId,
+-            _: WindowEvent,
+-        ) {
+-        }
+-    }
+-    let mut h = WaitResumed(false);
++    let (mut event_loop, resumed) = EARLY_LOOP
++        .with(|l| l.borrow_mut().take())
++        .unwrap_or_else(|| (new_event_loop(), false));
++    let mut h = WaitResumed(resumed);
+     while !h.0 {
+         let _ = event_loop.pump_app_events(Some(Duration::from_millis(50)), &mut h);
+     }
+@@ -99,6 +113,13 @@ pub fn build_event_loop() -> crate::window::EventLoop {
+     event_loop
+ }
+ 
++fn new_event_loop() -> crate::window::EventLoop {
++    winit::event_loop::EventLoop::builder()
++        .with_android_app(app().clone())
++        .build()
++        .expect("failed to build android event loop")
++}
++
+ fn redirect_stdio_to_logcat() {
+     unsafe {
+         let mut fds = [0i32; 2];
+@@ -127,42 +148,134 @@ fn redirect_stdio_to_logcat() {
+     }
+ }
+ 
++/// Version of the asset tarball inside the APK (`assets/assets.version`).
++fn apk_asset_version(app: &AndroidApp) -> String {
++    let name = std::ffi::CString::new("assets.version").unwrap();
++    app.asset_manager()
++        .open(&name)
++        .and_then(|mut a| {
++            let mut s = String::new();
++            a.read_to_string(&mut s).ok().map(|_| s.trim().to_owned())
++        })
++        .filter(|s| !s.is_empty())
++        .unwrap_or_else(|| ASSET_VERSION.to_owned())
++}
++
++struct CountingReader<R> {
++    inner: R,
++    read: Arc<AtomicU64>,
++}
++
++impl<R: Read> Read for CountingReader<R> {
++    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
++        let n = self.inner.read(buf)?;
++        self.read.fetch_add(n as u64, Ordering::Relaxed);
++        Ok(n)
++    }
++}
++
++/// Extract `assets.tar` once per asset version (5.4). Runs on a worker thread
++/// while this thread keeps pumping the event loop, and reports progress to a
++/// Java dialog.
+ fn extract_assets(app: &AndroidApp, data: &Path) -> PathBuf {
+     let root = data.join("veloren");
+-    let marker = root.join(format!(".assets-{ASSET_VERSION}"));
++    let marker = root.join(".assets-version");
+     let assets = root.join("assets");
+-    if marker.exists() && assets.is_dir() {
+-        ainfo!("android: assets already extracted at {}", assets.display());
++    let version = apk_asset_version(app);
++    let have = std::fs::read_to_string(&marker).unwrap_or_default();
++    if assets.is_dir() && have.trim() == version {
++        ainfo!("android: assets already extracted at {} (version {version})", assets.display());
+         return root;
+     }
++    EXTRACTED_THIS_LAUNCH.store(true, Ordering::SeqCst);
++    ainfo!(
++        "android: extracting assets (apk version {version}, installed {:?})",
++        have.trim()
++    );
+     let t0 = Instant::now();
++    let _ = std::fs::remove_file(&marker);
+     let _ = std::fs::remove_dir_all(&assets);
+     std::fs::create_dir_all(&root).expect("create asset root");
+-    let am = app.asset_manager();
+-    let name = std::ffi::CString::new("assets.tar").unwrap();
+-    let asset = am
+-        .open(&name)
+-        .expect("assets.tar missing from APK (assets/assets.tar)");
+-    let reader = BufReader::with_capacity(1 << 20, asset);
+-    let mut ar = tar::Archive::new(reader);
+-    ar.unpack(&root).expect("failed to unpack assets.tar");
+-    std::fs::File::create(&marker)
+-        .and_then(|mut f| f.write_all(b"ok"))
+-        .ok();
++    // AAsset is not Send: open it on the worker thread.
++    let total = Arc::new(AtomicU64::new(0));
++    let read = Arc::new(AtomicU64::new(0));
++    let (app2, root2, total2, read2) = (app.clone(), root.clone(), Arc::clone(&total), Arc::clone(&read));
++    let job = std::thread::Builder::new()
++        .name("asset-extract".into())
++        .spawn(move || {
++            let name = std::ffi::CString::new("assets.tar").unwrap();
++            let asset = app2
++                .asset_manager()
++                .open(&name)
++                .ok_or_else(|| "assets.tar missing from APK (assets/assets.tar)".to_owned())?;
++            total2.store(asset.length() as u64, Ordering::SeqCst);
++            let reader = CountingReader {
++                inner: BufReader::with_capacity(1 << 20, asset),
++                read: read2,
++            };
++            let mut ar = tar::Archive::new(reader);
++            ar.unpack(&root2).map_err(|e| e.to_string())
++        })
++        .expect("spawn asset-extract");
++    let mut event_loop = new_event_loop();
++    let mut h = WaitResumed(false);
++    let mut last_pct = u32::MAX;
++    jni_send(JniCall::Progress(0));
++    while !job.is_finished() {
++        let _ = event_loop.pump_app_events(Some(Duration::from_millis(50)), &mut h);
++        let pct = (read.load(Ordering::Relaxed) * 100 / total.load(Ordering::Relaxed).max(1)).min(100) as u32;
++        if pct != last_pct {
++            jni_send(JniCall::Progress(pct));
++            last_pct = pct;
++        }
++    }
++    let r = job.join().expect("asset-extract thread panicked");
++    jni_send(JniCall::ProgressDone);
++    if let Err(e) = r {
++        panic!("failed to unpack assets.tar: {e}");
++    }
++    std::fs::write(&marker, &version).ok();
+     ainfo!(
+-        "android: extracted assets to {} in {:.1}s",
++        "android: extracted assets to {} in {:.1}s ({} MB, version {version})",
+         assets.display(),
+-        t0.elapsed().as_secs_f32()
++        t0.elapsed().as_secs_f32(),
++        total.load(Ordering::Relaxed) >> 20
+     );
++    EARLY_LOOP.with(|l| *l.borrow_mut() = Some((event_loop, h.0)));
+     root
+ }
+ 
++/// dev.5 (5.5): write a crash report that the Java side offers to share on the
++/// next launch (`files/userdata/crash/*.txt`). Returns the file path.
++pub fn write_crash_report(kind: &str, text: &str) -> Option<PathBuf> {
++    let dir = DATA_DIR.get()?.join("userdata").join("crash");
++    std::fs::create_dir_all(&dir).ok()?;
++    let ts = std::time::SystemTime::now()
++        .duration_since(std::time::UNIX_EPOCH)
++        .map(|d| d.as_secs())
++        .unwrap_or(0);
++    let path = dir.join(format!("{kind}-{ts}.txt"));
++    let body = format!(
++        "my-veloren crash report\nkind: {kind}\nunix_time: {ts}\nvoxygen: {}\n\n{text}\n",
++        env!("CARGO_PKG_VERSION")
++    );
++    std::fs::write(&path, body).ok()?;
++    Some(path)
++}
++
+ #[unsafe(no_mangle)]
+ fn android_main(app: AndroidApp) {
+     // NOTE: no android_logger here: voxygen installs its own tracing subscriber
+     // (with a `log` bridge) and a second global logger aborts with SetLoggerError.
+     std::panic::set_hook(Box::new(|info| {
+         aerror!("PANIC: {info}");
++        // dev.5 (5.5): keep a shareable report (backtrace is symbolized with
++        // the unstripped .so from the build tree).
++        let bt = std::backtrace::Backtrace::force_capture();
++        let thread = std::thread::current().name().unwrap_or("?").to_owned();
++        if let Some(p) = write_crash_report("panic", &format!("{info}\nthread: {thread}\n\nbacktrace:\n{bt}")) {
++            aerror!("PANIC report written to {}", p.display());
++        }
+     }));
+     redirect_stdio_to_logcat();
+     let _ = APP.set(app.clone());
+@@ -171,6 +284,8 @@ fn android_main(app: AndroidApp) {
+         .internal_data_path()
+         .unwrap_or_else(|| PathBuf::from("/data/local/tmp/veloren"));
+     ainfo!("android: internal data path {}", data.display());
++    let _ = DATA_DIR.set(data.clone());
++    start_jni_thread();
+     let root = extract_assets(&app, &data);
+     // Written by VelorenActivity for Test Lab game loops; content = scenario.
+     let autostart_marker = std::fs::read_to_string(data.join("autostart")).ok();
+@@ -180,7 +295,6 @@ fn android_main(app: AndroidApp) {
+         .and_then(|s| s.trim().parse::<u32>().ok())
+         .unwrap_or(1);
+     ainfo!("android: autostart={autostart} scenario={scenario}");
+-    let _ = DATA_DIR.set(data.clone());
+     let userdata = data.join("userdata");
+     let config = userdata.join("voxygen");
+     let logs = userdata.join("logs");
+@@ -208,7 +322,6 @@ fn android_main(app: AndroidApp) {
+         }
+     }
+     let _ = std::io::stdout().flush();
+-    start_jni_thread();
+     crate::android_main_body::run();
+     ainfo!("android: game loop returned");
+ }
+@@ -218,6 +331,14 @@ fn android_main(app: AndroidApp) {
+ enum JniCall {
+     Vibrate(u32),
+     FinishLoop,
++    /// dev.5: first-launch extraction progress dialog (percent) / dismiss it.
++    Progress(u32),
++    ProgressDone,
++    /// dev.5 test: cover the game with an opaque activity for N ms, so Android
++    /// destroys the native window exactly like Home / app switch does.
++    CycleBackground(u32),
++    /// dev.5 test: inject a real KEYCODE_BACK through Instrumentation.
++    SendBack,
+ }
+ 
+ static JNI_TX: Mutex<Option<mpsc::Sender<JniCall>>> = Mutex::new(None);
+@@ -252,6 +373,18 @@ fn start_jni_thread() {
+                         )])
+                         .map(|_| ()),
+                     JniCall::FinishLoop => env.call_method(&activity, "finishLoop", "()V", &[]).map(|_| ()),
++                    JniCall::Progress(p) => env
++                        .call_method(&activity, "extractProgress", "(I)V", &[jni::objects::JValue::Int(
++                            p as i32,
++                        )])
++                        .map(|_| ()),
++                    JniCall::ProgressDone => env.call_method(&activity, "extractDone", "()V", &[]).map(|_| ()),
++                    JniCall::CycleBackground(ms) => env
++                        .call_method(&activity, "cycleBackground", "(I)V", &[jni::objects::JValue::Int(
++                            ms as i32,
++                        )])
++                        .map(|_| ()),
++                    JniCall::SendBack => env.call_method(&activity, "sendBack", "()V", &[]).map(|_| ()),
+                 };
+                 if let Err(e) = r {
+                     let _ = env.exception_describe();
+@@ -299,9 +432,18 @@ pub struct Probe {
+     pub trade_open: bool,
+     pub bag_open: bool,
+     pub map_open: bool,
++    /// dev.5: Esc menu open; occupied inventory slots and total item count.
++    pub esc_open: bool,
++    pub inv_slots: u32,
++    pub inv_items: u32,
+     pub ctx: touch::Context,
+ }
+ 
++static DROP_REQUEST: AtomicBool = AtomicBool::new(false);
++
++/// dev.5 test: the session drops one inventory stack when this returns true.
++pub fn take_drop_request() -> bool { DROP_REQUEST.swap(false, Ordering::SeqCst) }
++
+ static PROBE: Mutex<Option<Probe>> = Mutex::new(None);
+ 
+ pub fn set_probe(p: Probe) { *PROBE.lock().unwrap() = Some(p); }
+@@ -456,6 +598,8 @@ fn apply_outs(outs: Vec<Out>, gs: &mut GlobalState, out_events: &mut Vec<Event<(
+     }
+ }
+ 
++static BACK_PRESSES: AtomicU64 = AtomicU64::new(0);
++
+ /// Translate winit events. Touches go through `crate::touch`; once per frame
+ /// (`AboutToWait`) camera smoothing, haptics and the Test Lab autopilot run.
+ pub fn translate_touch(
+@@ -479,6 +623,34 @@ pub fn translate_touch(
+                 &mut out,
+             );
+         },
++        // dev.5 (5.3): the Android Back button acts as Escape (Esc menu / close
++        // window). winit reports it as `BrowserBack` and marks it handled, so
++        // Android never finishes the activity on Back.
++        Event::WindowEvent {
++            window_id,
++            event:
++                WindowEvent::KeyboardInput {
++                    device_id,
++                    mut event,
++                    is_synthetic,
++                },
++        } if event.logical_key == Key::Named(NamedKey::BrowserBack) => {
++            if event.state == ElementState::Pressed && !event.repeat {
++                ainfo!("android: Back -> Escape");
++                BACK_PRESSES.fetch_add(1, Ordering::SeqCst);
++            }
++            event.logical_key = Key::Named(NamedKey::Escape);
++            event.physical_key = PhysicalKey::Code(KeyCode::Escape);
++            event.text = None;
++            out.push(Event::WindowEvent {
++                window_id,
++                event: WindowEvent::KeyboardInput {
++                    device_id,
++                    event,
++                    is_synthetic,
++                },
++            });
++        },
+         Event::AboutToWait => {
+             let t_hook = std::time::Instant::now();
+             frame(state_name, gs, &mut out);
+@@ -508,9 +680,34 @@ fn frame(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut Vec<E
+     for ms in touch::take_haptics() {
+         vibrate(ms);
+     }
++    if state_name == Some("Session") {
++        let (tested, culled, us, _) = crate::scene::terrain::occlusion_stats();
++        let mut a = OCC_ACC.lock().unwrap();
++        a.0 += 1;
++        a.1 += tested as u64;
++        a.2 += culled as u64;
++        a.3 += us as u64;
++    }
+     autopilot(state_name, gs, out);
+ }
+ 
++/// dev.5 (5.6): occlusion-culling counters since the last bench begin
++/// (frames, chunks tested, chunks culled, µs spent).
++static OCC_ACC: Mutex<(u64, u64, u64, u64)> = Mutex::new((0, 0, 0, 0));
++
++fn occ_summary() -> String {
++    let a = *OCC_ACC.lock().unwrap();
++    let f = a.0.max(1) as f64;
++    format!(
++        "occ={} occ_tested={:.1} occ_culled={:.1} occ_pct={:.0}% occ_cost={:.0}us",
++        if crate::scene::terrain::OCCLUSION_CULLING.load(Ordering::Relaxed) { "on" } else { "off" },
++        a.1 as f64 / f,
++        a.2 as f64 / f,
++        if a.1 > 0 { a.2 as f64 * 100.0 / a.1 as f64 } else { 0.0 },
++        a.3 as f64 / f,
++    )
++}
++
+ // -------------------------------------------------------------- autopilot ---
+ //
+ // Firebase Test Lab game loop. Scenario 1: play with injected touches and
+@@ -541,7 +738,25 @@ enum Act {
+     SaveCache,
+     /// Wait until (re)created pipelines are ready, at most this many seconds.
+     WaitPipelines(f32),
++    /// dev.5: remember lifecycle counters before a background cycle.
++    LifeMark,
++    /// dev.5: cover the game with another activity for this many ms.
++    Background(u32),
++    /// dev.5: wait (at most s seconds) until the app is suspended / resumed.
++    WaitSuspended(f32),
++    WaitResumed(f32),
++    /// dev.5: drop one inventory stack, then wait until the client sees it.
++    DropItem,
++    WaitInvChange(f32),
++    /// dev.5: write a self-test crash report (no real crash).
++    CrashSelfTest,
++    /// dev.5: inject a real Back key press.
++    SendBack,
++    /// dev.5 (5.6): switch terrain occlusion culling on/off.
++    Occlusion(bool),
+     Finish,
++    /// dev.5: end the scenario and SIGKILL the process (no clean shutdown).
++    FinishKill,
+ }
+ 
+ #[derive(Default)]
+@@ -554,6 +769,14 @@ struct Rec {
+     speeds: Vec<f32>,
+     slow: f32,
+     max_fingers: usize,
++    /// dev.5: (suspends, resumes, presented) at `LifeMark`
++    life: (u32, u32, u64),
++    presented_at_resume: u64,
++    bg_paused: bool,
++    bg_muted: bool,
++    bg_surface_gone: bool,
++    resumed_after: f32,
++    inv_before: (u32, u32),
+ }
+ 
+ struct Pilot {
+@@ -651,6 +874,74 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
+         q.push(Act::Wait(1.0));
+     };
+     match scenario {
++        4 => {
++            // dev.5: 5 background/foreground cycles, then autosave + kill.
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::CrashSelfTest);
++            for _ in 0..5 {
++                q.push(Act::EnsureAlive(3));
++                q.push(Act::LifeMark);
++                q.push(Act::Background(3000));
++                q.push(Act::WaitSuspended(15.0));
++                q.push(Act::WaitResumed(30.0));
++                q.push(Act::Wait(4.0));
++                q.push(Act::Check("pause_resume"));
++            }
++            q.push(Act::Check("pause_resume_5x"));
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::EnsureGameInput(3));
++            q.push(Act::Begin("autosave"));
++            q.push(Act::DropItem);
++            q.push(Act::WaitInvChange(10.0));
++            q.push(Act::LifeMark);
++            q.push(Act::Background(120_000));
++            q.push(Act::WaitSuspended(15.0));
++            q.push(Act::Wait(4.0));
++            q.push(Act::Check("autosave_before_kill"));
++            q.push(Act::FinishKill);
++            return q;
++        },
++        5 => {
++            // dev.5: new process after the kill in scenario 4.
++            q.push(Act::Check("assets_once"));
++            q.push(Act::Check("save_after_kill"));
++            q.push(Act::Check("crash_report"));
++            q.push(Act::Check("activity_flags"));
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::EnsureGameInput(3));
++            q.push(Act::SendBack);
++            q.push(Act::Wait(2.5));
++            q.push(Act::Check("back_opens_menu"));
++            q.push(Act::SendBack);
++            q.push(Act::Wait(2.5));
++            q.push(Act::Check("back_closes_menu"));
++        },
++        6 => {
++            // dev.5 (5.6): occlusion culling A/B on the automatic tier. The same
++            // camera sweep is run with culling off and on, in both orders (ABBA)
++            // to cancel warm-up/thermal drift.
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::EnsureGameInput(3));
++            q.push(Act::WaitPipelines(90.0));
++            q.push(Act::Wait(10.0));
++            for (on, name, from, to) in [
++                (false, "occ-off-1", 0.30, 0.80),
++                (true, "occ-on-1", 0.80, 0.30),
++                (true, "occ-on-2", 0.30, 0.80),
++                (false, "occ-off-2", 0.80, 0.30),
++            ] {
++                q.push(Act::Occlusion(on));
++                q.push(Act::Wait(2.0));
++                q.push(Act::Down(CAM_ID, from, 0.22));
++                q.push(Act::BenchBegin(name));
++                q.push(Act::MoveTo(CAM_ID, to, 0.22, 30.0));
++                q.push(Act::BenchEnd(name));
++                q.push(Act::Up(CAM_ID));
++            }
++            q.push(Act::Occlusion(true));
++            q.push(Act::Check("occlusion_culls"));
++            q.push(Act::Check("occlusion_not_slower"));
++        },
+         3 => {
+             // dev.4 benchmark: same spot, slow camera sweep, one window per tier,
+             // then a 10 min soak on the automatic tier walking in circles.
+@@ -910,10 +1201,163 @@ fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (boo
+                 && read_settings_touch(gs).is_some_and(|t| t.buttons == touch::default_layout());
+             (ok, format!("jump={:?}", gs.settings.touch.layout(Ctl::Jump)))
+         },
++        "pause_resume" => {
++            use crate::lifecycle as l;
++            let drawn = l::presented().saturating_sub(rec.presented_at_resume);
++            let ok = l::suspends() == rec.life.0 + 1
++                && l::resumes() == rec.life.1 + 1
++                && !l::is_suspended()
++                && !gs.window.renderer().is_surface_suspended()
++                && rec.bg_surface_gone
++                && rec.bg_paused
++                && rec.bg_muted
++                && drawn >= 5
++                && l::resume_fails() == 0;
++            if ok {
++                *LIFE_OK.lock().unwrap() += 1;
++            }
++            (
++                ok,
++                format!(
++                    "cycle={} suspends={} resumes={} bg_surface_gone={} bg_server_paused={} \
++                     bg_muted={} back_after={:.1}s frames_drawn_after_resume={drawn} \
++                     resume_fails={} game_paused_now={}",
++                    l::resumes(),
++                    l::suspends(),
++                    l::resumes(),
++                    rec.bg_surface_gone,
++                    rec.bg_paused,
++                    rec.bg_muted,
++                    rec.resumed_after,
++                    l::resume_fails(),
++                    gs.paused(),
++                ),
++            )
++        },
++        "pause_resume_5x" => {
++            let n = *LIFE_OK.lock().unwrap();
++            (n >= 5, format!("{n}/5 background->foreground cycles passed, no crash"))
++        },
++        "autosave_before_kill" => {
++            use crate::lifecycle as l;
++            let ok = l::is_suspended()
++                && rec.bg_paused
++                && p.inv_slots + 1 == rec.inv_before.0;
++            if let Some(path) = DATA_DIR.get().map(|d| d.join("lifecycle_expect")) {
++                let _ = std::fs::write(path, format!("{} {}", p.inv_slots, p.inv_items));
++            }
++            (
++                ok,
++                format!(
++                    "inventory slots {} -> {} items {} -> {}; suspended={} server_paused={}; \
++                     killing the process with SIGKILL while in background",
++                    rec.inv_before.0,
++                    p.inv_slots,
++                    rec.inv_before.1,
++                    p.inv_items,
++                    l::is_suspended(),
++                    rec.bg_paused
++                ),
++            )
++        },
++        "save_after_kill" => {
++            let expect: Option<Vec<u32>> = DATA_DIR
++                .get()
++                .and_then(|d| std::fs::read_to_string(d.join("lifecycle_expect")).ok())
++                .map(|s| s.split_whitespace().filter_map(|v| v.parse().ok()).collect());
++            let ok = expect
++                .as_ref()
++                .is_some_and(|e| e.len() == 2 && e[0] == p.inv_slots && e[1] == p.inv_items);
++            (
++                ok,
++                format!(
++                    "inventory after kill + relaunch: slots={} items={}, expected {expect:?}",
++                    p.inv_slots, p.inv_items
++                ),
++            )
++        },
++        "assets_once" => {
++            let extracted = EXTRACTED_THIS_LAUNCH.load(Ordering::SeqCst);
++            let marker = DATA_DIR
++                .get()
++                .and_then(|d| std::fs::read_to_string(d.join("veloren/.assets-version")).ok())
++                .unwrap_or_default();
++            (
++                !extracted && !marker.is_empty(),
++                format!("extracted_this_launch={extracted} installed_version={}", marker.trim()),
++            )
++        },
++        "crash_report" => {
++            let report = DATA_DIR
++                .get()
++                .and_then(|d| std::fs::read_to_string(d.join("crash_last_report.txt")).ok())
++                .unwrap_or_default();
++            let ok = report.contains("kind: selftest");
++            (
++                ok,
++                format!(
++                    "Java collected the previous launch's report: {} bytes, selftest={ok}, \
++                     exit-info lines={}",
++                    report.len(),
++                    report.matches("exit_reason").count()
++                ),
++            )
++        },
++        "activity_flags" => {
++            let f = DATA_DIR
++                .get()
++                .and_then(|d| std::fs::read_to_string(d.join("activity_flags.txt")).ok())
++                .unwrap_or_default();
++            let ok = f.contains("keep_screen_on=1") && f.contains("landscape=1");
++            (ok, f.trim().replace('\n', " "))
++        },
++        "occlusion_culls" | "occlusion_not_slower" => {
++            let b = OCC_BENCH.lock().unwrap();
++            let avg = |prefix: &str, key: &str, from_occ: bool| {
++                let v: Vec<f64> = b
++                    .iter()
++                    .filter(|e| e.0.starts_with(prefix))
++                    .filter_map(|e| field(if from_occ { &e.2 } else { &e.1 }, key))
++                    .collect();
++                (!v.is_empty()).then(|| v.iter().sum::<f64>() / v.len() as f64)
++            };
++            let fps_key = "fps=";
++            let (on, off) = (avg("occ-on", fps_key, false), avg("occ-off", fps_key, false));
++            let pct = avg("occ-on", "occ_pct=", true);
++            let culled = avg("occ-on", "occ_culled=", true);
++            let cost = avg("occ-on", "occ_cost=", true);
++            let detail = format!(
++                "fps off={off:?} on={on:?} culled_chunks={culled:?} culled_pct={pct:?} cost_us={cost:?}"
++            );
++            if name == "occlusion_culls" {
++                (culled.is_some_and(|c| c > 0.0), detail)
++            } else {
++                (
++                    matches!((on, off), (Some(a), Some(b)) if a >= b * 0.97),
++                    detail,
++                )
++            }
++        },
++        "back_opens_menu" => {
++            let backs = BACK_PRESSES.load(Ordering::SeqCst);
++            (
++                p.esc_open && !p.ctx.game_input && backs >= 1,
++                format!("esc_menu={} game_input={} back_presses={backs}", p.esc_open, p.ctx.game_input),
++            )
++        },
++        "back_closes_menu" => {
++            let backs = BACK_PRESSES.load(Ordering::SeqCst);
++            (
++                !p.esc_open && p.ctx.game_input && backs >= 2,
++                format!("esc_menu={} game_input={} back_presses={backs}", p.esc_open, p.ctx.game_input),
++            )
++        },
+         _ => (false, "unknown check".into()),
+     }
+ }
+ 
++static LIFE_OK: Mutex<u32> = Mutex::new(0);
++
+ fn read_settings_touch(gs: &GlobalState) -> Option<touch::TouchSettings> {
+     let s = std::fs::read_to_string(gs.config_dir.join("settings.ron")).ok()?;
+     let v: crate::settings::Settings = ron::from_str(&s).ok()?;
+@@ -930,6 +1374,14 @@ fn avg(v: &[f32]) -> f32 {
+ 
+ static CACHE_SAVED: Mutex<bool> = Mutex::new(false);
+ static TIER_NAME: Mutex<Option<&'static str>> = Mutex::new(None);
++/// dev.5 (5.6): (bench name, bench summary, occlusion summary) for checks.
++static OCC_BENCH: Mutex<Vec<(&'static str, String, String)>> = Mutex::new(Vec::new());
++
++fn field(s: &str, key: &str) -> Option<f64> {
++    let rest = &s[s.find(key)? + key.len()..];
++    let end = rest.find(|c: char| !(c.is_ascii_digit() || c == '.')).unwrap_or(rest.len());
++    rest[..end].parse().ok()
++}
+ 
+ fn current_tier_name() -> &'static str {
+     TIER_NAME.lock().unwrap().unwrap_or_else(|| {
+@@ -1288,6 +1740,11 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+             }
+             finished
+         },
++        Act::Occlusion(on) => {
++            ainfo!("VEL-STEP occlusion culling -> {}", if on { "on" } else { "off" });
++            crate::scene::terrain::OCCLUSION_CULLING.store(on, Ordering::Relaxed);
++            true
++        },
+         Act::Tier(t) => {
+             ainfo!("VEL-STEP graphics tier -> {}", t.name());
+             crate::mobile::request_graphics(t.apply(gs.settings.graphics.clone()));
+@@ -1297,13 +1754,18 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+         Act::BenchBegin(name) => {
+             ainfo!("VEL-STEP bench begin {name}");
+             crate::mobile::bench_begin();
++            *OCC_ACC.lock().unwrap() = (0, 0, 0, 0);
+             true
+         },
+         Act::BenchEnd(name) => {
+             let g = &gs.settings.graphics;
++            let bench = crate::mobile::bench_end();
++            let occ = occ_summary();
++            OCC_BENCH.lock().unwrap().push((name, bench.clone(), occ.clone()));
+             ainfo!(
+-                "VEL-BENCH {name} {} vd={} upscale={:.2} shadow={:?} gpu='{}' rss={:.0}MB temp={}",
+-                crate::mobile::bench_end(),
++                "VEL-BENCH {name} {} {} vd={} upscale={:.2} shadow={:?} gpu='{}' rss={:.0}MB temp={}",
++                bench,
++                occ,
+                 g.terrain_view_distance,
+                 g.render_mode.upscale_mode.factor,
+                 g.render_mode.shadow,
+@@ -1326,7 +1788,81 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+             crate::mobile::save_pipeline_cache();
+             true
+         },
+-        Act::Finish => {
++        Act::LifeMark => {
++            use crate::lifecycle as l;
++            p.rec.life = (l::suspends(), l::resumes(), l::presented());
++            p.rec.bg_paused = false;
++            p.rec.bg_muted = false;
++            p.rec.bg_surface_gone = false;
++            true
++        },
++        Act::Background(ms) => {
++            ainfo!("VEL-STEP cover the game with another activity for {ms} ms (= Home / app switch)");
++            jni_send(JniCall::CycleBackground(ms));
++            true
++        },
++        Act::WaitSuspended(max) => {
++            let s = crate::lifecycle::is_suspended();
++            if s {
++                p.rec.bg_paused = gs.paused();
++                p.rec.bg_muted = gs.audio.get_master_volume() == 0.0;
++                p.rec.bg_surface_gone = gs.window.renderer().is_surface_suspended();
++                ainfo!(
++                    "VEL-STEP suspended after {t:.1}s: server_paused={} muted={} surface_gone={}",
++                    p.rec.bg_paused,
++                    p.rec.bg_muted,
++                    p.rec.bg_surface_gone
++                );
++            } else if t > max {
++                ainfo!("VEL-STEP not suspended after {max}s");
++            }
++            s || t > max
++        },
++        Act::WaitResumed(max) => {
++            let r = !crate::lifecycle::is_suspended();
++            if r {
++                p.rec.presented_at_resume = crate::lifecycle::presented();
++                p.rec.resumed_after = t;
++                ainfo!("VEL-STEP resumed after {t:.1}s");
++            } else if t > max {
++                ainfo!("VEL-STEP still suspended after {max}s");
++            }
++            r || t > max
++        },
++        Act::DropItem => {
++            p.rec.inv_before = (pr.inv_slots, pr.inv_items);
++            ainfo!("VEL-STEP drop one inventory stack (slots={} items={})", pr.inv_slots, pr.inv_items);
++            DROP_REQUEST.store(true, Ordering::SeqCst);
++            true
++        },
++        Act::WaitInvChange(max) => {
++            let changed = pr.inv_slots < p.rec.inv_before.0;
++            if changed || t > max {
++                ainfo!(
++                    "VEL-STEP inventory now slots={} items={} (changed={changed})",
++                    pr.inv_slots,
++                    pr.inv_items
++                );
++            }
++            (changed || t > max) && p.act_frames >= MIN_FRAMES
++        },
++        Act::CrashSelfTest => {
++            let path = write_crash_report(
++                "selftest",
++                "dev.5 crash-report self-test written by the Test Lab scenario (not a real crash)",
++            );
++            let ok = path.as_ref().is_some_and(|p| p.exists());
++            ainfo!("VEL-CHECK crash_report_written {} {:?}", if ok { "PASS" } else { "FAIL" }, path);
++            p.results.push(("crash_report_written".into(), ok));
++            true
++        },
++        Act::SendBack => {
++            ainfo!("VEL-STEP inject KEYCODE_BACK");
++            jni_send(JniCall::SendBack);
++            true
++        },
++        Act::Finish | Act::FinishKill => {
++            let kill = matches!(act, Act::FinishKill);
+             let pass = p.results.iter().filter(|r| r.1).count();
+             let fail: Vec<_> = p.results.iter().filter(|r| !r.1).map(|r| r.0.clone()).collect();
+             ainfo!(
+@@ -1339,7 +1875,12 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+             );
+             p.finished = true;
+             jni_send(JniCall::FinishLoop);
+-            let _ = std::thread::Builder::new().spawn(|| {
++            let _ = std::thread::Builder::new().spawn(move || {
++                if kill {
++                    std::thread::sleep(Duration::from_millis(1500));
++                    ainfo!("android: SIGKILL self (dev.5 save-after-kill test)");
++                    unsafe { libc::kill(libc::getpid(), libc::SIGKILL) };
++                }
+                 std::thread::sleep(Duration::from_secs(3));
+                 ainfo!("android: game loop scenario finished, exiting process");
+                 // _exit, not exit(): running C atexit/static destructors while the
+diff --git a/voxygen/src/hud/mod.rs b/voxygen/src/hud/mod.rs
+index 986864a9f..965175090 100755
+--- a/voxygen/src/hud/mod.rs
++++ b/voxygen/src/hud/mod.rs
+@@ -4771,6 +4771,9 @@ impl Hud {
+         )
+     }
+ 
++    /// my-veloren dev.5: Esc menu open (Android Back button test).
++    pub fn esc_menu_open(&self) -> bool { self.show.esc_menu }
++
+     fn show_bag(slot_manager: &mut slots::SlotManager, show: &mut Show, state: bool) {
+         show.bag(state);
+         if !state {
+diff --git a/voxygen/src/lib.rs b/voxygen/src/lib.rs
+index aaabb48a1..eb696b4e3 100644
+--- a/voxygen/src/lib.rs
++++ b/voxygen/src/lib.rs
+@@ -13,6 +13,7 @@
+ pub mod ui;
+ #[cfg(target_os = "android")] pub mod android;
+ #[cfg(target_os = "android")] mod android_main_body;
++#[cfg(target_os = "android")] pub mod lifecycle;
+ pub mod audio;
+ pub mod touch;
+ pub mod mobile;
+diff --git a/voxygen/src/lifecycle.rs b/voxygen/src/lifecycle.rs
+new file mode 100644
+index 000000000..3a0e88add
+--- /dev/null
++++ b/voxygen/src/lifecycle.rs
+@@ -0,0 +1,101 @@
++//! my-veloren dev.5: Android activity lifecycle (pause / resume / autosave).
++//!
++//! winit reports `Event::Suspended` when Android destroys the native window
++//! (Home, app switcher, screen off, another activity on top) and
++//! `Event::Resumed` when a new one exists. On suspend:
++//! * the wgpu surface is dropped while the window still exists, and frames are
++//!   skipped until resume (rendering into a destroyed window crashes);
++//! * audio is muted;
++//! * settings + profile are written, and the singleplayer server persists all
++//!   characters right away, then pauses (no world simulation in background).
++//!
++//! On resume, a new surface is created for the new window, the volume is
++//! restored and the server is unpaused if this module paused it.
++
++use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
++
++use crate::GlobalState;
++
++static SUSPENDED: AtomicBool = AtomicBool::new(false);
++static SUSPENDS: AtomicU32 = AtomicU32::new(0);
++static RESUMES: AtomicU32 = AtomicU32::new(0);
++static RESUME_FAILS: AtomicU32 = AtomicU32::new(0);
++/// Frames actually drawn into a surface (skipped frames are not counted).
++static PRESENTED: AtomicU64 = AtomicU64::new(0);
++/// Whether this module paused the singleplayer server (so resume only
++/// unpauses what it paused, never a pause the player chose in the Esc menu).
++static WE_PAUSED: AtomicBool = AtomicBool::new(false);
++/// Observed while suspended (for the Test Lab check).
++static PAUSED_SEEN: AtomicBool = AtomicBool::new(false);
++
++pub fn is_suspended() -> bool { SUSPENDED.load(Ordering::SeqCst) }
++
++pub fn suspends() -> u32 { SUSPENDS.load(Ordering::SeqCst) }
++
++pub fn resumes() -> u32 { RESUMES.load(Ordering::SeqCst) }
++
++pub fn resume_fails() -> u32 { RESUME_FAILS.load(Ordering::SeqCst) }
++
++pub fn presented() -> u64 { PRESENTED.load(Ordering::Relaxed) }
++
++pub fn frame_presented() { PRESENTED.fetch_add(1, Ordering::Relaxed); }
++
++pub fn paused_seen() -> bool { PAUSED_SEEN.load(Ordering::SeqCst) }
++
++pub fn on_suspend(gs: &mut GlobalState) {
++    if SUSPENDED.swap(true, Ordering::SeqCst) {
++        return;
++    }
++    let n = SUSPENDS.fetch_add(1, Ordering::SeqCst) + 1;
++    gs.window.renderer_mut().android_suspend();
++    gs.audio.set_master_volume(0.0);
++    gs.settings.save_to_file_warn(&gs.config_dir);
++    gs.profile.save_to_file_warn(&gs.config_dir);
++    #[cfg(feature = "singleplayer")]
++    let server = if let Some(sp) = gs.singleplayer.as_running() {
++        crate::singleplayer::request_persistence();
++        let was_paused = sp.is_paused();
++        if !was_paused {
++            sp.pause(true);
++        }
++        WE_PAUSED.store(!was_paused, Ordering::SeqCst);
++        PAUSED_SEEN.store(sp.is_paused(), Ordering::SeqCst);
++        "persist requested + paused"
++    } else {
++        "no singleplayer server"
++    };
++    #[cfg(not(feature = "singleplayer"))]
++    let server = "no singleplayer";
++    crate::android::alog(
++        4,
++        &format!("VEL-LIFE suspend #{n}: surface dropped, audio muted, settings saved, {server}"),
++    );
++}
++
++pub fn on_resume(gs: &mut GlobalState) {
++    if !SUSPENDED.load(Ordering::SeqCst) {
++        return;
++    }
++    let n = RESUMES.load(Ordering::SeqCst) + 1;
++    match gs.window.renderer_mut().android_resume() {
++        Ok(dims) => {
++            SUSPENDED.store(false, Ordering::SeqCst);
++            RESUMES.store(n, Ordering::SeqCst);
++            let vol = gs.settings.audio.master_volume.get_checked();
++            gs.audio.set_master_volume(vol);
++            #[cfg(feature = "singleplayer")]
++            if WE_PAUSED.swap(false, Ordering::SeqCst) {
++                gs.unpause();
++            }
++            crate::android::alog(
++                4,
++                &format!("VEL-LIFE resume #{n}: new surface {}x{}, audio restored", dims.x, dims.y),
++            );
++        },
++        Err(e) => {
++            // Stay suspended; the next `Resumed` retries.
++            RESUME_FAILS.fetch_add(1, Ordering::SeqCst);
++            crate::android::alog(6, &format!("VEL-LIFE resume #{n} FAILED: {e}"));
++        },
++    }
++}
+diff --git a/voxygen/src/render/renderer/mod.rs b/voxygen/src/render/renderer/mod.rs
+index d71454a2d..26c41c66d 100644
+--- a/voxygen/src/render/renderer/mod.rs
++++ b/voxygen/src/render/renderer/mod.rs
+@@ -136,8 +136,14 @@ enum State {
+ pub struct Renderer {
+     device: wgpu::Device,
+     queue: wgpu::Queue,
+-    surface: wgpu::Surface<'static>,
++    /// `None` while the Android native window is gone (my-veloren dev.5: the
++    /// app is in the background between `Suspended` and `Resumed`).
++    surface: Option<wgpu::Surface<'static>>,
+     surface_config: wgpu::SurfaceConfiguration,
++    #[cfg(target_os = "android")]
++    android_instance: wgpu::Instance,
++    #[cfg(target_os = "android")]
++    android_window: Arc<winit::window::Window>,
+ 
+     sampler: wgpu::Sampler,
+     depth_sampler: wgpu::Sampler,
+@@ -233,6 +239,8 @@ impl Renderer {
+ 
+         let dims = window.inner_size();
+ 
++        #[cfg(target_os = "android")]
++        let android_window = Arc::clone(&window);
+         let surface = instance
+             .create_surface(window)
+             .expect("Failed to create a surface");
+@@ -627,8 +635,12 @@ impl Renderer {
+         Ok(Self {
+             device,
+             queue,
+-            surface,
++            surface: Some(surface),
+             surface_config,
++            #[cfg(target_os = "android")]
++            android_instance: instance,
++            #[cfg(target_os = "android")]
++            android_window,
+ 
+             state,
+             recreation_pending: None,
+@@ -785,7 +797,7 @@ impl Renderer {
+             self.resolution = dims;
+             self.surface_config.width = dims.x;
+             self.surface_config.height = dims.y;
+-            self.surface.configure(&self.device, &self.surface_config);
++            self.configure_surface();
+ 
+             // Resize other render targets
+             let (views, bloom_sizes) = Self::create_rt_views(
+@@ -920,6 +932,45 @@ impl Renderer {
+         }
+     }
+ 
++    /// Configure the swap chain if a surface exists (none while suspended on
++    /// Android).
++    fn configure_surface(&self) {
++        if let Some(surface) = &self.surface {
++            surface.configure(&self.device, &self.surface_config);
++        }
++    }
++
++    /// my-veloren dev.5: the Android native window is about to be destroyed
++    /// (`Event::Suspended`). Drop the surface and its swap chain now, while the
++    /// window still exists; frames are skipped until `android_resume`.
++    #[cfg(target_os = "android")]
++    pub fn android_suspend(&mut self) {
++        let _ = self.device.poll(wgpu::PollType::Poll);
++        self.surface = None;
++    }
++
++    /// my-veloren dev.5: a new native window exists (`Event::Resumed`): create
++    /// a surface for it and configure the swap chain with the current size.
++    #[cfg(target_os = "android")]
++    pub fn android_resume(&mut self) -> Result<Vec2<u32>, String> {
++        let surface = self
++            .android_instance
++            .create_surface(Arc::clone(&self.android_window))
++            .map_err(|e| format!("create_surface: {e}"))?;
++        self.surface = Some(surface);
++        let size = self.android_window.inner_size();
++        let dims = Vec2::new(size.width, size.height);
++        if dims.x != 0 && dims.y != 0 && dims != self.resolution {
++            self.on_resize(dims);
++        } else {
++            self.configure_surface();
++        }
++        Ok(dims)
++    }
++
++    /// my-veloren dev.5: true while there is no surface (app in background).
++    pub fn is_surface_suspended(&self) -> bool { self.surface.is_none() }
++
+     pub fn maintain(&self) {
+         if self.is_minimized {
+             self.queue.submit(std::iter::empty());
+@@ -1287,12 +1338,15 @@ impl Renderer {
+             self.recreate_pipelines(new_pipeline_modes);
+         }
+ 
+-        let texture = match self.surface.get_current_texture() {
++        let Some(surface) = self.surface.as_ref() else {
++            return Ok(None);
++        };
++        let texture = match surface.get_current_texture() {
+             Ok(texture) => {
+                 if texture.suboptimal {
+                     warn!("Suboptimal swap chain, recreating");
+                     drop(texture);
+-                    self.surface.configure(&self.device, &self.surface_config);
++                    self.configure_surface();
+                     return Ok(None);
+                 } else {
+                     texture
+@@ -1301,7 +1355,7 @@ impl Renderer {
+             // If lost recreate the swap chain
+             Err(err @ wgpu::SurfaceError::Lost) => {
+                 warn!("{}. Recreating swap chain. A frame will be missed", err);
+-                self.surface.configure(&self.device, &self.surface_config);
++                self.configure_surface();
+                 return Ok(None);
+             },
+             Err(wgpu::SurfaceError::Timeout) => {
+@@ -1312,7 +1366,7 @@ impl Renderer {
+             },
+             Err(err @ wgpu::SurfaceError::Outdated) => {
+                 warn!("{}. Recreating the swapchain", err);
+-                self.surface.configure(&self.device, &self.surface_config);
++                self.configure_surface();
+                 return Ok(None);
+             },
+             Err(err @ (wgpu::SurfaceError::OutOfMemory | wgpu::SurfaceError::Other)) => {
+diff --git a/voxygen/src/run.rs b/voxygen/src/run.rs
+index e6999dff0..5059b4d77 100644
+--- a/voxygen/src/run.rs
++++ b/voxygen/src/run.rs
+@@ -104,8 +104,15 @@ pub fn run(
+             winit::event::Event::WindowEvent { event, .. } => {
+                 span!(_guard, "Handle WindowEvent");
+ 
++                #[cfg(target_os = "android")]
++                let suspended = crate::lifecycle::is_suspended();
++                #[cfg(not(target_os = "android"))]
++                let suspended = false;
+                 if let winit::event::WindowEvent::Focused(focused) = event {
+-                    global_state.audio.set_master_volume(if focused {
++                    // my-veloren dev.5: stay muted while in the background.
++                    global_state.audio.set_master_volume(if suspended {
++                        0.0
++                    } else if focused {
+                         global_state.settings.audio.master_volume.get_checked()
+                     } else {
+                         global_state
+@@ -125,6 +132,11 @@ pub fn run(
+                 span!(_guard, "Handle DeviceEvent");
+                 global_state.window.handle_device_event(event)
+             },
++            // my-veloren dev.5: Android destroyed / recreated the native window.
++            #[cfg(target_os = "android")]
++            winit::event::Event::Suspended => crate::lifecycle::on_suspend(&mut global_state),
++            #[cfg(target_os = "android")]
++            winit::event::Event::Resumed => crate::lifecycle::on_resume(&mut global_state),
+             winit::event::Event::LoopExiting => {
+                 // Save any unsaved changes to settings and profile
+                 global_state
+@@ -256,6 +268,8 @@ fn handle_main_events_cleared(
+         };
+         if let Some(mut drawer) = drawer
+         {
++            #[cfg(target_os = "android")]
++            crate::lifecycle::frame_presented();
+             if global_state.clear_shadows_next_frame {
+                 drawer.clear_shadows();
+             }
+diff --git a/voxygen/src/scene/terrain/mod.rs b/voxygen/src/scene/terrain/mod.rs
+index bc3113493..0c8844d1a 100644
+--- a/voxygen/src/scene/terrain/mod.rs
++++ b/voxygen/src/scene/terrain/mod.rs
+@@ -49,6 +49,9 @@ use vek::*;
+ const SPRITE_SCALE: Vec3<f32> = Vec3::new(1.0 / 11.0, 1.0 / 11.0, 1.0 / 11.0);
+ pub const SPRITE_LOD_LEVELS: usize = 5;
+ 
++mod occlusion;
++pub use occlusion::{OCCLUSION_CULLING, occlusion_stats};
++
+ // For rain occlusion we only need to render the closest chunks.
+ /// How many chunks are maximally rendered for rain occlusion.
+ pub const RAIN_OCCLUSION_CHUNKS: usize = 25;
+@@ -57,6 +60,9 @@ pub const RAIN_OCCLUSION_CHUNKS: usize = 25;
+ struct Visibility {
+     in_range: bool,
+     in_frustum: bool,
++    /// Hidden from the camera behind terrain (see `occlusion`). Only affects the
++    /// camera passes; shadow casting still uses `in_frustum`.
++    occluded: bool,
+ }
+ 
+ impl Visibility {
+@@ -68,7 +74,7 @@ impl Visibility {
+         // anyway so this literally just controls which chunks get actually
+         // rendered.
+         /* self.in_range && */
+-        self.in_frustum
++        self.in_frustum && !self.occluded
+     }
+ }
+ 
+@@ -102,6 +108,8 @@ pub struct TerrainChunkData {
+     z_bounds: (f32, f32),
+     sun_occluder_z_bounds: (f32, f32),
+     frustum_last_plane_index: u8,
++    /// Conservative ground height per 8x8 cell (see `occlusion`).
++    occluder: Option<occlusion::Heights>,
+ 
+     alt_indices: AltIndices,
+ }
+@@ -132,6 +140,7 @@ struct ChunkMeshState {
+ /// Just the mesh part of a mesh worker response.
+ pub struct MeshWorkerResponseMesh {
+     z_bounds: (f32, f32),
++    occluder: occlusion::Heights,
+     sun_occluder_z_bounds: (f32, f32),
+     opaque_mesh: Mesh<TerrainVertex>,
+     fluid_mesh: Mesh<FluidVertex>,
+@@ -297,6 +306,7 @@ fn mesh_worker(
+         mesh = Some(MeshWorkerResponseMesh {
+             // TODO: Take sprite bounds into account somehow?
+             z_bounds: (bounds.min.z, bounds.max.z),
++            occluder: occlusion::ground_heights(&chunk),
+             sun_occluder_z_bounds,
+             opaque_mesh,
+             fluid_mesh,
+@@ -445,7 +455,9 @@ pub struct Terrain<V: RectRasterableVol = TerrainChunk> {
+ }
+ 
+ impl TerrainChunkData {
+-    pub fn can_shadow_sun(&self) -> bool { self.visible.is_visible() || self.can_shadow_sun }
++    // An occluded chunk can still cast sun shadows into view, so this uses the
++    // frustum test only (unchanged behaviour from before occlusion culling).
++    pub fn can_shadow_sun(&self) -> bool { self.visible.in_frustum || self.can_shadow_sun }
+ }
+ 
+ pub(crate) struct SpriteRenderState {
+@@ -1240,6 +1252,7 @@ impl<V: RectRasterableVol> Terrain<V> {
+                             visible: Visibility {
+                                 in_range: false,
+                                 in_frustum: false,
++                                occluded: false,
+                             },
+                             can_shadow_point: false,
+                             can_shadow_sun: false,
+@@ -1247,6 +1260,7 @@ impl<V: RectRasterableVol> Terrain<V> {
+                             z_bounds: mesh.z_bounds,
+                             sun_occluder_z_bounds: mesh.sun_occluder_z_bounds,
+                             frustum_last_plane_index: 0,
++                            occluder: Some(mesh.occluder),
+                             alt_indices: mesh.alt_indices,
+                         });
+                     } else if let Some(chunk) = self.chunks.get_mut(&response.pos) {
+@@ -1325,6 +1339,16 @@ impl<V: RectRasterableVol> Terrain<V> {
+         }
+         drop(guard);
+ 
++        // dev.5 (5.6): skip chunks hidden behind hills/mountains (camera passes only).
++        span!(guard, "Occlusion culling");
++        occlusion::cull(
++            &mut self.chunks,
++            camera.get_pos_with_focus(),
++            loaded_distance,
++            chunk_sz,
++        );
++        drop(guard);
++
+         span!(guard, "Shadow magic");
+         // PSRs: potential shadow receivers
+         let visible_bounding_box = visible_bounding_box.unwrap_or(Aabb {
+diff --git a/voxygen/src/scene/terrain/occlusion.rs b/voxygen/src/scene/terrain/occlusion.rs
+new file mode 100644
+index 000000000..92ff2aab6
+--- /dev/null
++++ b/voxygen/src/scene/terrain/occlusion.rs
+@@ -0,0 +1,243 @@
++//! dev.5 (5.6): terrain occlusion culling for the camera passes.
++//!
++//! Veloren terrain chunks are full-height 32x32 columns, so the Minecraft PE
++//! "cave culling" (connectivity between 16^3 sections) does not map directly.
++//! Instead this is a CPU horizon test against a conservative ground model:
++//!
++//! * The mesh worker stores, for each 8x8 cell of a chunk, the *lowest* top
++//!   of natural terrain (rock/earth/grass/snow/sand) in that cell. Trees,
++//!   buildings, water and sprites never count as occluders.
++//! * Every frame, for each chunk in the frustum, a "cone" from the camera to
++//!   the chunk's top face is marched. At fraction `t` the cone's footprint is
++//!   a square of side `t * 32` around the centre ray; every ray from the
++//!   camera to any point of the chunk (at or below its top) passes through
++//!   that square no higher than `cam.z + t * (top - cam.z)`. If the ground in
++//!   the whole footprint is above that height, every such ray is underground
++//!   there and the chunk is hidden.
++//! * Shadows still use the frustum test only, so hidden hills keep casting
++//!   shadows into view.
++//!
++//! Known approximation: caves/overhangs are treated as solid (a ray through
++//! a tunnel that pierces a whole hill is not considered). The culling is
++//! disabled while the camera is at/below the ground of its own cell
++//! (underground, caves, under an overhang).
++
++use super::TerrainChunkData;
++use common::{
++    terrain::{BlockKind, TerrainChunk},
++    vol::ReadVol,
++};
++use hashbrown::HashMap;
++use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
++use vek::*;
++
++/// Cell size in blocks (a chunk is `CELLS` x `CELLS` cells).
++const CELL: i32 = 8;
++const CELLS: usize = 4;
++pub type Heights = [f32; CELLS * CELLS];
++
++/// Chunks closer than this (in chunks, Chebyshev) are never culled.
++const NEAR_CHUNKS: i32 = 2;
++/// Safety margin (blocks) subtracted from the ground model.
++const GROUND_MARGIN: f32 = 1.0;
++/// Sprites (grass, flowers, ...) are not part of the mesh z bounds.
++const SPRITE_MARGIN: f32 = 4.0;
++
++pub static OCCLUSION_CULLING: AtomicBool = AtomicBool::new(true);
++static TESTED: AtomicU32 = AtomicU32::new(0);
++static CULLED: AtomicU32 = AtomicU32::new(0);
++static MICROS: AtomicU32 = AtomicU32::new(0);
++static UNDERGROUND: AtomicBool = AtomicBool::new(false);
++
++/// Last frame: (chunks tested, chunks culled, cost in µs, skipped because the
++/// camera is underground).
++pub fn occlusion_stats() -> (u32, u32, u32, bool) {
++    (
++        TESTED.load(Ordering::Relaxed),
++        CULLED.load(Ordering::Relaxed),
++        MICROS.load(Ordering::Relaxed),
++        UNDERGROUND.load(Ordering::Relaxed),
++    )
++}
++
++fn is_occluder(kind: BlockKind) -> bool {
++    matches!(
++        kind,
++        BlockKind::Rock
++            | BlockKind::WeakRock
++            | BlockKind::GlowingRock
++            | BlockKind::GlowingWeakRock
++            | BlockKind::Grass
++            | BlockKind::Snow
++            | BlockKind::ArtSnow
++            | BlockKind::Earth
++            | BlockKind::Sand
++    )
++}
++
++/// Conservative ground height (world z of the top face) per 8x8 cell: the
++/// minimum over the cell's columns of the highest natural-terrain block.
++/// A cell with any column lacking terrain gets `-inf` (never occludes).
++pub fn ground_heights(chunk: &TerrainChunk) -> Heights {
++    let (min_z, max_z) = (chunk.get_min_z(), chunk.get_max_z());
++    let mut out = [f32::NEG_INFINITY; CELLS * CELLS];
++    for cy in 0..CELLS as i32 {
++        for cx in 0..CELLS as i32 {
++            let mut cell_min = f32::INFINITY;
++            'cell: for y in 0..CELL {
++                for x in 0..CELL {
++                    let (px, py) = (cx * CELL + x, cy * CELL + y);
++                    let mut z = max_z - 1;
++                    let mut top = None;
++                    while z >= min_z {
++                        if chunk
++                            .get(Vec3::new(px, py, z))
++                            .is_ok_and(|b| is_occluder(b.kind()))
++                        {
++                            top = Some(z);
++                            break;
++                        }
++                        z -= 1;
++                    }
++                    match top {
++                        Some(z) => cell_min = cell_min.min(z as f32 + 1.0),
++                        None => {
++                            cell_min = f32::NEG_INFINITY;
++                            break 'cell;
++                        },
++                    }
++                }
++            }
++            out[(cy as usize) * CELLS + cx as usize] = cell_min;
++        }
++    }
++    out
++}
++
++struct Grid {
++    heights: Vec<f32>,
++    side: i32,
++    /// World xy of cell (0, 0).
++    origin: Vec2<f32>,
++}
++
++impl Grid {
++    #[inline]
++    fn cell(&self, x: i32, y: i32) -> f32 {
++        if x < 0 || y < 0 || x >= self.side || y >= self.side {
++            f32::NEG_INFINITY
++        } else {
++            self.heights[(y * self.side + x) as usize]
++        }
++    }
++
++    #[inline]
++    fn to_cell(&self, p: f32, o: f32) -> i32 { ((p - o) / CELL as f32).floor() as i32 }
++
++    fn at(&self, p: Vec2<f32>) -> f32 {
++        self.cell(self.to_cell(p.x, self.origin.x), self.to_cell(p.y, self.origin.y))
++    }
++
++    /// Is the ground above `z` everywhere in the square `[c - hw, c + hw]`?
++    fn all_above(&self, c: Vec2<f32>, hw: f32, z: f32) -> bool {
++        let (x0, x1) = (
++            self.to_cell(c.x - hw, self.origin.x),
++            self.to_cell(c.x + hw, self.origin.x),
++        );
++        let (y0, y1) = (
++            self.to_cell(c.y - hw, self.origin.y),
++            self.to_cell(c.y + hw, self.origin.y),
++        );
++        for y in y0..=y1 {
++            for x in x0..=x1 {
++                if self.cell(x, y) - GROUND_MARGIN <= z {
++                    return false;
++                }
++            }
++        }
++        true
++    }
++}
++
++fn chunk_hidden(grid: &Grid, cam: Vec3<f32>, center: Vec2<f32>, top: f32, chunk_sz: f32) -> bool {
++    let d = center - Vec2::from(cam);
++    let len = d.magnitude();
++    if len < 1.0 {
++        return false;
++    }
++    let steps = (len / CELL as f32).ceil() as i32;
++    for i in 1..steps {
++        let t = i as f32 / steps as f32;
++        let p = Vec2::from(cam) + d * t;
++        let hw = t * chunk_sz * 0.5;
++        let ray_z = cam.z + t * (top - cam.z);
++        if grid.all_above(p, hw, ray_z) {
++            return true;
++        }
++    }
++    false
++}
++
++pub(super) fn cull(
++    chunks: &mut HashMap<Vec2<i32>, TerrainChunkData>,
++    cam: Vec3<f32>,
++    loaded_distance: f32,
++    chunk_sz: f32,
++) {
++    let start = std::time::Instant::now();
++    for c in chunks.values_mut() {
++        c.visible.occluded = false;
++    }
++    let (mut tested, mut culled) = (0u32, 0u32);
++    UNDERGROUND.store(false, Ordering::Relaxed);
++    if OCCLUSION_CULLING.load(Ordering::Relaxed) {
++        let csz = chunk_sz as i32;
++        let cam_chunk = Vec2::<f32>::from(cam).map(|e| (e / chunk_sz).floor() as i32);
++        let r = (loaded_distance / chunk_sz).ceil() as i32 + 1;
++        let side_chunks = 2 * r + 1;
++        let side = side_chunks * CELLS as i32;
++        let mut grid = Grid {
++            heights: vec![f32::NEG_INFINITY; (side * side) as usize],
++            side,
++            origin: ((cam_chunk - r) * csz).as_::<f32>(),
++        };
++        for (pos, c) in chunks.iter() {
++            let Some(h) = &c.occluder else { continue };
++            let d = *pos - cam_chunk + r;
++            if d.x < 0 || d.y < 0 || d.x >= side_chunks || d.y >= side_chunks {
++                continue;
++            }
++            for cy in 0..CELLS {
++                for cx in 0..CELLS {
++                    let gx = d.x as usize * CELLS + cx;
++                    let gy = d.y as usize * CELLS + cy;
++                    grid.heights[gy * side as usize + gx] = h[cy * CELLS + cx];
++                }
++            }
++        }
++
++        if cam.z < grid.at(Vec2::from(cam)) + 2.0 {
++            UNDERGROUND.store(true, Ordering::Relaxed);
++        } else {
++            for (pos, c) in chunks.iter_mut() {
++                if !c.visible.in_frustum {
++                    continue;
++                }
++                let rel = *pos - cam_chunk;
++                if rel.x.abs().max(rel.y.abs()) < NEAR_CHUNKS {
++                    continue;
++                }
++                tested += 1;
++                let top = c.z_bounds.1.max(c.sun_occluder_z_bounds.1) + SPRITE_MARGIN;
++                let center = pos.as_::<f32>() * chunk_sz + chunk_sz * 0.5;
++                if chunk_hidden(&grid, cam, center, top, chunk_sz) {
++                    c.visible.occluded = true;
++                    culled += 1;
++                }
++            }
++        }
++    }
++    TESTED.store(tested, Ordering::Relaxed);
++    CULLED.store(culled, Ordering::Relaxed);
++    MICROS.store(start.elapsed().as_micros() as u32, Ordering::Relaxed);
++}
+diff --git a/voxygen/src/session/mod.rs b/voxygen/src/session/mod.rs
+index 4cd03d646..aa36943f2 100644
+--- a/voxygen/src/session/mod.rs
++++ b/voxygen/src/session/mod.rs
+@@ -179,16 +179,22 @@ impl SessionState {
+                         .unwrap_or(std::cmp::Ordering::Equal)
+                 })
+                 .map(|d| d.into_array());
+-            let npc = villagers
+-                .into_iter()
+-                // same floor only: villagers upstairs are unreachable by walking
+-                .filter(|(_, p, _, _)| (p.0.z - my_pos.z).abs() < 3.0)
+-                .map(|(_, p, _, _)| (p.0 - my_pos).xy())
+-                .min_by(|a, b| {
+-                    a.magnitude_squared()
+-                        .partial_cmp(&b.magnitude_squared())
+-                        .unwrap_or(std::cmp::Ordering::Equal)
+-                })
++            // Prefer villagers on the same floor (upstairs ones are unreachable by
++            // walking). If none, fall back to the nearest one within a slope's height
++            // (vm6: the only villagers had wandered 11 m downhill and the test idled).
++            let nearest_xy = |max_dz: f32| {
++                villagers
++                    .iter()
++                    .filter(|(_, p, _, _)| (p.0.z - my_pos.z).abs() < max_dz)
++                    .map(|(_, p, _, _)| (p.0 - my_pos).xy())
++                    .min_by(|a, b| {
++                        a.magnitude_squared()
++                            .partial_cmp(&b.magnitude_squared())
++                            .unwrap_or(std::cmp::Ordering::Equal)
++                    })
++            };
++            let npc = nearest_xy(3.0)
++                .or_else(|| nearest_xy(16.0))
+                 .map(|d| {
+                     let n = d.try_normalized().unwrap_or_default();
+                     (
+@@ -197,6 +203,12 @@ impl SessionState {
+                     )
+                 });
+             let (quest, trade, bag, map) = self.hud.touch_windows();
++            let inventories = ecs.read_storage::<comp::Inventory>();
++            let (inv_slots, inv_items) = inventories.get(me).map_or((0, 0), |inv| {
++                inv.slots().flatten().fold((0u32, 0u32), |(s, n), item| {
++                    (s + 1, n + item.amount())
++                })
++            });
+             let cam = self.scene.camera();
+             crate::android::set_probe(crate::android::Probe {
+                 pos: my_pos.into_array(),
+@@ -218,6 +230,9 @@ impl SessionState {
+                 trade_open: trade || client.pending_trade().is_some(),
+                 bag_open: bag,
+                 map_open: map,
++                esc_open: self.hud.esc_menu_open(),
++                inv_slots,
++                inv_items,
+                 ctx,
+             });
+         }
+@@ -1717,6 +1732,20 @@ impl PlayState for SessionState {
+                 self.publish_touch_context(global_state);
+             }
+ 
++            // my-veloren dev.5: Test Lab autosave check drops one inventory stack.
++            #[cfg(target_os = "android")]
++            if crate::android::take_drop_request() {
++                let mut client = self.client.borrow_mut();
++                let slot = client
++                    .inventories()
++                    .get(client.entity())
++                    .and_then(|inv| inv.slots_with_id().find(|(_, s)| s.is_some()).map(|(id, _)| id));
++                if let Some(slot) = slot {
++                    client.drop_slot(Slot::Inventory(slot));
++                    crate::android::alog(4, &format!("VEL-STEP dropped inventory slot {slot:?}"));
++                }
++            }
++
+             // my-veloren dev.4: graphics tier switch requested by the benchmark.
+             if let Some(g) = crate::mobile::take_pending_graphics() {
+                 settings_change::SettingsChange::Graphics(
+diff --git a/voxygen/src/singleplayer/mod.rs b/voxygen/src/singleplayer/mod.rs
+index 020f785dd..b01080c21 100644
+--- a/voxygen/src/singleplayer/mod.rs
++++ b/voxygen/src/singleplayer/mod.rs
+@@ -24,6 +24,12 @@ pub use singleplayer_world::{SingleplayerWorld, SingleplayerWorlds};
+ 
+ const TPS: u64 = 30;
+ 
++/// my-veloren dev.5: persist every character on the next server tick, even
++/// if the server is paused (Android `onPause` autosave).
++static PERSIST_NOW: AtomicBool = AtomicBool::new(false);
++
++pub fn request_persistence() { PERSIST_NOW.store(true, Ordering::SeqCst); }
++
+ /// Used to start and stop the background thread running the server
+ /// when in singleplayer mode.
+ pub struct Singleplayer {
+@@ -209,8 +215,16 @@ fn run_server(mut server: Server, stop_server_r: Receiver<()>, paused: Arc<Atomi
+         // Wait for the next tick.
+         clock.tick();
+ 
++        // my-veloren dev.5: autosave requested (app going to background): run
++        // one tick with the persistence system forced, even when paused.
++        let persist_now = PERSIST_NOW.swap(false, Ordering::SeqCst);
++        if persist_now {
++            server.request_persistence();
++            info!("my-veloren: persisting all characters now (app suspended)");
++        }
++
+         // Skip updating the server if it's paused
+-        if paused.load(Ordering::SeqCst) && server.number_of_players() < 2 {
++        if !persist_now && paused.load(Ordering::SeqCst) && server.number_of_players() < 2 {
+             continue;
+         } else if server.number_of_players() > 1 {
+             paused.store(false, Ordering::SeqCst);

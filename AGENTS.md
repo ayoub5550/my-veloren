@@ -10,6 +10,10 @@
 > (dev.3 touch controls → dev.9 distribution) are in [docs/ROADMAP.md](docs/ROADMAP.md); each needs an
 > owner instruction «نفّذ dev.N». The old Unity roadmap is `docs/ROADMAP-UNITY-ARCHIVED.md`.
 >
+> **2026-10-03:** dev.5 authorized («ابدأ dev5»): branch `feat/dev5-lifecycle`, patch 0004 (lifecycle, autosave,
+> Back, assets-once, crash reports, + 5.6 terrain occlusion culling approved by the owner). VM: sc. 4 8/8, sc. 5 6/6.
+> Physical runs pending quota. See [docs/DEV5.md](docs/DEV5.md). Not merged without owner approval.
+>
 > **2026-10-03:** dev.3 merged (PR #4). dev.4 (mobile tiers, pipeline cache, perf telemetry; patch 0003)
 > was closed by the owner («اغلق dev4 وابدأ في dev5») with its physical 30 fps gate NOT RUN (Test Lab quota),
 > carried to the first physical run of dev.5. See [docs/DEV4.md](docs/DEV4.md).

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.ayoub.myveloren"
-    android:versionCode="40"
-    android:versionName="0.1.0-dev.4">
+    android:versionCode="50"
+    android:versionName="0.1.0-dev.5">
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
     <uses-feature android:glEsVersion="0x00030000" android:required="true" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -14,8 +14,10 @@
         android:allowBackup="false"
         android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
         <!-- Test Lab game loop: 1 = play + all dev.3 checks, 2 = layout restored after restart,
-             3 = dev.4 graphics-tier benchmark + 10 min soak -->
-        <meta-data android:name="com.google.test.loops" android:value="3" />
+             3 = dev.4 graphics-tier benchmark + 10 min soak,
+             4 = dev.5 background/foreground x5 + autosave + SIGKILL, 5 = relaunch after kill
+             (save kept, assets not re-extracted, crash report, Back button) -->
+        <meta-data android:name="com.google.test.loops" android:value="6" />
         <activity
             android:name="com.ayoub.myveloren.VelorenActivity"
             android:exported="true"
@@ -33,5 +35,11 @@
                 <data android:mimeType="application/javascript" />
             </intent-filter>
         </activity>
+        <!-- dev.5 test helper: covers the game so Android destroys its window (like Home). -->
+        <activity
+            android:name="com.ayoub.myveloren.CoverActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
     </application>
 </manifest>

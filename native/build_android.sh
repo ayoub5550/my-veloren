@@ -1,13 +1,13 @@
 #!/bin/bash
 # Build the native Veloren Android APK (dev2+, ADR-002).
-# Usage: native/build_android.sh [VELOREN_SRC=/work/native/veloren] [APK_NAME=my-veloren-dev4.apk]
-# Output: native/out/$APK_NAME. Patches 0001 + 0002 + 0003 must already be applied to VELOREN_SRC.
+# Usage: native/build_android.sh [VELOREN_SRC=/work/native/veloren] [APK_NAME=my-veloren-dev5.apk]
+# Output: native/out/$APK_NAME. Patches 0001..0004 must already be applied to VELOREN_SRC.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 SRC=${VELOREN_SRC:-/work/native/veloren}
 source /work/native/env.sh
 SDK=${ANDROID_SDK:-/work/native/android-sdk}
-APK_NAME=${APK_NAME:-my-veloren-dev4.apk}
+APK_NAME=${APK_NAME:-my-veloren-dev5.apk}
 BT=$SDK/build-tools/34.0.0
 JAR=$SDK/platforms/android-34/android.jar
 export JAVA_HOME=${JAVA_HOME:-/work/native/jdk}
@@ -22,6 +22,8 @@ llvm-strip --strip-unneeded -o "$STAGE/lib/arm64-v8a/libveloren_voxygen.so" "$SO
 cp "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$STAGE/lib/arm64-v8a/"
 # Full upstream asset tree, as one tar (extracted on first launch by voxygen/src/android.rs)
 tar -C "$SRC" --exclude='*.blend' -cf "$STAGE/assets/assets.tar" assets
+# dev.5: content version of the tarball; the app re-extracts only when it changes
+sha256sum "$STAGE/assets/assets.tar" | cut -c1-16 > "$STAGE/assets/assets.version"
 # Java shim (VelorenActivity extends NativeActivity) -> classes.dex
 rm -rf "$OUT/classes"; mkdir -p "$OUT/classes" "$OUT/dex"
 javac -source 8 -target 8 -nowarn -bootclasspath "$JAR" -d "$OUT/classes" $(find "$HERE/android/java" -name '*.java') 2>/dev/null
