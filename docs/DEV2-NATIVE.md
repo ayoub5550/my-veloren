@@ -48,7 +48,12 @@ Offline: singleplayer runs the server in-process; no account/login/network requi
 | 2026-10-03 | Added Java shim `VelorenActivity extends NativeActivity` (classes.dex): game-loop intent → `files/autostart` marker → autostart singleplayer (default official world map `world.map.veloren_0_18_0_0`), auto-create character "Ayoub" (starter sword), enter world, autopilot walk/jump/attack/turn; `VEL-STAT fps=` logged every 5 s | built: APK 465,937,007 bytes, sha256 `62505b7bbf10acdfdba81d9bfdff3d41f92f86fc84f7525f3dace13a7b12a413` |
 | 2026-10-03 | Test Lab attempt 2 game-loop 15 min r8q (A13) + e3q (A16) | **FAIL** both: APK installs, `assets.tar` (444 MB) extracts in **2.7 s**, then SIGABRT `failed to set global default subscriber: SetLoggerError` (android_logger + voxygen's tracing `log` bridge both claim the global logger) |
 | 2026-10-03 | Fix: drop `android_logger`, log via direct `__android_log_write` (`alog`/`ainfo!`) | build rc=0; APK 465,945,199 B sha256 `a2c60549…e354` |
-| 2026-10-03 | Test Lab attempt 3 game-loop 10 min r8q only (quota) | running |
+| 2026-10-03 | Test Lab attempt 3 r8q | not run: `TEST_QUOTA_EXCEEDED` (daily physical quota used) → virtual `MediumPhone.arm` v34 |
+| 2026-10-03 | VM attempt 3 | FAIL: `System's $HOME directory path not found!` (settings defaults) → set `HOME`/`XDG_*`/`VOXYGEN_SCREENSHOT` |
+| 2026-10-03 | VM attempt 4 | FAIL: audio + assets OK, wgpu picks device, then `UnsupportedAlphaMode {Opaque, available [Inherit]}` → alpha mode from surface caps |
+| 2026-10-03 | VM attempt 5 | running |
+
+Full method (toolchain, patch, build, Test Lab, lessons): **[ANDROID-PORT-METHOD.md](ANDROID-PORT-METHOD.md)**.
 
 ## How to rebuild
 

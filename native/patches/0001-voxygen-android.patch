@@ -38,10 +38,10 @@ index 1d34a5f..0b9e461 100644
  [dev-dependencies]
 diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
 new file mode 100644
-index 0000000..30079c4
+index 0000000..b363226
 --- /dev/null
 +++ b/voxygen/src/android.rs
-@@ -0,0 +1,444 @@
+@@ -0,0 +1,450 @@
 +//! Android entry point for Voxygen (my-veloren dev2, ADR-002).
 +//!
 +//! * `android_main` is called by android-activity (NativeActivity).
@@ -220,6 +220,12 @@ index 0000000..30079c4
 +        std::env::set_var("VELOREN_USERDATA", &userdata);
 +        std::env::set_var("VOXYGEN_CONFIG", &config);
 +        std::env::set_var("VOXYGEN_LOGS", &logs);
++        // Android has no $HOME; `directories::UserDirs` (settings defaults) needs one.
++        std::env::set_var("HOME", &data);
++        std::env::set_var("XDG_CONFIG_HOME", data.join(".config"));
++        std::env::set_var("XDG_DATA_HOME", data.join(".local/share"));
++        std::env::set_var("XDG_CACHE_HOME", data.join(".cache"));
++        std::env::set_var("VOXYGEN_SCREENSHOT", userdata.join("screenshots"));
 +        if autostart {
 +            std::env::set_var("VELOREN_ANDROID_AUTOSTART", "1");
 +        }
@@ -811,6 +817,31 @@ index f25f95b..891998c 100644
          // Poll server creation
          #[cfg(feature = "singleplayer")]
          {
+diff --git a/voxygen/src/render/renderer/mod.rs b/voxygen/src/render/renderer/mod.rs
+index 8f7d53c..e2804a9 100644
+--- a/voxygen/src/render/renderer/mod.rs
++++ b/voxygen/src/render/renderer/mod.rs
+@@ -387,7 +387,19 @@ impl Renderer {
+                     .find(|mode| PresentMode::try_from(**mode).is_ok())
+                     .expect("There should never be no supported present modes")
+             },
+-            alpha_mode: wgpu::CompositeAlphaMode::Opaque,
++            // Android surfaces often only expose `Inherit` (my-veloren dev2).
++            alpha_mode: if surface_capabilities
++                .alpha_modes
++                .contains(&wgpu::CompositeAlphaMode::Opaque)
++            {
++                wgpu::CompositeAlphaMode::Opaque
++            } else {
++                surface_capabilities
++                    .alpha_modes
++                    .first()
++                    .copied()
++                    .unwrap_or(wgpu::CompositeAlphaMode::Auto)
++            },
+             view_formats: Vec::new(),
+         };
+ 
 diff --git a/voxygen/src/run.rs b/voxygen/src/run.rs
 index 8cbfb22..05fee39 100644
 --- a/voxygen/src/run.rs

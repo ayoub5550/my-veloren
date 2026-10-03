@@ -32,7 +32,7 @@
 
 ## English summary
 
-Status: **dev1** — first Unity slice and a debug APK (see docs/DEV1.md). Not yet the full game. The proposed product is an offline Android adaptation using Unity.
+Status: **dev2 (native, ADR-002)** — the real upstream Veloren client (Voxygen, Rust) cross-compiled for arm64 Android with the complete asset tree (~444 MB) and the official world map, offline singleplayer, touch controls. See [docs/DEV2-NATIVE.md](docs/DEV2-NATIVE.md). dev1 (Unity slice, docs/DEV1.md) is archived.
 Implementation is explicitly paused until the owner authorizes a milestone.
 
 Read [AGENTS.md](AGENTS.md) before editing. The requested lowercase

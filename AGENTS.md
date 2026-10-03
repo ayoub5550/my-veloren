@@ -1,5 +1,11 @@
 # AGENTS.md — developer and AI-agent contract
 
+> **Owner override 2026-10-03 (ADR-002, see [DEV2-NATIVE](docs/DEV2-NATIVE.md)):** the owner rejected the
+> Unity dev1 slice and chose the **native port** (upstream Rust Voxygen cross-compiled for Android,
+> full pinned asset tree in the APK, official world map). For dev2+ this supersedes the "Unity is the
+> Android host" rule in §2 and the planning-only stop in §0 for the dev2 milestone. Start with
+> `docs/DEV2-NATIVE.md` (status log, rebuild steps, Android code map).
+
 ## 0. Authorization: dev1 authorized (2026-10-03)
 
 The owner chose **Veloren → Unity → Android → offline**. On 2026-10-03 the owner instructed
