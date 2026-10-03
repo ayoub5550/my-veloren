@@ -1,6 +1,11 @@
 # Content and behavior coverage matrix
 
-**dev1 status (2026-10-03):** Voxel geometry, Character creation, Equipment visuals, Procedural
+**dev3 status (2026-10-03, native port):** Camera/movement (touch stick/camera/pinch/glide) and
+UI touch (menu bar, context buttons, layout editor) are **IMPLEMENTED for touch** with Test Lab evidence:
+[DEV3.md](DEV3.md). Under the native port (ADR-002), gameplay rows run the upstream code as-is;
+Android-specific gaps are performance (dev4) and lifecycle (dev5).
+
+**dev1 status (2026-10-03, archived Unity slice):** Voxel geometry, Character creation, Equipment visuals, Procedural
 animation, Camera/movement, World generation/rendering and Android robustness are **STARTED**
 (sample/placeholder level, see [DEV1.md](DEV1.md)); APK built, real-device smoke NOT RUN.
 All other rows: NOT STARTED. Expand each broad row into per-family/per-feature cases when implementation
@@ -15,7 +20,7 @@ is authorized. Every exception needs a reason, owner decision and impact on adve
 | Character creation | One valid assembled humanoid | Required appearances/races/body variations | dev3–6 |
 | Equipment visuals | Weapon + armor correctly attached | All required slots/items and visibility rules | dev3–6 |
 | Procedural animation | Idle/move/jump/attack/hit/death | Each required skeleton and state transition | dev3–6 |
-| Camera/movement | Touch + collision + pause | Swimming/climbing/gliding/mounts if required by agreed parity | dev3–6 |
+| Camera/movement | Touch + collision + pause — **dev3: touch stick/camera/pinch/glide PASS on r8q** ([DEV3](DEV3.md)); pause = dev5 | Swimming/climbing/gliding/mounts if required by agreed parity | dev3–6 |
 | World generation | Repeatable seed and chunk boundaries | Biomes/sites/dungeons and original rules comparison | dev4–6 |
 | World rendering | Terrain/water/foliage with bounded meshes | Lighting/weather/time-of-day effects required by scope | dev4–7 |
 | Local simulation | Actors progress without a network transport | Server/world/rtsim responsibilities required for offline experience | dev4–6 |
@@ -25,7 +30,7 @@ is authorized. Every exception needs a reason, owner decision and impact on adve
 | NPC interaction/economy | One agreed interaction | Trading/dialogue/quest-like systems present in selected upstream scope | dev6 |
 | Persistence | Kill/relaunch preserves world/player | Migration, corruption recovery, large-world stress | dev4–8 |
 | Audio | Nonzero decoded audio, played on device | Music/ambience/spatial feedback and manual sound check | dev2–7 |
-| UI/localization | Usable menus/touch safe areas | FTL semantics, Arabic shaping/RTL/glyph and accessibility tests | dev3–7 |
+| UI/localization | Usable menus/touch safe areas — **dev3: menu bar, context buttons, layout editor, 16:9–22:9 layout tests PASS** ([DEV3](DEV3.md)) | FTL semantics, Arabic shaping/RTL/glyph and accessibility tests | dev3–7 |
 | Offline distribution | Fresh complete install launches in airplane mode | All core paths work with no first-run download/account | dev5–8 |
 | Android robustness | ARM64/IL2CPP artifact and real-device smoke | Lifecycle/thermal/memory/page-size/upgrade matrix | dev1–8 |
 | Provenance/distribution | Original attribution and component map | Release obligations and engine integration resolved | dev1–8 |

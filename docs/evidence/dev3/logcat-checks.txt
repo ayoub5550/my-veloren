@@ -1,0 +1,64 @@
+# VEL-CHECK / VEL-SCENARIO lines extracted from Firebase Test Lab logcat (project ayoub-261d7)
+
+## vm2 (build5, MediumPhone.arm-34-en-landscape, outcome "outcome": "Passed")
+VEL-CHECK haptics PASS self-test pulse sent via JNI (see 'jni:' errors if any)
+VEL-CHECK multitouch PASS moved=31.3m cam_yaw_delta=1.27rad attack_seen=true max_fingers=3 states={"ComboMelee2", "Equipping", "Idle"}
+VEL-CHECK analog_slow PASS light tilt (0.35) speed=1.15 m/s
+VEL-CHECK analog_fast PASS light=1.15 m/s full=3.26 m/s
+VEL-CHECK pinch_zoom PASS camera distance 10.00 -> 7.64
+VEL-CHECK buttons PASS no crash; character states seen {"BasicBlock", "ChargedMelee", "Crawl", "Idle", "Roll", "Stunned", "Wielding"}
+VEL-CHECK glide FAIL glider_wielded=false gliding=false
+VEL-CHECK bag_open PASS bag=true game_input=false
+VEL-CHECK bag_closed PASS bag=false game_input=true
+VEL-CHECK map_open PASS map=true game_input=false
+VEL-CHECK map_closed PASS map=false game_input=true
+VEL-CHECK npc_interact PASS dialogue=true trade=false taps=1
+VEL-CHECK game_input_back PASS game_input=true
+VEL-CHECK layout_saved PASS jump=ButtonLayout { ctl: Jump, x: 0.7, y: 0.22, size: 0.102850005, alpha: 0.85 } on_disk=Some(ButtonLayout { ctl: Jump, x: 0.7, y: 0.22, size: 0.102850005, alpha: 0.85 })
+VEL-SCENARIO 1 DONE pass=13 fail=1 failed=["glide"] haptics=14
+VEL-CHECK layout_restored PASS loaded jump=ButtonLayout { ctl: Jump, x: 0.7, y: 0.22, size: 0.102850005, alpha: 0.85 } expected=Some([0.7, 0.22, 0.102850005, 0.85])
+VEL-CHECK multitouch PASS moved=25.2m cam_yaw_delta=1.24rad attack_seen=true max_fingers=3 states={"ComboMelee2", "Equipping", "Idle"}
+VEL-CHECK layout_reset PASS jump=ButtonLayout { ctl: Jump, x: 0.95, y: 0.53, size: 0.085, alpha: 1.0 }
+VEL-SCENARIO 2 DONE pass=3 fail=0 failed=[] haptics=5
+
+## r8q1 (build5, r8q-33-en-landscape, outcome "outcome": "Passed")
+VEL-CHECK haptics PASS self-test pulse sent via JNI (see 'jni:' errors if any)
+VEL-CHECK multitouch PASS moved=36.6m cam_yaw_delta=1.24rad attack_seen=true max_fingers=3 states={"ComboMelee2", "Equipping", "Idle", "Wielding"}
+VEL-CHECK analog_slow FAIL light tilt (0.35) speed=0.00 m/s
+VEL-CHECK analog_fast FAIL light=0.00 m/s full=0.00 m/s
+VEL-CHECK pinch_zoom PASS camera distance 9.99 -> 7.65
+VEL-CHECK buttons PASS no crash; character states seen {"BasicBlock", "ChargedMelee", "Equipping", "Idle", "Roll", "Wielding"}
+VEL-CHECK glide PASS glider_wielded=true gliding=true
+VEL-CHECK bag_open PASS bag=true game_input=false
+VEL-CHECK bag_closed PASS bag=false game_input=true
+VEL-CHECK map_open PASS map=true game_input=false
+VEL-CHECK map_closed PASS map=false game_input=true
+VEL-CHECK npc_interact FAIL timeout npc_dist=Some(23.97988) can_interact=true taps=4 dead=false respawns=0 detours=20
+VEL-CHECK game_input_back FAIL game_input=false
+VEL-CHECK layout_saved FAIL jump=ButtonLayout { ctl: Jump, x: 0.95, y: 0.53, size: 0.085, alpha: 1.0 } on_disk=Some(ButtonLayout { ctl: Jump, x: 0.95, y: 0.53, size: 0.085, alpha: 1.0 })
+VEL-SCENARIO 1 DONE pass=9 fail=5 failed=["analog_slow", "analog_fast", "npc_interact", "game_input_back", "layout_saved"] haptics=1
+VEL-CHECK layout_restored PASS loaded jump=ButtonLayout { ctl: Jump, x: 0.95, y: 0.53, size: 0.085, alpha: 1.0 } expected=Some([0.95, 0.53, 0.085, 1.0])
+VEL-CHECK multitouch PASS moved=63.2m cam_yaw_delta=1.24rad attack_seen=true max_fingers=3 states={"ComboMelee2", "Equipping", "Idle", "Wielding"}
+VEL-CHECK layout_reset PASS jump=ButtonLayout { ctl: Jump, x: 0.95, y: 0.53, size: 0.085, alpha: 1.0 }
+VEL-SCENARIO 2 DONE pass=3 fail=0 failed=[] haptics=0
+
+## vm3 (build6, MediumPhone.arm-34-en-landscape, outcome "outcome": "Passed")
+VEL-CHECK haptics PASS self-test pulse sent via JNI (see 'jni:' errors if any)
+VEL-CHECK multitouch PASS moved=28.0m cam_yaw_delta=1.24rad attack_seen=true max_fingers=3 states={"ComboMelee2", "Equipping", "Idle"}
+VEL-CHECK analog_slow PASS light tilt (0.35) speed=0.52 m/s
+VEL-CHECK analog_fast PASS light=0.52 m/s full=6.66 m/s
+VEL-CHECK pinch_zoom PASS camera distance 10.00 -> 7.66
+VEL-CHECK buttons PASS no crash; character states seen {"BasicBlock", "ChargedMelee", "Equipping", "Idle", "Roll", "Wielding"}
+VEL-CHECK glide PASS glider_wielded=true gliding=true
+VEL-CHECK bag_open PASS bag=true game_input=false
+VEL-CHECK bag_closed PASS bag=false game_input=true
+VEL-CHECK map_open PASS map=true game_input=false
+VEL-CHECK map_closed PASS map=false game_input=true
+VEL-CHECK npc_interact PASS dialogue=true trade=false taps=1
+VEL-CHECK game_input_back PASS game_input=true
+VEL-CHECK layout_saved PASS jump=ButtonLayout { ctl: Jump, x: 0.7, y: 0.22, size: 0.102850005, alpha: 0.85 } on_disk=Some(ButtonLayout { ctl: Jump, x: 0.7, y: 0.22, size: 0.102850005, alpha: 0.85 })
+VEL-SCENARIO 1 DONE pass=14 fail=0 failed=[] haptics=1
+VEL-CHECK layout_restored PASS loaded jump=ButtonLayout { ctl: Jump, x: 0.7, y: 0.22, size: 0.102850005, alpha: 0.85 } expected=Some([0.7, 0.22, 0.102850005, 0.85])
+VEL-CHECK multitouch PASS moved=28.0m cam_yaw_delta=1.21rad attack_seen=true max_fingers=3 states={"ComboMelee2", "Equipping", "Idle"}
+VEL-CHECK layout_reset PASS jump=ButtonLayout { ctl: Jump, x: 0.95, y: 0.53, size: 0.085, alpha: 1.0 }
+VEL-SCENARIO 2 DONE pass=3 fail=0 failed=[] haptics=17

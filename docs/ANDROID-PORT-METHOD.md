@@ -71,16 +71,18 @@ Needed because Firebase rejects APKs without dex (`NO_CODE_APK`) and to receive 
 intent: on `com.google.intent.action.TEST_LOOP` it writes `files/autostart` (autopilot on);
 on a normal launch it deletes it.
 
-## 6. Touch controls (session)
+## 6. Touch controls (session, dev.3)
 
-| Zone | Action |
+Patch `0002-dev3-touch-controls.patch` replaces the invisible dev2 zones with a drawn overlay.
+Details and evidence: [DEV3.md](DEV3.md).
+
+| Part | Where |
 |---|---|
-| left 40 % of screen | virtual stick → W/A/S/D |
-| right side drag | camera (cursor pan) |
-| right edge, middle | primary attack |
-| bottom-right | jump · left of it: roll |
-| top-right corner | Escape (menu) |
-| menus | one finger = mouse |
+| State machine (fingers, stick, camera, pinch, buttons, editor, context) | `voxygen/src/touch.rs`, pure Rust, host tests in `native/touch-tests` |
+| Drawing | `voxygen/src/hud/touch_overlay.rs` (conrod primitives above the HUD) |
+| Touch → game | `android.rs` maps actions to `GameInput` press/release, analog `move_dir`, camera pan/zoom; one finger = mouse while a window is open |
+| Context (Use/Mount/Respawn/Swim) + haptics on hits | `session/mod.rs` publishes `touch::Context` every tick |
+| Layout | `settings.ron` → `touch` (position, size, alpha per button; opacity, sensitivity, smoothing, stick radius/dead-zone, haptics) |
 
 ## 7. Firebase Test Lab
 
@@ -91,6 +93,9 @@ Never enable billing, never cancel a running matrix.
 
 - Physical: `r8q` (A13, version 33), `e3q` (A16, version 36).
 - Virtual: `MediumPhone.arm` version 34 — renders with llvmpipe (CPU), slow; good for boot/crash checks.
+
+Scenarios (dev.3): `FTL_SCENARIOS=1,2`; the Java shim passes the scenario number to the game.
+Scenario 1 injects touches and logs `VEL-CHECK <name> PASS|FAIL`; scenario 2 runs after a restart.
 
 Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
 `android: extracted assets … in Ns`, `android: activity resumed`, `android-autostart: …`,
@@ -107,9 +112,14 @@ Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
 | `TEST_QUOTA_EXCEEDED` | daily Spark quota used | switch to virtual device or wait for tomorrow |
 | log spam `Failed to toggle cursor grab … NotSupported` | winit Android has no cursor grab | harmless; can be silenced on Android |
 | VM Session at 0.5–2 fps | virtual device renders on CPU (llvmpipe) | logic check only; judge fps on a physical device |
+| Outcome "Application crashed" after all checks passed; tombstone `FORTIFY: pthread_mutex_lock called on a destroyed mutex` in `libEGL_emulation eglDisplay::~eglDisplay` | `std::process::exit` runs C `atexit`/static destructors while the render thread still owns the EGL context | leave the game loop with `libc::_exit(0)` after `reportFullyDrawn`/finish |
+| Autopilot step fails (glide, NPC) with `dead=true` in `VEL-STAT` | wild animals kill the character during the scripted run | before every step: if dead, tap the contextual Respawn button |
+| "Use" opened a crafting window instead of the NPC dialogue | the nearest interactable was a crafting station | tap Use only when the target is within 3.5 m; close stray windows with Menu (Esc) |
+| Analog speed test 0.00 m/s on a fast device | after a 36 m run the character stood against a wall | measure the walk back along the path just used |
+| Shell killed by `pkill -f <pattern>` | the pattern also matched the agent's own command line | kill by PID, never `pkill -f` with a pattern from your own command |
 
 ## 9. Known gaps / next
 
-- No on-screen drawing of touch zones yet; no pause/resume surface recreation.
+- Touch overlay done in dev.3. Still missing: pause/resume surface recreation (dev.5).
 - Default graphics settings are desktop defaults → lower them on Android for fps.
 - VM attempt 5 reached the world (Session) and ran 10 min without crash; physical-device confirmation pending quota.

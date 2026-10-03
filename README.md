@@ -1,9 +1,11 @@
 # my-veloren — Unity / Android / Offline
 
-> **الحالة: dev1 (0.1.0-dev.1) — شريحة Unity أولى + APK تجريبي.**
-> مشروع Unity في `game/`، عينة 26 أصلاً حقيقياً من Veloren (شخصية بشرية بدرع وسيف، أشجار)،
-> عالم voxel مولد محلياً، تحكم لمس. البناء نجح؛ اختبار الهاتف الحقيقي لم يُشغَّل بعد.
-> التفاصيل والأدلة: [docs/DEV1.md](docs/DEV1.md).
+> **الحالة: dev.3 (0.1.0-dev.3) — Veloren الأصلية (Rust) على أندرويد، تعمل دون إنترنت، مع تحكم لمس كامل.**
+> المسار الأصلي native (ADR-002): عميل Voxygen الحقيقي مع خادم فردي مدمج، وكل الموارد، وخريطة العالم الرسمية.
+> يتضمن dev.3 عصا تحكم تناظرية، وكاميرا بالسحب، وتكبيرًا بإصبعين، وأزرار القتال والحركة، وشريط قوائم، وأزرارًا حسب السياق،
+> ومحرر تخطيط، واهتزازًا. جُرّب في Firebase Test Lab على جهاز حقيقي.
+> التفاصيل: [docs/DEV3.md](docs/DEV3.md) · [docs/DEV2-NATIVE.md](docs/DEV2-NATIVE.md) · خارطة المراحل [docs/ROADMAP.md](docs/ROADMAP.md).
+> شريحة Unity (dev1) مؤرشفة: [docs/DEV1.md](docs/DEV1.md).
 
 الهدف المستقبلي: إعادة تنفيذ تجربة Veloren على Unity لأندرويد، تعمل محلياً دون حساب
 أو اتصال، مع خط استيراد يشمل مكتبة الأصول كاملة، وتعليمات قابلة للتكرار لأي مطور أو
@@ -32,8 +34,8 @@
 
 ## English summary
 
-Status: **dev2 (native, ADR-002)** — the real upstream Veloren client (Voxygen, Rust) cross-compiled for arm64 Android with the complete asset tree (~444 MB) and the official world map, offline singleplayer, touch controls. See [docs/DEV2-NATIVE.md](docs/DEV2-NATIVE.md). dev1 (Unity slice, docs/DEV1.md) is archived.
-Implementation is explicitly paused until the owner authorizes a milestone.
+Status: **dev.3 (native, ADR-002)** — the real upstream Veloren client (Voxygen, Rust) cross-compiled for arm64 Android with the complete asset tree (~444 MB) and the official world map, offline singleplayer, plus a full on-screen touch layer (analog stick, camera drag/pinch, combat/movement buttons, menu bar, context buttons, layout editor, haptics) tested with injected touches on Firebase Test Lab. See [docs/DEV3.md](docs/DEV3.md) and [docs/DEV2-NATIVE.md](docs/DEV2-NATIVE.md). dev1 (Unity slice, docs/DEV1.md) is archived.
+Each further milestone starts only on an owner instruction (see docs/ROADMAP.md).
 
 Read [AGENTS.md](AGENTS.md) before editing. The requested lowercase
 [agent.md](agent.md) points to the same canonical instructions.

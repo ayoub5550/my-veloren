@@ -53,6 +53,7 @@ Offline: singleplayer runs the server in-process; no account/login/network requi
 | 2026-10-03 | VM attempt 4 | FAIL: audio + assets OK, wgpu picks device, then `UnsupportedAlphaMode {Opaque, available [Inherit]}` → alpha mode from surface caps |
 | 2026-10-03 | VM attempt 5 (`MediumPhone.arm` v34, game-loop 15 min, CPU llvmpipe Vulkan) | **PASS** (outcome `Passed`, 0 `PANIC`): assets extracted 1.8 s → Title menu 34–47 fps → singleplayer server on official world `veloren_0_18_0_0` → Character Selection (t=40 s) → auto-created character → **Session in world at t=45 s**, ran ~10 min to the end without crash (Session 0.5–2 fps on software rendering). Video frames: [title](evidence/dev2/vm5_t30s.jpg), [in world + HUD + minimap](evidence/dev2/vm5_t120s.jpg), [autopilot died → respawn prompt](evidence/dev2/vm5_t400s.jpg). APK 465,945,199 B sha256 `b2fc7065950874ba7e72f76befd3dcd9cce28c45d3ca9310baaaa79d2f380db5` |
 | 2026-10-03 | **Physical attempt 6: Samsung Galaxy S20 FE (r8q, Android 13, Adreno 650)**, game-loop 10 min, same APK sha256 `b2fc7065…0db5` | **PASS** (outcome `Passed`, 0 `PANIC`): wgpu selected **Vulkan** on Adreno 650; assets extracted 3.5 s; **Title 54–59 fps**; Character Selection ~30 fps (t=30 s); **Session in world at t=36 s**, ran ~10 min to the end without crash; **Session fps 5.0–10.6 (mean 6.8 over 114 samples)** at default desktop graphics settings → mobile graphics preset is the top dev.4 item. Frames: [title](evidence/dev2/r8q_t20s.jpg), [in world](evidence/dev2/r8q_t60s.jpg), [village](evidence/dev2/r8q_t200s.jpg), [Ammestin Woodlands](evidence/dev2/r8q_t450s.jpg). Video: release asset `veloren-android-r8q-physical.mp4`. Only log noise: `Failed to toggle cursor grab NotSupported` (harmless). |
+| 2026-10-03 | dev.3 touch controls (patch 0002) | see [DEV3.md](DEV3.md): physical r8q run reached the world at 7–9 fps, outcome `Passed` |
 | next | e3q physical run; mobile graphics preset (dev.4) | NOT RUN |
 
 Full method (toolchain, patch, build, Test Lab, lessons): **[ANDROID-PORT-METHOD.md](ANDROID-PORT-METHOD.md)**.
@@ -77,4 +78,5 @@ FIREBASE_SA_JSON=... tools/ftl.sh native/out/my-veloren-dev2.apk dev2-r8q
   right edge: Primary (middle), Jump (bottom-right), Roll (left of Jump), Escape (top-right corner).
 - `voxygen/src/android_main_body.rs`: copy of `main.rs` body without CLI parsing.
 - `run.rs`: touch events translated before the normal pipeline. `window.rs`: android event loop.
-- Known gaps: surface loss on app pause/resume not handled yet; no on-screen drawing of touch zones yet.
+- dev.3 replaced the invisible touch zones with the drawn overlay of patch 0002 (code map in [DEV3.md](DEV3.md)).
+- Known gap: surface loss on app pause/resume is not handled yet (dev.5).

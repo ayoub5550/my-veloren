@@ -1,0 +1,2928 @@
+diff --git a/voxygen/Cargo.toml b/voxygen/Cargo.toml
+index 0b9e46186..c605de819 100644
+--- a/voxygen/Cargo.toml
++++ b/voxygen/Cargo.toml
+@@ -152,8 +152,7 @@ cpal = "0.18"
+ 
+ [target.'cfg(target_os = "android")'.dependencies]
+ winit = { version = "0.30.12", features = ["serde", "android-native-activity"] }
+-android_logger = "0.14"
+-log = "0.4"
++jni = "0.21"
+ libc = "0.2"
+ tar = "0.4"
+ 
+diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
+index b363226c4..3b8cbe67a 100644
+--- a/voxygen/src/android.rs
++++ b/voxygen/src/android.rs
+@@ -4,19 +4,23 @@
+ //! * stdout/stderr are redirected to logcat (tag `veloren`).
+ //! * The full upstream `assets/` tree is shipped as `assets/assets.tar` inside the
+ //!   APK and extracted once to the app's internal storage.
+-//! * Touch input is mapped to mouse input in menus and to a virtual stick /
+-//!   camera pan / action zones while in a game session.
++//! * Touch input goes through `crate::touch` (dev.3): mouse emulation in menus,
++//!   on-screen stick / camera / buttons in a session, layout editor.
++//! * JNI (dev.3): vibration (`VelorenActivity.vibrate`) and ending a Test Lab
++//!   game loop (`VelorenActivity.finishLoop`).
++//! * Test Lab game loop scenarios (dev.3) drive the game by injecting touches.
+ #![allow(unsafe_code)]
+ 
+ use std::{
+-    io::{BufRead, BufReader, Read, Write},
++    collections::{BTreeSet, HashMap},
++    io::{BufRead, BufReader, Write},
+     path::{Path, PathBuf},
+-    sync::{Mutex, OnceLock},
++    sync::{Mutex, OnceLock, mpsc},
+     time::{Duration, Instant},
+ };
+ use winit::{
+     application::ApplicationHandler,
+-    event::{ElementState, Event, MouseButton, TouchPhase, WindowEvent},
++    event::{DeviceId, ElementState, Event, MouseButton, TouchPhase, WindowEvent},
+     event_loop::ActiveEventLoop,
+     platform::{
+         android::{EventLoopBuilderExtAndroid, activity::AndroidApp},
+@@ -24,9 +28,15 @@ use winit::{
+     },
+ };
+ 
+-use crate::{game_input::GameInput, window::Event as VEvent};
++use crate::{
++    GlobalState,
++    game_input::GameInput,
++    touch::{self, Ctl, Out, Phase, Tool},
++    window::{AnalogGameInput, Event as VEvent, KeyMouse},
++};
+ 
+ static APP: OnceLock<AndroidApp> = OnceLock::new();
++static DATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+ 
+ #[link(name = "log")]
+ unsafe extern "C" {
+@@ -162,8 +172,15 @@ fn android_main(app: AndroidApp) {
+         .unwrap_or_else(|| PathBuf::from("/data/local/tmp/veloren"));
+     ainfo!("android: internal data path {}", data.display());
+     let root = extract_assets(&app, &data);
+-    let autostart = data.join("autostart").exists();
+-    ainfo!("android: autostart={autostart}");
++    // Written by VelorenActivity for Test Lab game loops; content = scenario.
++    let autostart_marker = std::fs::read_to_string(data.join("autostart")).ok();
++    let autostart = autostart_marker.is_some();
++    let scenario = autostart_marker
++        .as_deref()
++        .and_then(|s| s.trim().parse::<u32>().ok())
++        .unwrap_or(1);
++    ainfo!("android: autostart={autostart} scenario={scenario}");
++    let _ = DATA_DIR.set(data.clone());
+     let userdata = data.join("userdata");
+     let config = userdata.join("voxygen");
+     let logs = userdata.join("logs");
+@@ -184,222 +201,680 @@ fn android_main(app: AndroidApp) {
+         std::env::set_var("VOXYGEN_SCREENSHOT", userdata.join("screenshots"));
+         if autostart {
+             std::env::set_var("VELOREN_ANDROID_AUTOSTART", "1");
++            std::env::set_var("VELOREN_ANDROID_SCENARIO", scenario.to_string());
+         }
+         if std::env::var_os("RUST_BACKTRACE").is_none() {
+             std::env::set_var("RUST_BACKTRACE", "1");
+         }
+     }
+     let _ = std::io::stdout().flush();
++    start_jni_thread();
+     crate::android_main_body::run();
+     ainfo!("android: game loop returned");
+ }
+ 
++// -------------------------------------------------------------------- JNI ---
++
++enum JniCall {
++    Vibrate(u32),
++    FinishLoop,
++}
++
++static JNI_TX: Mutex<Option<mpsc::Sender<JniCall>>> = Mutex::new(None);
++
++/// One permanently attached thread performs all Java calls, so the render
++/// thread never blocks on JNI.
++fn start_jni_thread() {
++    let (tx, rx) = mpsc::channel::<JniCall>();
++    *JNI_TX.lock().unwrap() = Some(tx);
++    let _ = std::thread::Builder::new()
++        .name("veloren-jni".into())
++        .spawn(move || {
++            let app = app();
++            // SAFETY: pointers come from android-activity and stay valid for the
++            // lifetime of the process.
++            let vm = match unsafe { jni::JavaVM::from_raw(app.vm_as_ptr() as *mut _) } {
++                Ok(vm) => vm,
++                Err(e) => return aerror!("jni: no JavaVM: {e}"),
++            };
++            let mut env = match vm.attach_current_thread_permanently() {
++                Ok(env) => env,
++                Err(e) => return aerror!("jni: attach failed: {e}"),
++            };
++            let activity =
++                unsafe { jni::objects::JObject::from_raw(app.activity_as_ptr() as jni::sys::jobject) };
++            ainfo!("jni: ready");
++            for call in rx {
++                let r = match call {
++                    JniCall::Vibrate(ms) => env
++                        .call_method(&activity, "vibrate", "(I)V", &[jni::objects::JValue::Int(
++                            ms as i32,
++                        )])
++                        .map(|_| ()),
++                    JniCall::FinishLoop => env.call_method(&activity, "finishLoop", "()V", &[]).map(|_| ()),
++                };
++                if let Err(e) = r {
++                    let _ = env.exception_describe();
++                    let _ = env.exception_clear();
++                    aerror!("jni: call failed: {e}");
++                }
++            }
++        });
++}
++
++fn jni_send(c: JniCall) {
++    if let Some(tx) = JNI_TX.lock().unwrap().as_ref() {
++        let _ = tx.send(c);
++    }
++}
++
++static HAPTIC_COUNT: Mutex<u32> = Mutex::new(0);
++
++fn vibrate(ms: u32) {
++    *HAPTIC_COUNT.lock().unwrap() += 1;
++    jni_send(JniCall::Vibrate(ms));
++}
++
++// ------------------------------------------------------------------ probe ---
++
++/// Snapshot of the player published by the session every tick (Test Lab checks).
++#[derive(Clone, Debug, Default)]
++pub struct Probe {
++    pub pos: [f32; 3],
++    pub vel: [f32; 3],
++    pub cam_yaw: f32,
++    pub cam_dist: f32,
++    pub char_state: String,
++    pub gliding: bool,
++    pub glide_wield: bool,
++    pub attacking: bool,
++    /// Stick vector (right, forward) that walks towards the nearest villager.
++    pub npc_stick: Option<[f32; 2]>,
++    pub npc_dist: Option<f32>,
++    pub dialogue_open: bool,
++    pub trade_open: bool,
++    pub bag_open: bool,
++    pub map_open: bool,
++    pub ctx: touch::Context,
++}
++
++static PROBE: Mutex<Option<Probe>> = Mutex::new(None);
++
++pub fn set_probe(p: Probe) { *PROBE.lock().unwrap() = Some(p); }
++
++fn probe() -> Option<Probe> { PROBE.lock().unwrap().clone() }
++
+ // ------------------------------------------------------------------ touch ---
+ 
+-#[derive(Default)]
+-struct TouchState {
+-    /// Finger driving the mouse in menus.
+-    mouse_finger: Option<u64>,
+-    /// Virtual stick finger, its origin.
+-    stick: Option<(u64, (f64, f64))>,
+-    stick_dirs: [bool; 4],
+-    /// Camera finger and its last position.
+-    cam: Option<(u64, (f64, f64))>,
+-    /// Action buttons held: (finger, input)
+-    actions: Vec<(u64, GameInput)>,
++fn ctl_input(c: Ctl) -> Option<GameInput> {
++    Some(match c {
++        Ctl::Primary => GameInput::Primary,
++        Ctl::Secondary => GameInput::Secondary,
++        Ctl::Block => GameInput::Block,
++        Ctl::Jump => GameInput::Jump,
++        Ctl::Roll => GameInput::Roll,
++        Ctl::Ability1 => GameInput::Slot1,
++        Ctl::Ability2 => GameInput::Slot2,
++        Ctl::Ability3 => GameInput::Slot3,
++        Ctl::Ability4 => GameInput::Slot4,
++        Ctl::Ability5 => GameInput::Slot5,
++        Ctl::Glide => GameInput::Glide,
++        Ctl::Sneak => GameInput::Sneak,
++        Ctl::SwimUp => GameInput::SwimUp,
++        Ctl::SwimDown => GameInput::SwimDown,
++        Ctl::Interact => GameInput::Interact,
++        Ctl::Mount => GameInput::Mount,
++        Ctl::Wield => GameInput::ToggleWield,
++        Ctl::Lantern => GameInput::ToggleLantern,
++        Ctl::Respawn => GameInput::Respawn,
++        Ctl::Menu => GameInput::Escape,
++        Ctl::Bag => GameInput::Inventory,
++        Ctl::Map => GameInput::Map,
++        Ctl::Skills => GameInput::Diary,
++        Ctl::Crafting => GameInput::Crafting,
++        Ctl::Social => GameInput::Social,
++        Ctl::Chat => GameInput::Chat,
++        Ctl::Edit => return None,
++    })
+ }
+ 
+-static TOUCH: Mutex<Option<TouchState>> = Mutex::new(None);
++/// key/mouse binding → on-screen button, for keyboard hints (3.10).
++static KEY_HINTS: Mutex<Option<HashMap<KeyMouse, Ctl>>> = Mutex::new(None);
+ 
+-const STICK_DEADZONE: f64 = 0.03; // fraction of screen height
++fn build_key_hints(gs: &GlobalState) {
++    let mut m = HashMap::new();
++    for c in Ctl::ALL {
++        if let Some(gi) = ctl_input(c)
++            && let Some(km) = gs.settings.controls.get_binding(gi)
++        {
++            m.entry(km).or_insert(c);
++        }
++    }
++    *KEY_HINTS.lock().unwrap() = Some(m);
++}
+ 
+-/// Translate winit touch events. Returns the (possibly synthesized) winit
+-/// events that should be processed by the normal event pipeline.
+-pub fn translate_touch(
+-    event: Event<()>,
+-    state_name: Option<&'static str>,
+-    window: &mut crate::window::Window,
+-) -> Vec<Event<()>> {
+-    if matches!(event, Event::AboutToWait) {
+-        autopilot(state_name, window);
++/// Label of the touch button bound to `km` (used by `KeyMouse::display_string`).
++pub fn touch_hint(km: &KeyMouse) -> Option<&'static str> {
++    let g = KEY_HINTS.lock().ok()?;
++    touch::hint_label_for(g.as_ref()?.get(km).copied())
++}
++
++fn phase_of(p: TouchPhase) -> Phase {
++    match p {
++        TouchPhase::Started => Phase::Started,
++        TouchPhase::Moved => Phase::Moved,
++        TouchPhase::Ended => Phase::Ended,
++        TouchPhase::Cancelled => Phase::Cancelled,
+     }
+-    let (window_id, touch) = match event {
+-        Event::WindowEvent {
+-            window_id,
+-            event: WindowEvent::Touch(t),
+-        } => (window_id, t),
+-        other => return vec![other],
+-    };
+-    let mut guard = TOUCH.lock().unwrap();
+-    let ts = guard.get_or_insert_with(TouchState::default);
+-    let size = window.window().inner_size();
+-    let (w, h) = (size.width.max(1) as f64, size.height.max(1) as f64);
+-    let (x, y) = (touch.location.x, touch.location.y);
+-    let id = touch.id;
+-    let dev = touch.device_id;
+-    let in_session = state_name == Some("Session");
++}
+ 
+-    let mut out = Vec::new();
+-    let cursor = |out: &mut Vec<Event<()>>| {
+-        out.push(Event::WindowEvent {
+-            window_id,
+-            event: WindowEvent::CursorMoved {
+-                device_id: dev,
+-                position: touch.location,
+-            },
+-        })
+-    };
+-    let button = |out: &mut Vec<Event<()>>, st: ElementState| {
+-        out.push(Event::WindowEvent {
+-            window_id,
+-            event: WindowEvent::MouseInput {
+-                device_id: dev,
+-                state: st,
+-                button: MouseButton::Left,
+-            },
+-        })
+-    };
++fn current_context(state_name: Option<&'static str>, gs: &GlobalState) -> touch::Context {
++    if state_name == Some("Session") {
++        let mut c = touch::context();
++        c.in_session = true;
++        c.game_input = gs.window.is_cursor_grabbed();
++        c
++    } else {
++        touch::Context::default()
++    }
++}
+ 
+-    if !in_session {
+-        // Release anything held from a previous session.
+-        release_all(ts, window);
+-        match touch.phase {
+-            TouchPhase::Started => {
+-                if ts.mouse_finger.is_none() {
+-                    ts.mouse_finger = Some(id);
+-                    cursor(&mut out);
+-                    button(&mut out, ElementState::Pressed);
++/// Run one touch through the touch layer and turn the result into events.
++fn handle_touch(
++    id: u64,
++    phase: Phase,
++    x: f64,
++    y: f64,
++    state_name: Option<&'static str>,
++    gs: &mut GlobalState,
++    out_events: &mut Vec<Event<()>>,
++) {
++    let size = gs.window.window().inner_size();
++    let (w, h) = (size.width.max(1) as f64, size.height.max(1) as f64);
++    let ctx = current_context(state_name, gs);
++    let outs = touch::with_layer(|l| l.on_touch(id, phase, x, y, w, h, &ctx, &mut gs.settings.touch));
++    apply_outs(outs, gs, out_events);
++}
++
++fn apply_outs(outs: Vec<Out>, gs: &mut GlobalState, out_events: &mut Vec<Event<()>>) {
++    let window_id = gs.window.window().id();
++    let device_id = DeviceId::dummy();
++    let pos = |x: f64, y: f64| winit::dpi::PhysicalPosition::new(x, y);
++    for o in outs {
++        match o {
++            Out::Press(c) | Out::Release(c) => {
++                if let Some(gi) = ctl_input(c) {
++                    gs.window
++                        .send_event(VEvent::InputUpdate(gi, matches!(o, Out::Press(_))));
+                 }
+             },
+-            TouchPhase::Moved => {
+-                if ts.mouse_finger == Some(id) {
+-                    cursor(&mut out);
+-                }
++            Out::Move(x, y) => {
++                gs.window
++                    .send_event(VEvent::AnalogGameInput(AnalogGameInput::MovementX(x)));
++                gs.window
++                    .send_event(VEvent::AnalogGameInput(AnalogGameInput::MovementY(y)));
+             },
+-            TouchPhase::Ended | TouchPhase::Cancelled => {
+-                if ts.mouse_finger == Some(id) {
+-                    ts.mouse_finger = None;
+-                    cursor(&mut out);
+-                    button(&mut out, ElementState::Released);
+-                }
++            Out::Pan(dx, dy) => gs.window.send_event(VEvent::CursorPan(vek::Vec2::new(dx, dy))),
++            Out::Zoom(z) => gs.window.send_event(VEvent::Zoom(z)),
++            Out::MouseMove(x, y) => out_events.push(Event::WindowEvent {
++                window_id,
++                event: WindowEvent::CursorMoved {
++                    device_id,
++                    position: pos(x, y),
++                },
++            }),
++            Out::MouseDown(x, y) | Out::MouseUp(x, y) => {
++                out_events.push(Event::WindowEvent {
++                    window_id,
++                    event: WindowEvent::CursorMoved {
++                        device_id,
++                        position: pos(x, y),
++                    },
++                });
++                out_events.push(Event::WindowEvent {
++                    window_id,
++                    event: WindowEvent::MouseInput {
++                        device_id,
++                        state: if matches!(o, Out::MouseDown(..)) {
++                            ElementState::Pressed
++                        } else {
++                            ElementState::Released
++                        },
++                        button: MouseButton::Left,
++                    },
++                });
++            },
++            Out::Save => {
++                gs.settings.save_to_file_warn(&gs.config_dir);
++                ainfo!("touch: layout saved to settings.ron");
+             },
+         }
+-        return out;
+     }
++}
+ 
+-    // ---- in game session ----
+-    ts.mouse_finger = None;
+-    let (fx, fy) = (x / w, y / h);
+-    match touch.phase {
+-        TouchPhase::Started => {
+-            if fx < 0.4 && ts.stick.is_none() {
+-                ts.stick = Some((id, (x, y)));
+-            } else if fx > 0.85 && fy > 0.72 {
+-                ts.actions.push((id, GameInput::Jump));
+-                window.send_event(VEvent::InputUpdate(GameInput::Jump, true));
+-            } else if fx > 0.85 && fy > 0.45 {
+-                ts.actions.push((id, GameInput::Primary));
+-                window.send_event(VEvent::InputUpdate(GameInput::Primary, true));
+-            } else if fx > 0.70 && fy > 0.72 {
+-                ts.actions.push((id, GameInput::Roll));
+-                window.send_event(VEvent::InputUpdate(GameInput::Roll, true));
+-            } else if fx > 0.90 && fy < 0.10 {
+-                ts.actions.push((id, GameInput::Escape));
+-                window.send_event(VEvent::InputUpdate(GameInput::Escape, true));
+-            } else if ts.cam.is_none() {
+-                ts.cam = Some((id, (x, y)));
+-            }
++/// Translate winit events. Touches go through `crate::touch`; once per frame
++/// (`AboutToWait`) camera smoothing, haptics and the Test Lab autopilot run.
++pub fn translate_touch(
++    event: Event<()>,
++    state_name: Option<&'static str>,
++    gs: &mut GlobalState,
++) -> Vec<Event<()>> {
++    let mut out = Vec::new();
++    match event {
++        Event::WindowEvent {
++            event: WindowEvent::Touch(t),
++            ..
++        } => {
++            handle_touch(
++                t.id,
++                phase_of(t.phase),
++                t.location.x,
++                t.location.y,
++                state_name,
++                gs,
++                &mut out,
++            );
+         },
+-        TouchPhase::Moved => {
+-            if let Some((sid, (ox, oy))) = ts.stick
+-                && sid == id
+-            {
+-                let (dx, dy) = ((x - ox) / h, (y - oy) / h);
+-                let dirs = [
+-                    dy < -STICK_DEADZONE,
+-                    dy > STICK_DEADZONE,
+-                    dx < -STICK_DEADZONE,
+-                    dx > STICK_DEADZONE,
+-                ];
+-                set_dirs(ts, window, dirs);
+-            } else if let Some((cid, (lx, ly))) = ts.cam
+-                && cid == id
+-            {
+-                let sens = 0.6 * (1080.0 / h) as f32;
+-                window.send_event(VEvent::CursorPan(vek::Vec2::new(
+-                    (x - lx) as f32 * sens,
+-                    (y - ly) as f32 * sens,
+-                )));
+-                ts.cam = Some((id, (x, y)));
+-            }
+-        },
+-        TouchPhase::Ended | TouchPhase::Cancelled => {
+-            if ts.stick.map(|s| s.0) == Some(id) {
+-                ts.stick = None;
+-                set_dirs(ts, window, [false; 4]);
+-            }
+-            if ts.cam.map(|c| c.0) == Some(id) {
+-                ts.cam = None;
+-            }
+-            ts.actions.retain(|(f, input)| {
+-                if *f == id {
+-                    window.send_event(VEvent::InputUpdate(*input, false));
+-                    false
+-                } else {
+-                    true
+-                }
+-            });
++        Event::AboutToWait => {
++            frame(state_name, gs, &mut out);
++            out.push(event);
+         },
++        other => out.push(other),
+     }
+     out
+ }
+ 
+-const DIR_INPUTS: [GameInput; 4] = [
+-    GameInput::MoveForward,
+-    GameInput::MoveBack,
+-    GameInput::MoveLeft,
+-    GameInput::MoveRight,
+-];
+-
+-fn set_dirs(ts: &mut TouchState, window: &mut crate::window::Window, dirs: [bool; 4]) {
+-    for i in 0..4 {
+-        if ts.stick_dirs[i] != dirs[i] {
+-            window.send_event(VEvent::InputUpdate(DIR_INPUTS[i], dirs[i]));
+-        }
++fn frame(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut Vec<Event<()>>) {
++    static HINTS: std::sync::Once = std::sync::Once::new();
++    HINTS.call_once(|| build_key_hints(gs));
++    if state_name != Some("Session") {
++        touch::set_context(touch::Context::default());
+     }
+-    ts.stick_dirs = dirs;
+-}
+-
+-fn release_all(ts: &mut TouchState, window: &mut crate::window::Window) {
+-    if ts.stick.is_some() || ts.stick_dirs.iter().any(|d| *d) {
+-        ts.stick = None;
+-        set_dirs(ts, window, [false; 4]);
+-    }
+-    ts.cam = None;
+-    for (_, input) in ts.actions.drain(..) {
+-        window.send_event(VEvent::InputUpdate(input, false));
++    // A window opened/closed without a touch (e.g. by the game): keep the layer
++    // in sync so held buttons are released.
++    let ctx = current_context(state_name, gs);
++    let outs = touch::with_layer(|l| {
++        let mut o = l.sync_context(&ctx);
++        o.extend(l.on_frame(&gs.settings.touch));
++        o
++    });
++    apply_outs(outs, gs, out);
++    for ms in touch::take_haptics() {
++        vibrate(ms);
+     }
++    autopilot(state_name, gs, out);
+ }
+ 
+-#[allow(dead_code)]
+-fn _assert_read<R: Read>(_: R) {}
+-
+ // -------------------------------------------------------------- autopilot ---
++//
++// Firebase Test Lab game loop. Scenario 1: play with injected touches and
++// check every dev.3 feature; scenario 2: (new process) check the saved layout
++// was restored, then reset it. Results are logged as `VEL-CHECK <name> PASS|FAIL`.
++
++#[derive(Clone, Debug)]
++enum Act {
++    Down(u64, f32, f32),
++    MoveTo(u64, f32, f32, f32),
++    Up(u64),
++    Wait(f32),
++    Begin(&'static str),
++    Check(&'static str),
++    SeekNpc(f32),
++    /// If the character is dead (wild animals attack while the script runs),
++    /// tap the contextual Respawn button; the number is the attempts left.
++    EnsureAlive(u8),
++    /// If a window still holds the input (e.g. a crafting station opened by
++    /// 'Use'), tap the menu-bar "Menu" (Escape) button to close it.
++    EnsureGameInput(u8),
++    Log(&'static str),
++    Finish,
++}
++
++#[derive(Default)]
++struct Rec {
++    base: Probe,
++    states: BTreeSet<String>,
++    attack: bool,
++    glide_wield: bool,
++    gliding: bool,
++    speeds: Vec<f32>,
++    slow: f32,
++    max_fingers: usize,
++}
+ 
+ struct Pilot {
+     start: Instant,
+     last_log: Instant,
+     frames: u32,
+     session_start: Option<Instant>,
+-    phase: u32,
++    scenario: u32,
++    queue: std::collections::VecDeque<Act>,
++    act_start: Instant,
++    act_frames: u32,
++    act_from: Option<(f32, f32)>,
++    fingers: HashMap<u64, (f32, f32)>,
++    rec: Rec,
++    results: Vec<(String, bool)>,
++    seek: Option<SeekState>,
++    inject: Vec<Act>,
++    finished: bool,
++}
++
++#[derive(Default)]
++struct SeekState {
++    taps: u32,
++    tap_at: Option<Instant>,
++    /// last position where the character was seen moving, and when
++    anchor: Option<([f32; 3], Instant)>,
++    /// jump finger down since
++    jump_at: Option<Instant>,
++    /// detour (strafe side, until) after getting stuck on terrain
++    detour: Option<(f32, Instant)>,
++    detours: u32,
++    respawns: u32,
++    /// stray (non-NPC) windows closed
++    closes: u32,
+ }
+ 
+ static PILOT: Mutex<Option<Pilot>> = Mutex::new(None);
+ 
+-/// Logs an approximate frame rate every 5 s (AboutToWait fires twice per
+-/// rendered frame, see run.rs) and, in game-loop mode, walks/looks around in
+-/// the session so the Test Lab video shows real gameplay.
+-fn autopilot(state_name: Option<&'static str>, window: &mut crate::window::Window) {
++const STICK_ID: u64 = 1001;
++const CAM_ID: u64 = 1002;
++const BTN_ID: u64 = 1003;
++const PINCH_A: u64 = 1004;
++const PINCH_B: u64 = 1005;
++const TAP_ID: u64 = 1006;
++const JUMP_ID: u64 = 1007;
++const STICK_BASE: (f32, f32) = (0.20, 0.72);
++/// AboutToWait fires about twice per rendered frame.
++const MIN_FRAMES: u32 = 4;
++
++fn center(c: Ctl, gs: &GlobalState) -> (f32, f32) {
++    let b = gs.settings.touch.layout(c);
++    (b.x, b.y)
++}
++
++fn tap_at(q: &mut Vec<Act>, (x, y): (f32, f32)) {
++    q.push(Act::Down(TAP_ID, x, y));
++    q.push(Act::Wait(0.6));
++    q.push(Act::Up(TAP_ID));
++    q.push(Act::Wait(0.5));
++}
++
++/// Stick finger position for a stick vector (right, forward) of magnitude m
++/// (accounts for the dead-zone, so the game receives exactly `v`).
++fn stick_pos(gs: &GlobalState, aspect: f32, v: (f32, f32)) -> (f32, f32) {
++    let s = &gs.settings.touch;
++    let m = (v.0 * v.0 + v.1 * v.1).sqrt();
++    if m < 1e-4 {
++        return STICK_BASE;
++    }
++    let dz = s.stick_deadzone;
++    let raw = (m * (1.0 - dz) + dz).min(1.0) / m;
++    (
++        STICK_BASE.0 + v.0 * raw * s.stick_radius / aspect,
++        STICK_BASE.1 - v.1 * raw * s.stick_radius,
++    )
++}
++
++fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
++    let mut q = Vec::new();
++    q.push(Act::Log("terrain settle"));
++    q.push(Act::Wait(20.0));
++    let multitouch = |q: &mut Vec<Act>, secs: f32| {
++        q.push(Act::Begin("multitouch"));
++        q.push(Act::Down(STICK_ID, STICK_BASE.0, STICK_BASE.1));
++        q.push(Act::Down(CAM_ID, 0.50, 0.22));
++        let (px, py) = center(Ctl::Primary, gs);
++        q.push(Act::Down(BTN_ID, px, py));
++        let (sx, sy) = stick_pos(gs, aspect, (0.0, 1.0));
++        q.push(Act::MoveTo(STICK_ID, sx, sy, 0.3));
++        q.push(Act::MoveTo(CAM_ID, 0.68, 0.22, secs));
++        q.push(Act::Up(BTN_ID));
++        q.push(Act::Up(CAM_ID));
++        q.push(Act::Up(STICK_ID));
++        q.push(Act::Check("multitouch"));
++        q.push(Act::Wait(1.0));
++    };
++    match scenario {
++        2 => {
++            q.push(Act::Check("layout_restored"));
++            multitouch(&mut q, 6.0);
++            tap_at(&mut q, center(Ctl::Edit, gs));
++            let (x, y, _) = Tool::Reset.place();
++            tap_at(&mut q, (x, y));
++            let (x, y, _) = Tool::Done.place();
++            tap_at(&mut q, (x, y));
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("layout_reset"));
++        },
++        _ => {
++            q.push(Act::Check("haptics"));
++            multitouch(&mut q, 8.0);
++            // 3.2 analog: light tilt walks slower than full tilt. Walk *back*
++            // towards where the multitouch run came from: straight ahead may be a
++            // wall after 30+ m (r8q run 1 measured 0.00 m/s against a house).
++            q.push(Act::Down(STICK_ID, STICK_BASE.0, STICK_BASE.1));
++            let (sx, sy) = stick_pos(gs, aspect, (0.0, -0.35));
++            q.push(Act::MoveTo(STICK_ID, sx, sy, 0.3));
++            q.push(Act::Wait(1.5));
++            q.push(Act::Begin("speed"));
++            q.push(Act::Wait(2.5));
++            q.push(Act::Check("analog_slow"));
++            let (sx, sy) = stick_pos(gs, aspect, (0.0, -1.0));
++            q.push(Act::MoveTo(STICK_ID, sx, sy, 0.3));
++            q.push(Act::Wait(1.5));
++            q.push(Act::Begin("speed"));
++            q.push(Act::Wait(2.5));
++            q.push(Act::Check("analog_fast"));
++            q.push(Act::Up(STICK_ID));
++            q.push(Act::Wait(1.0));
++            // 3.3 pinch zoom
++            q.push(Act::Begin("pinch"));
++            q.push(Act::Down(PINCH_A, 0.55, 0.24));
++            q.push(Act::Down(PINCH_B, 0.60, 0.24));
++            q.push(Act::MoveTo(PINCH_B, 0.80, 0.24, 2.0));
++            q.push(Act::Up(PINCH_B));
++            q.push(Act::Up(PINCH_A));
++            q.push(Act::Wait(0.5));
++            q.push(Act::Check("pinch_zoom"));
++            // 3.4 / 3.5 every combat + movement button
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::Begin("buttons"));
++            for c in [
++                Ctl::Secondary,
++                Ctl::Block,
++                Ctl::Roll,
++                Ctl::Jump,
++                Ctl::Ability1,
++                Ctl::Ability2,
++                Ctl::Ability3,
++                Ctl::Ability4,
++                Ctl::Ability5,
++                Ctl::Sneak,
++                Ctl::Sneak,
++                Ctl::Wield,
++                Ctl::Wield,
++                Ctl::Lantern,
++                Ctl::Lantern,
++            ] {
++                tap_at(&mut q, center(c, gs));
++            }
++            q.push(Act::Check("buttons"));
++            // 3.5 glide: wield glider, jump, glide
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::Begin("glide"));
++            tap_at(&mut q, center(Ctl::Glide, gs));
++            q.push(Act::Wait(1.0));
++            let (jx, jy) = center(Ctl::Jump, gs);
++            q.push(Act::Down(BTN_ID, jx, jy));
++            q.push(Act::Wait(0.6));
++            q.push(Act::Up(BTN_ID));
++            q.push(Act::Wait(3.0));
++            q.push(Act::Check("glide"));
++            tap_at(&mut q, center(Ctl::Glide, gs));
++            // 3.6 menu bar: open + close bag and map
++            q.push(Act::EnsureAlive(3));
++            tap_at(&mut q, center(Ctl::Bag, gs));
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("bag_open"));
++            tap_at(&mut q, center(Ctl::Bag, gs));
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("bag_closed"));
++            tap_at(&mut q, center(Ctl::Map, gs));
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("map_open"));
++            tap_at(&mut q, center(Ctl::Map, gs));
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("map_closed"));
++            // 3.7 context button + NPC interaction
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::SeekNpc(150.0));
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("game_input_back"));
++            // 3.8 layout editor: move + resize + fade Jump, save
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::EnsureGameInput(3));
++            tap_at(&mut q, center(Ctl::Edit, gs));
++            q.push(Act::Down(TAP_ID, jx, jy));
++            q.push(Act::MoveTo(TAP_ID, 0.70, 0.22, 1.0));
++            q.push(Act::Up(TAP_ID));
++            q.push(Act::Wait(0.5));
++            for t in [Tool::Bigger, Tool::Bigger, Tool::Fainter, Tool::Done] {
++                let (x, y, _) = t.place();
++                tap_at(&mut q, (x, y));
++            }
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("layout_saved"));
++        },
++    }
++    q.push(Act::Finish);
++    q
++}
++
++fn expect_path() -> Option<PathBuf> { DATA_DIR.get().map(|d| d.join("layout_expect")) }
++
++fn yaw_delta(a: f32, b: f32) -> f32 {
++    let mut d = (b - a) % std::f32::consts::TAU;
++    if d > std::f32::consts::PI {
++        d -= std::f32::consts::TAU;
++    } else if d < -std::f32::consts::PI {
++        d += std::f32::consts::TAU;
++    }
++    d
++}
++
++fn hspeed(p: &Probe) -> f32 { (p.vel[0] * p.vel[0] + p.vel[1] * p.vel[1]).sqrt() }
++
++fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (bool, String) {
++    match name {
++        "haptics" => {
++            vibrate(40);
++            (true, "self-test pulse sent via JNI (see 'jni:' errors if any)".into())
++        },
++        "multitouch" => {
++            let moved = ((p.pos[0] - rec.base.pos[0]).powi(2)
++                + (p.pos[1] - rec.base.pos[1]).powi(2))
++            .sqrt();
++            let dyaw = yaw_delta(rec.base.cam_yaw, p.cam_yaw);
++            (
++                moved > 1.5 && dyaw.abs() > 0.15 && rec.attack && rec.max_fingers >= 3,
++                format!(
++                    "moved={moved:.1}m cam_yaw_delta={dyaw:.2}rad attack_seen={} \
++                     max_fingers={} states={:?}",
++                    rec.attack, rec.max_fingers, rec.states
++                ),
++            )
++        },
++        "analog_slow" => {
++            rec.slow = avg(&rec.speeds);
++            (rec.slow > 0.2, format!("light tilt (0.35) speed={:.2} m/s", rec.slow))
++        },
++        "analog_fast" => {
++            let fast = avg(&rec.speeds);
++            (
++                rec.slow > 0.2 && fast > rec.slow * 1.3,
++                format!("light={:.2} m/s full={fast:.2} m/s", rec.slow),
++            )
++        },
++        "pinch_zoom" => {
++            let d = p.cam_dist - rec.base.cam_dist;
++            (d < -0.3, format!("camera distance {:.2} -> {:.2}", rec.base.cam_dist, p.cam_dist))
++        },
++        "buttons" => (true, format!("no crash; character states seen {:?}", rec.states)),
++        "glide" => (
++            rec.glide_wield || rec.gliding,
++            format!("glider_wielded={} gliding={}", rec.glide_wield, rec.gliding),
++        ),
++        "bag_open" => (
++            p.bag_open && !p.ctx.game_input,
++            format!("bag={} game_input={}", p.bag_open, p.ctx.game_input),
++        ),
++        "bag_closed" => (
++            !p.bag_open && p.ctx.game_input,
++            format!("bag={} game_input={}", p.bag_open, p.ctx.game_input),
++        ),
++        "map_open" => (
++            p.map_open && !p.ctx.game_input,
++            format!("map={} game_input={}", p.map_open, p.ctx.game_input),
++        ),
++        "map_closed" => (
++            !p.map_open && p.ctx.game_input,
++            format!("map={} game_input={}", p.map_open, p.ctx.game_input),
++        ),
++        "game_input_back" => (p.ctx.game_input, format!("game_input={}", p.ctx.game_input)),
++        "layout_saved" => {
++            let j = gs.settings.touch.layout(Ctl::Jump);
++            let on_disk = read_settings_touch(gs);
++            let disk_j = on_disk.as_ref().map(|t| t.layout(Ctl::Jump));
++            let ok = disk_j == Some(j)
++                && (j.x - 0.70).abs() < 0.03
++                && (j.y - 0.22).abs() < 0.03
++                && j.size > 0.09
++                && j.alpha < 1.0;
++            if let Some(path) = expect_path() {
++                let _ = std::fs::write(path, format!("{} {} {} {}", j.x, j.y, j.size, j.alpha));
++            }
++            (ok, format!("jump={j:?} on_disk={disk_j:?}"))
++        },
++        "layout_restored" => {
++            let j = gs.settings.touch.layout(Ctl::Jump);
++            let expect: Option<Vec<f32>> = expect_path()
++                .and_then(|p| std::fs::read_to_string(p).ok())
++                .map(|s| s.split_whitespace().filter_map(|v| v.parse().ok()).collect());
++            let ok = expect.as_ref().is_some_and(|e| {
++                e.len() == 4
++                    && (e[0] - j.x).abs() < 1e-4
++                    && (e[1] - j.y).abs() < 1e-4
++                    && (e[2] - j.size).abs() < 1e-4
++                    && (e[3] - j.alpha).abs() < 1e-4
++            });
++            (ok, format!("loaded jump={j:?} expected={expect:?}"))
++        },
++        "layout_reset" => {
++            let ok = gs.settings.touch.buttons == touch::default_layout()
++                && read_settings_touch(gs).is_some_and(|t| t.buttons == touch::default_layout());
++            (ok, format!("jump={:?}", gs.settings.touch.layout(Ctl::Jump)))
++        },
++        _ => (false, "unknown check".into()),
++    }
++}
++
++fn read_settings_touch(gs: &GlobalState) -> Option<touch::TouchSettings> {
++    let s = std::fs::read_to_string(gs.config_dir.join("settings.ron")).ok()?;
++    let v: crate::settings::Settings = ron::from_str(&s).ok()?;
++    Some(v.touch)
++}
++
++fn avg(v: &[f32]) -> f32 {
++    if v.is_empty() {
++        0.0
++    } else {
++        v.iter().sum::<f32>() / v.len() as f32
++    }
++}
++
++fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut Vec<Event<()>>) {
+     let mut g = PILOT.lock().unwrap();
+     let now = Instant::now();
+     let p = g.get_or_insert_with(|| Pilot {
+@@ -407,44 +882,359 @@ fn autopilot(state_name: Option<&'static str>, window: &mut crate::window::Windo
+         last_log: now,
+         frames: 0,
+         session_start: None,
+-        phase: u32::MAX,
++        scenario: std::env::var("VELOREN_ANDROID_SCENARIO")
++            .ok()
++            .and_then(|s| s.parse().ok())
++            .unwrap_or(1),
++        queue: Default::default(),
++        act_start: now,
++        act_frames: 0,
++        act_from: None,
++        fingers: HashMap::new(),
++        rec: Rec::default(),
++        results: Vec::new(),
++        seek: None,
++        inject: Vec::new(),
++        finished: false,
+     });
+     p.frames += 1;
+     let dt = now.duration_since(p.last_log).as_secs_f32();
++    let pr = probe();
+     if dt >= 5.0 {
++        let stats = touch::with_layer(|l| l.stats);
+         ainfo!(
+-            "VEL-STAT t={:.0}s state={} fps={:.1}",
++            "VEL-STAT t={:.0}s state={} fps={:.1} pos={:?} char={} dead={} game_input={} \
++             touch={:?} haptics={}",
+             now.duration_since(p.start).as_secs_f32(),
+             state_name.unwrap_or("-"),
+-            p.frames as f32 / 2.0 / dt
++            p.frames as f32 / 2.0 / dt,
++            pr.as_ref().map(|p| [p.pos[0] as i32, p.pos[1] as i32, p.pos[2] as i32]),
++            pr.as_ref().map(|p| p.char_state.as_str()).unwrap_or("-"),
++            pr.as_ref().is_some_and(|p| p.ctx.dead),
++            gs.window.is_cursor_grabbed(),
++            stats,
++            *HAPTIC_COUNT.lock().unwrap(),
+         );
+         p.frames = 0;
+         p.last_log = now;
+     }
+-    if !autostart_enabled() || state_name != Some("Session") {
++    if !autostart_enabled() || state_name != Some("Session") || p.finished {
+         return;
+     }
+-    let ss = *p.session_start.get_or_insert(now);
+-    let t = now.duration_since(ss).as_secs();
+-    // 0-15 s: let terrain load; then cycles of 12 s: walk forward 8 s (jumping
+-    // every 3 s), turn, attack.
+-    if t < 15 {
+-        return;
++    let Some(pr) = pr else { return };
++    let size = gs.window.window().inner_size();
++    let (w, h) = (size.width.max(1) as f64, size.height.max(1) as f64);
++    let aspect = (w / h) as f32;
++    if p.session_start.is_none() {
++        p.session_start = Some(now);
++        p.queue = script(p.scenario, gs, aspect).into();
++        p.act_start = now;
++        ainfo!("android-autostart: scenario {} with {} actions", p.scenario, p.queue.len());
+     }
+-    let phase = ((t - 15) % 12) as u32;
+-    if phase != p.phase {
+-        p.phase = phase;
+-        match phase {
+-            0 => window.send_event(VEvent::InputUpdate(GameInput::MoveForward, true)),
+-            3 | 6 => window.send_event(VEvent::InputUpdate(GameInput::Jump, true)),
+-            4 | 7 => window.send_event(VEvent::InputUpdate(GameInput::Jump, false)),
+-            8 => window.send_event(VEvent::InputUpdate(GameInput::MoveForward, false)),
+-            9 => window.send_event(VEvent::InputUpdate(GameInput::Primary, true)),
+-            10 => window.send_event(VEvent::InputUpdate(GameInput::Primary, false)),
+-            _ => {},
+-        }
+-        if phase == 11 {
+-            window.send_event(VEvent::CursorPan(vek::Vec2::new(250.0, 0.0)));
++
++    // continuous recording
++    if !pr.char_state.is_empty() {
++        p.rec.states.insert(pr.char_state.clone());
++    }
++    p.rec.attack |= pr.attacking;
++    p.rec.glide_wield |= pr.glide_wield;
++    p.rec.gliding |= pr.gliding;
++    p.rec.speeds.push(hspeed(&pr));
++    p.rec.max_fingers = p.rec.max_fingers.max(touch::with_layer(|l| l.finger_count()));
++
++    p.act_frames += 1;
++    let t = now.duration_since(p.act_start).as_secs_f32();
++    let Some(act) = p.queue.front().cloned() else { return };
++    let mut touches: Vec<(u64, Phase, f32, f32)> = Vec::new();
++    let done = match act {
++        Act::Down(id, x, y) => {
++            p.fingers.insert(id, (x, y));
++            touches.push((id, Phase::Started, x, y));
++            true
++        },
++        Act::Up(id) => {
++            if let Some((x, y)) = p.fingers.remove(&id) {
++                touches.push((id, Phase::Ended, x, y));
++            }
++            true
++        },
++        Act::MoveTo(id, tx, ty, secs) => {
++            let cur = p.fingers.get(&id).copied().unwrap_or((tx, ty));
++            let from = *p.act_from.get_or_insert(cur);
++            let k = if secs <= 0.0 { 1.0 } else { (t / secs).min(1.0) };
++            let (x, y) = (from.0 + (tx - from.0) * k, from.1 + (ty - from.1) * k);
++            p.fingers.insert(id, (x, y));
++            touches.push((id, Phase::Moved, x, y));
++            k >= 1.0 && p.act_frames >= MIN_FRAMES
++        },
++        Act::Wait(secs) => t >= secs && p.act_frames >= MIN_FRAMES,
++        Act::Begin(name) => {
++            ainfo!("VEL-STEP begin {name}");
++            p.rec = Rec {
++                base: pr.clone(),
++                slow: p.rec.slow,
++                ..Rec::default()
++            };
++            true
++        },
++        Act::Log(msg) => {
++            ainfo!("VEL-STEP {msg}");
++            true
++        },
++        Act::EnsureAlive(left) => {
++            if pr.ctx.dead {
++                if left > 0 {
++                    ainfo!("VEL-STEP character dead -> tap contextual 'Respawn' ({left} tries left)");
++                    let mut q = Vec::new();
++                    tap_at(&mut q, center(Ctl::Respawn, gs));
++                    q.push(Act::Wait(4.0));
++                    q.push(Act::EnsureAlive(left - 1));
++                    p.inject = q;
++                } else {
++                    ainfo!("VEL-STEP character still dead after respawn taps, continuing");
++                }
++            }
++            true
++        },
++        Act::EnsureGameInput(left) => {
++            if !pr.ctx.game_input {
++                if left > 0 {
++                    ainfo!("VEL-STEP a window holds the input -> tap 'Menu' ({left} tries left)");
++                    let mut q = Vec::new();
++                    tap_at(&mut q, center(Ctl::Menu, gs));
++                    q.push(Act::Wait(1.5));
++                    q.push(Act::EnsureGameInput(left - 1));
++                    p.inject = q;
++                } else {
++                    ainfo!("VEL-STEP input still held by a window, continuing");
++                }
++            }
++            true
++        },
++        Act::Check(name) => {
++            let (ok, detail) = check(name, &pr, &mut p.rec, gs);
++            ainfo!("VEL-CHECK {name} {} {detail}", if ok { "PASS" } else { "FAIL" });
++            p.results.push((name.to_string(), ok));
++            true
++        },
++        Act::SeekNpc(timeout) => {
++            let s = p.seek.get_or_insert_with(SeekState::default);
++            let mut finished = false;
++            if pr.dialogue_open || pr.trade_open {
++                ainfo!(
++                    "VEL-CHECK npc_interact PASS dialogue={} trade={} taps={}",
++                    pr.dialogue_open,
++                    pr.trade_open,
++                    s.taps
++                );
++                p.results.push(("npc_interact".into(), true));
++                finished = true;
++            } else if t > timeout {
++                ainfo!(
++                    "VEL-CHECK npc_interact FAIL timeout npc_dist={:?} can_interact={} taps={} \
++                     dead={} respawns={} detours={} closes={}",
++                    pr.npc_dist,
++                    pr.ctx.can_interact,
++                    s.taps,
++                    pr.ctx.dead,
++                    s.respawns,
++                    s.detours,
++                    s.closes
++                );
++                p.results.push(("npc_interact".into(), false));
++                finished = true;
++            } else if let Some(at) = s.tap_at {
++                // finger is on the Use button: lift it after 0.6 s, then wait 3 s
++                let e = now.duration_since(at).as_secs_f32();
++                if e > 0.6 && p.fingers.contains_key(&TAP_ID) {
++                    let (x, y) = p.fingers.remove(&TAP_ID).unwrap();
++                    touches.push((TAP_ID, Phase::Ended, x, y));
++                }
++                if e > 3.6 {
++                    s.tap_at = None;
++                }
++            } else if !pr.ctx.game_input && !pr.ctx.dead && s.closes < 6 {
++                // 'Use' picked a nearer interactable (crafting station, door, ...)
++                // and opened its window: close it with "Menu" (Escape), keep seeking
++                for id in [STICK_ID, CAM_ID, JUMP_ID] {
++                    if let Some((x, y)) = p.fingers.remove(&id) {
++                        touches.push((id, Phase::Ended, x, y));
++                    }
++                }
++                let (x, y) = center(Ctl::Menu, gs);
++                s.closes += 1;
++                ainfo!("VEL-STEP non-NPC window opened -> tap 'Menu' to close (#{})", s.closes);
++                p.fingers.insert(TAP_ID, (x, y));
++                touches.push((TAP_ID, Phase::Started, x, y));
++                s.tap_at = Some(now);
++            } else if pr.ctx.dead {
++                // killed on the way (wild animals near villages): use the contextual
++                // Respawn button, then keep seeking from the campfire
++                for id in [STICK_ID, CAM_ID, JUMP_ID] {
++                    if let Some((x, y)) = p.fingers.remove(&id) {
++                        touches.push((id, Phase::Ended, x, y));
++                    }
++                }
++                s.jump_at = None;
++                s.detour = None;
++                s.anchor = None;
++                if s.respawns < 3 {
++                    let (x, y) = center(Ctl::Respawn, gs);
++                    s.respawns += 1;
++                    ainfo!("VEL-STEP died during NPC seek -> tap contextual 'Respawn' (#{})", s.respawns);
++                    p.fingers.insert(TAP_ID, (x, y));
++                    touches.push((TAP_ID, Phase::Started, x, y));
++                    s.tap_at = Some(now);
++                }
++            } else if pr.ctx.can_interact
++                && s.taps < 6
++                && pr.npc_dist.is_some_and(|d| d <= 3.5)
++            {
++                if let Some((x, y)) = p.fingers.remove(&STICK_ID) {
++                    touches.push((STICK_ID, Phase::Ended, x, y));
++                }
++                let (x, y) = center(Ctl::Interact, gs);
++                ainfo!("VEL-STEP context button 'Use' visible -> tap (npc_dist={:?})", pr.npc_dist);
++                p.fingers.insert(TAP_ID, (x, y));
++                touches.push((TAP_ID, Phase::Started, x, y));
++                s.taps += 1;
++                s.tap_at = Some(now);
++            } else if let (Some(v), Some(d)) = (pr.npc_stick, pr.npc_dist) {
++                // turn the camera towards the villager, walk when roughly facing it
++                if !p.fingers.contains_key(&CAM_ID) {
++                    p.fingers.insert(CAM_ID, (0.5, 0.22));
++                    touches.push((CAM_ID, Phase::Started, 0.5, 0.22));
++                }
++                let (cx, cy) = p.fingers[&CAM_ID];
++                let turn = v[0].clamp(-1.0, 1.0) * 0.01;
++                let nx = if (0.46..=0.9).contains(&(cx + turn)) { cx + turn } else { 0.5 };
++                if nx == 0.5 && cx != 0.5 {
++                    touches.push((CAM_ID, Phase::Ended, cx, cy));
++                    touches.push((CAM_ID, Phase::Started, nx, cy));
++                } else {
++                    touches.push((CAM_ID, Phase::Moved, nx, cy));
++                }
++                p.fingers.insert(CAM_ID, (nx, cy));
++                // stuck on terrain (wall, fence, steep step)? jump + strafe around it
++                let moved = s.anchor.map_or(true, |(a, _)| {
++                    let (dx, dy) = (pr.pos[0] - a[0], pr.pos[1] - a[1]);
++                    dx * dx + dy * dy > 0.8 * 0.8
++                });
++                if moved {
++                    s.anchor = Some((pr.pos, now));
++                } else if d > 2.0
++                    && s.detour.is_none()
++                    && s.anchor.is_some_and(|(_, at)| now.duration_since(at).as_secs_f32() > 4.0)
++                {
++                    s.detours += 1;
++                    // same side three times with growing length (3/5/7 s), then
++                    // the other side: alternating every time just oscillates in
++                    // front of the same wall (r8q run 1: 20 detours, no progress)
++                    let k = s.detours - 1;
++                    let side = if (k / 3) % 2 == 0 { 1.0 } else { -1.0 };
++                    let secs = 3 + 2 * (k % 3) as u64;
++                    s.detour = Some((side, now + Duration::from_secs(secs)));
++                    s.anchor = Some((pr.pos, now));
++                    let (jx, jy) = center(Ctl::Jump, gs);
++                    if !p.fingers.contains_key(&JUMP_ID) {
++                        p.fingers.insert(JUMP_ID, (jx, jy));
++                        touches.push((JUMP_ID, Phase::Started, jx, jy));
++                        s.jump_at = Some(now);
++                    }
++                    ainfo!(
++                        "VEL-STEP stuck at {:?} npc_dist={d:.1} -> jump + detour {} (#{})",
++                        pr.pos,
++                        if side > 0.0 { "right" } else { "left" },
++                        s.detours
++                    );
++                }
++                if s.jump_at.is_some_and(|at| now.duration_since(at).as_secs_f32() > 0.5) {
++                    if let Some((x, y)) = p.fingers.remove(&JUMP_ID) {
++                        touches.push((JUMP_ID, Phase::Ended, x, y));
++                    }
++                    s.jump_at = None;
++                }
++                if s.detour.is_some_and(|(_, until)| now >= until) {
++                    s.detour = None;
++                }
++                let walk = if d <= 2.0 {
++                    (0.0, 0.0)
++                } else if let Some((side, _)) = s.detour {
++                    // perpendicular to the target direction, slightly forward
++                    let (px, py) = (v[1] * side, -v[0] * side);
++                    let (wx, wy) = (px + 0.3 * v[0], py + 0.3 * v[1]);
++                    let m = (wx * wx + wy * wy).sqrt().max(1e-4);
++                    (wx / m, wy / m)
++                } else {
++                    (v[0], v[1])
++                };
++                let (sx, sy) = stick_pos(gs, aspect, walk);
++                if !p.fingers.contains_key(&STICK_ID) {
++                    p.fingers.insert(STICK_ID, STICK_BASE);
++                    touches.push((STICK_ID, Phase::Started, STICK_BASE.0, STICK_BASE.1));
++                }
++                p.fingers.insert(STICK_ID, (sx, sy));
++                touches.push((STICK_ID, Phase::Moved, sx, sy));
++            }
++            if finished {
++                if pr.dialogue_open || pr.trade_open {
++                    // close the dialogue with the menu-bar "Menu" (Escape) button
++                    let mut q = Vec::new();
++                    tap_at(&mut q, center(Ctl::Menu, gs));
++                    p.inject = q;
++                }
++                for id in [STICK_ID, CAM_ID, TAP_ID, JUMP_ID] {
++                    if let Some((x, y)) = p.fingers.remove(&id) {
++                        touches.push((id, Phase::Ended, x, y));
++                    }
++                }
++                p.seek = None;
++            }
++            finished
++        },
++        Act::Finish => {
++            let pass = p.results.iter().filter(|r| r.1).count();
++            let fail: Vec<_> = p.results.iter().filter(|r| !r.1).map(|r| r.0.clone()).collect();
++            ainfo!(
++                "VEL-SCENARIO {} DONE pass={} fail={} failed={:?} haptics={}",
++                p.scenario,
++                pass,
++                fail.len(),
++                fail,
++                *HAPTIC_COUNT.lock().unwrap()
++            );
++            p.finished = true;
++            jni_send(JniCall::FinishLoop);
++            let _ = std::thread::Builder::new().spawn(|| {
++                std::thread::sleep(Duration::from_secs(3));
++                ainfo!("android: game loop scenario finished, exiting process");
++                // _exit, not exit(): running C atexit/static destructors while the
++                // render thread still owns the EGL/Vulkan context aborts in
++                // libEGL_emulation (`pthread_mutex_lock called on a destroyed mutex`).
++                unsafe { libc::_exit(0) };
++            });
++            true
++        },
++    };
++    if done {
++        p.queue.pop_front();
++        for a in std::mem::take(&mut p.inject).into_iter().rev() {
++            p.queue.push_front(a);
+         }
++        p.act_start = now;
++        p.act_frames = 0;
++        p.act_from = None;
++    }
++    drop(g);
++    for (id, ph, x, y) in touches {
++        handle_touch(
++            id,
++            ph,
++            x as f64 * w,
++            y as f64 * h,
++            state_name,
++            gs,
++            out,
++        );
+     }
+ }
+diff --git a/voxygen/src/hud/mod.rs b/voxygen/src/hud/mod.rs
+index 1f45d6bb8..986864a9f 100755
+--- a/voxygen/src/hud/mod.rs
++++ b/voxygen/src/hud/mod.rs
+@@ -17,6 +17,7 @@ mod overitem;
+ mod popup;
+ mod prompt_dialog;
+ mod quest;
++mod touch_overlay;
+ mod settings_window;
+ mod skillbar;
+ mod slot_grid;
+@@ -1343,6 +1344,7 @@ pub struct Hud {
+     speech_bubbles: HashMap<Uid, comp::SpeechBubble>,
+     content_bubbles: Vec<(Vec3<f32>, comp::SpeechBubble)>,
+     pub persisted_state: Rc<RefCell<PersistedHudState>>,
++    touch_ids: touch_overlay::Ids,
+     pub show: Show,
+     to_focus: Option<Option<widget::Id>>,
+     force_ungrab: bool,
+@@ -1378,6 +1380,7 @@ impl Hud {
+         ui.set_scaling_mode(settings.interface.ui_scale);
+         // Generate ids.
+         let ids = Ids::new(ui.id_generator());
++        let touch_ids = touch_overlay::Ids::new(ui.id_generator());
+         // Load world map
+         let mut layers = Vec::new();
+         for layer in client.world_data().map_layers() {
+@@ -1470,6 +1473,7 @@ impl Hud {
+             force_chat: false,
+             clear_chat: false,
+             current_dialogue: None,
++            touch_ids,
+             extra_markers: Vec::new(),
+         }
+     }
+@@ -4740,6 +4744,16 @@ impl Hud {
+             }
+         }
+ 
++        // my-veloren dev.3: on-screen touch controls, drawn last (on top).
++        if crate::touch::active() && global_state.settings.touch.enabled {
++            touch_overlay::draw(
++                &mut self.touch_ids,
++                ui_widgets,
++                &self.fonts,
++                &global_state.settings.touch,
++            );
++        }
++
+         // if a menu is open, notify window so it can restrict GameInputs
+         global_state.window.menu_open = !self.show.focus.is_empty();
+ 
+@@ -4747,6 +4761,16 @@ impl Hud {
+         events
+     }
+ 
++    /// my-veloren dev.3 Test Lab probe: (dialogue, trade, bag, map) open.
++    pub fn touch_windows(&self) -> (bool, bool, bool, bool) {
++        (
++            self.show.quest && self.current_dialogue.is_some(),
++            self.show.trade,
++            self.show.bag,
++            self.show.map,
++        )
++    }
++
+     fn show_bag(slot_manager: &mut slots::SlotManager, show: &mut Show, state: bool) {
+         show.bag(state);
+         if !state {
+diff --git a/voxygen/src/hud/touch_overlay.rs b/voxygen/src/hud/touch_overlay.rs
+new file mode 100644
+index 000000000..643c53750
+--- /dev/null
++++ b/voxygen/src/hud/touch_overlay.rs
+@@ -0,0 +1,70 @@
++//! Draws the on-screen touch controls (my-veloren dev.3, 3.1) on top of the HUD.
++//! Layout and state come from `crate::touch`; this module only renders.
++use crate::ui::fonts::Fonts;
++use conrod_core::{
++    Color, Colorable, Positionable, UiCell, Widget,
++    widget::{self, Text},
++    widget_ids,
++};
++
++widget_ids! {
++    pub struct Ids {
++        circles[],
++        labels[],
++    }
++}
++
++pub fn draw(ids: &mut Ids, ui: &mut UiCell, fonts: &Fonts, settings: &crate::touch::TouchSettings) {
++    let (win_w, win_h) = (ui.win_w, ui.win_h);
++    if win_w <= 1.0 || win_h <= 1.0 {
++        return;
++    }
++    let aspect = (win_w / win_h) as f32;
++    let ctx = crate::touch::context();
++    let prims = crate::touch::with_layer(|l| l.primitives(&ctx, settings, aspect));
++    let n_circles = prims.iter().filter(|p| p.r > 0.0).count();
++    let n_labels = prims.iter().filter(|p| p.label.is_some()).count();
++    if ids.circles.len() < n_circles {
++        ids.circles.resize(n_circles, &mut ui.widget_id_generator());
++    }
++    if ids.labels.len() < n_labels {
++        ids.labels.resize(n_labels, &mut ui.widget_id_generator());
++    }
++    let window = ui.window;
++    let (mut ci, mut li) = (0, 0);
++    for p in prims {
++        let x = (p.x as f64 - 0.5) * win_w;
++        let y = (0.5 - p.y as f64) * win_h;
++        let r = p.r as f64 * win_h;
++        if p.r > 0.0 {
++            widget::Circle::fill(r)
++                .color(Color::Rgba(p.rgba[0], p.rgba[1], p.rgba[2], p.rgba[3]))
++                .x_y(x, y)
++                .graphics_for(window)
++                .set(ids.circles[ci], ui);
++            ci += 1;
++        }
++        if let Some(label) = p.label {
++            let len = label.chars().count().max(1) as f64;
++            let size = if r > 0.0 {
++                (r * 2.0 * 0.85 / (0.6 * len)).min(r * 0.62)
++            } else {
++                win_h * 0.035
++            }
++            .clamp(7.0, 64.0) as u32;
++            Text::new(label)
++                .font_id(fonts.cyri.conrod_id)
++                .font_size(size)
++                .color(Color::Rgba(
++                    p.text_rgba[0],
++                    p.text_rgba[1],
++                    p.text_rgba[2],
++                    p.text_rgba[3],
++                ))
++                .x_y(x, y)
++                .graphics_for(window)
++                .set(ids.labels[li], ui);
++            li += 1;
++        }
++    }
++}
+diff --git a/voxygen/src/lib.rs b/voxygen/src/lib.rs
+index a46bdbae5..c5a3ad5b7 100644
+--- a/voxygen/src/lib.rs
++++ b/voxygen/src/lib.rs
+@@ -14,6 +14,7 @@ pub mod ui;
+ #[cfg(target_os = "android")] pub mod android;
+ #[cfg(target_os = "android")] mod android_main_body;
+ pub mod audio;
++pub mod touch;
+ pub mod cli;
+ pub mod cmd;
+ mod credits;
+diff --git a/voxygen/src/run.rs b/voxygen/src/run.rs
+index 05fee3916..a79a06db5 100644
+--- a/voxygen/src/run.rs
++++ b/voxygen/src/run.rs
+@@ -37,7 +37,7 @@ pub fn run(
+         let events = crate::android::translate_touch(
+             event,
+             states.last().map(|s| s.name()),
+-            &mut global_state.window,
++            &mut global_state,
+         );
+         #[cfg(not(target_os = "android"))]
+         let events = [event];
+diff --git a/voxygen/src/session/mod.rs b/voxygen/src/session/mod.rs
+index e358de462..669316ec8 100644
+--- a/voxygen/src/session/mod.rs
++++ b/voxygen/src/session/mod.rs
+@@ -128,6 +128,86 @@ pub struct SessionState {
+ 
+ /// Represents an active game session (i.e., the one being played).
+ impl SessionState {
++    /// my-veloren dev.3: tell the touch layer what is possible right now
++    /// (context buttons, 3.7) and, on Android, feed the Test Lab probe.
++    fn publish_touch_context(&self, global_state: &GlobalState) {
++        let client = self.client.borrow();
++        let ecs = client.state().ecs();
++        let me = client.entity();
++        let phys = ecs.read_storage::<comp::PhysicsState>();
++        let riders = ecs.read_storage::<common::link::Is<common::mounting::Rider>>();
++        let healths = ecs.read_storage::<comp::Health>();
++        let ctx = crate::touch::Context {
++            in_session: true,
++            game_input: global_state.window.is_cursor_grabbed(),
++            can_interact: self
++                .interactables
++                .input_map
++                .contains_key(&GameInput::Interact),
++            can_mount: self.interactables.input_map.contains_key(&GameInput::Mount),
++            riding: riders.get(me).is_some(),
++            in_liquid: phys.get(me).is_some_and(|p| p.in_liquid().is_some()),
++            dead: healths.get(me).is_some_and(|h| h.is_dead),
++        };
++        crate::touch::set_context(ctx);
++
++        #[cfg(target_os = "android")]
++        {
++            use specs::Join;
++            let positions = ecs.read_storage::<comp::Pos>();
++            let vels = ecs.read_storage::<comp::Vel>();
++            let alignments = ecs.read_storage::<comp::Alignment>();
++            let bodies = ecs.read_storage::<comp::Body>();
++            let char_states = ecs.read_storage::<comp::CharacterState>();
++            let my_pos = positions.get(me).map(|p| p.0).unwrap_or_default();
++            let npc = (&ecs.entities(), &positions, &alignments, &bodies)
++                .join()
++                .filter(|(e, _, a, b)| {
++                    *e != me
++                        && matches!(a, comp::Alignment::Npc)
++                        && matches!(b, comp::Body::Humanoid(_))
++                        && !healths.get(*e).is_some_and(|h| h.is_dead)
++                })
++                // same floor only: villagers upstairs are unreachable by walking
++                .filter(|(_, p, _, _)| (p.0.z - my_pos.z).abs() < 3.0)
++                .map(|(_, p, _, _)| (p.0 - my_pos).xy())
++                .min_by(|a, b| {
++                    a.magnitude_squared()
++                        .partial_cmp(&b.magnitude_squared())
++                        .unwrap_or(std::cmp::Ordering::Equal)
++                })
++                .map(|d| {
++                    let n = d.try_normalized().unwrap_or_default();
++                    (
++                        [n.dot(self.walk_right_dir), n.dot(self.walk_forward_dir)],
++                        d.magnitude(),
++                    )
++                });
++            let (quest, trade, bag, map) = self.hud.touch_windows();
++            let cam = self.scene.camera();
++            crate::android::set_probe(crate::android::Probe {
++                pos: my_pos.into_array(),
++                vel: vels.get(me).map(|v| v.0.into_array()).unwrap_or_default(),
++                cam_yaw: cam.get_orientation().x,
++                cam_dist: cam.get_distance(),
++                char_state: char_states
++                    .get(me)
++                    .map(|c| c.to_string())
++                    .unwrap_or_default(),
++                gliding: char_states.get(me).is_some_and(|c| c.is_glide()),
++                glide_wield: char_states.get(me).is_some_and(|c| c.is_glide_wielded()),
++                attacking: char_states.get(me).is_some_and(|c| c.is_attack()),
++                npc_stick: npc.map(|n| n.0),
++                npc_dist: npc.map(|n| n.1),
++                dialogue_open: quest,
++                trade_open: trade || client.pending_trade().is_some(),
++                bag_open: bag,
++                map_open: map,
++                ctx,
++            });
++        }
++    }
++
+     /// Create a new `SessionState`.
+     pub fn new(
+         global_state: &mut GlobalState,
+@@ -1617,6 +1697,11 @@ impl PlayState for SessionState {
+                 },
+             };
+ 
++            // my-veloren dev.3: context for the touch controls (3.7) + test probe.
++            if crate::touch::active() {
++                self.publish_touch_context(global_state);
++            }
++
+             let mut outcomes = Vec::new();
+ 
+             // Runs if either in a multiplayer server or the singleplayer server is unpaused
+@@ -2257,6 +2342,19 @@ impl PlayState for SessionState {
+ 
+                     // Process outcomes from client
+                     for outcome in outcomes {
++                        // my-veloren dev.3 (3.10): vibrate on hits taken / dealt.
++                        if crate::touch::active()
++                            && global_state.settings.touch.haptics
++                            && let Outcome::HealthChange { info, .. } = &outcome
++                            && info.amount < 0.0
++                            && let Some(me) = client.uid()
++                        {
++                            if info.target == me {
++                                crate::touch::request_haptic(70);
++                            } else if info.by.map(|b| b.uid()) == Some(me) {
++                                crate::touch::request_haptic(25);
++                            }
++                        }
+                         self.scene
+                             .handle_outcome(&outcome, &scene_data, &mut global_state.audio);
+                         self.hud.handle_outcome(&outcome, &scene_data, global_state);
+diff --git a/voxygen/src/settings/mod.rs b/voxygen/src/settings/mod.rs
+index 26ff41217..588e2b01c 100644
+--- a/voxygen/src/settings/mod.rs
++++ b/voxygen/src/settings/mod.rs
+@@ -51,6 +51,8 @@ pub struct Settings {
+     pub language: LanguageSettings,
+     pub screenshots_path: PathBuf,
+     pub inventory: InventorySettings,
++    /// On-screen touch controls (my-veloren dev.3).
++    pub touch: crate::touch::TouchSettings,
+ }
+ 
+ impl Default for Settings {
+@@ -88,6 +90,7 @@ impl Default for Settings {
+             language: LanguageSettings::default(),
+             screenshots_path,
+             inventory: InventorySettings::default(),
++            touch: crate::touch::TouchSettings::default(),
+         }
+     }
+ }
+diff --git a/voxygen/src/touch.rs b/voxygen/src/touch.rs
+new file mode 100644
+index 000000000..db7b74739
+--- /dev/null
++++ b/voxygen/src/touch.rs
+@@ -0,0 +1,1263 @@
++//! On-screen touch controls (my-veloren dev.3).
++//!
++//! Pure logic only (serde + std): no winit / wgpu / ECS types, so the whole
++//! state machine is unit-tested on the host (`native/touch-tests`).
++//!
++//! * `android.rs` feeds raw touches into [`TouchLayer::on_touch`] and maps the
++//!   returned [`Out`] actions to voxygen window events.
++//! * `hud/touch_overlay.rs` draws [`TouchLayer::primitives`].
++//! * The session publishes a [`Context`] every tick (what is near / possible)
++//!   which drives the context-sensitive buttons (3.7).
++//! * The layout lives in `settings.ron` under `touch` ([`TouchSettings`]).
++//!
++//! Coordinates: positions are fractions of the window (x of width, y of
++//! height, origin top-left); sizes/radii are fractions of the window height.
++
++use serde::{Deserialize, Serialize};
++use std::{collections::VecDeque, sync::Mutex};
++
++// ------------------------------------------------------------------ model ---
++
++/// Every on-screen control.
++#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
++pub enum Ctl {
++    // Combat (3.4)
++    Primary,
++    Secondary,
++    Block,
++    Jump,
++    Roll,
++    Ability1,
++    Ability2,
++    Ability3,
++    Ability4,
++    Ability5,
++    // Movement / interaction (3.5)
++    Glide,
++    Sneak,
++    SwimUp,
++    SwimDown,
++    Interact,
++    Mount,
++    Wield,
++    Lantern,
++    Respawn,
++    // Menu bar (3.6)
++    Menu,
++    Bag,
++    Map,
++    Skills,
++    Crafting,
++    Social,
++    Chat,
++    Edit,
++}
++
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum Group {
++    /// Gameplay buttons: only while the game owns the input (no window open).
++    Game,
++    /// Shown only when the [`Context`] says the action is possible (3.7).
++    Contextual,
++    /// Top menu bar: always visible in a session, so windows can be closed.
++    MenuBar,
++}
++
++impl Ctl {
++    pub const ALL: [Ctl; 27] = [
++        Ctl::Primary,
++        Ctl::Secondary,
++        Ctl::Block,
++        Ctl::Jump,
++        Ctl::Roll,
++        Ctl::Ability1,
++        Ctl::Ability2,
++        Ctl::Ability3,
++        Ctl::Ability4,
++        Ctl::Ability5,
++        Ctl::Glide,
++        Ctl::Sneak,
++        Ctl::SwimUp,
++        Ctl::SwimDown,
++        Ctl::Interact,
++        Ctl::Mount,
++        Ctl::Wield,
++        Ctl::Lantern,
++        Ctl::Respawn,
++        Ctl::Menu,
++        Ctl::Bag,
++        Ctl::Map,
++        Ctl::Skills,
++        Ctl::Crafting,
++        Ctl::Social,
++        Ctl::Chat,
++        Ctl::Edit,
++    ];
++
++    pub fn group(self) -> Group {
++        use Ctl::*;
++        match self {
++            Interact | Mount | SwimUp | SwimDown | Respawn => Group::Contextual,
++            Menu | Bag | Map | Skills | Crafting | Social | Chat | Edit => Group::MenuBar,
++            _ => Group::Game,
++        }
++    }
++
++    /// Text printed on the button. Also used by keyboard hints ("Press [Use]").
++    pub fn label(self, ctx: &Context) -> &'static str {
++        use Ctl::*;
++        match self {
++            Primary => "Attack",
++            Secondary => "Skill",
++            Block => "Block",
++            Jump => "Jump",
++            Roll => "Roll",
++            Ability1 => "1",
++            Ability2 => "2",
++            Ability3 => "3",
++            Ability4 => "4",
++            Ability5 => "5",
++            Glide => "Glide",
++            Sneak => "Sneak",
++            SwimUp => "Up",
++            SwimDown => "Down",
++            Interact => "Use",
++            Mount => {
++                if ctx.riding {
++                    "Dismount"
++                } else {
++                    "Mount"
++                }
++            },
++            Wield => "Wield",
++            Lantern => "Lamp",
++            Respawn => "Respawn",
++            Menu => "Menu",
++            Bag => "Bag",
++            Map => "Map",
++            Skills => "Skills",
++            Crafting => "Craft",
++            Social => "Social",
++            Chat => "Chat",
++            Edit => "Edit",
++        }
++    }
++
++    /// Base color (rgb) of the button face.
++    fn tint(self) -> [f32; 3] {
++        use Ctl::*;
++        match self {
++            Primary => [0.80, 0.25, 0.20],
++            Secondary => [0.75, 0.45, 0.15],
++            Block => [0.30, 0.45, 0.75],
++            Jump | Roll => [0.25, 0.60, 0.35],
++            Ability1 | Ability2 | Ability3 | Ability4 | Ability5 => [0.55, 0.30, 0.70],
++            Interact | Mount | Respawn => [0.85, 0.70, 0.20],
++            SwimUp | SwimDown => [0.20, 0.55, 0.80],
++            Menu | Bag | Map | Skills | Crafting | Social | Chat | Edit => [0.25, 0.25, 0.30],
++            Glide | Sneak | Wield | Lantern => [0.35, 0.35, 0.40],
++        }
++    }
++}
++
++/// Position / size / opacity of one button (persisted).
++#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
++pub struct ButtonLayout {
++    pub ctl: Ctl,
++    pub x: f32,
++    pub y: f32,
++    /// Radius as a fraction of the window height.
++    pub size: f32,
++    /// Per-button opacity multiplier (0.15..=1).
++    pub alpha: f32,
++}
++
++pub const MIN_SIZE: f32 = 0.035;
++pub const MAX_SIZE: f32 = 0.25;
++pub const MIN_ALPHA: f32 = 0.15;
++
++/// Default landscape layout. Verified non-overlapping by unit tests for
++/// aspect ratios 16:9 .. 22:9.
++pub fn default_layout() -> Vec<ButtonLayout> {
++    use Ctl::*;
++    let b = |ctl, x, y, size| ButtonLayout {
++        ctl,
++        x,
++        y,
++        size,
++        alpha: 1.0,
++    };
++    vec![
++        // right-hand combat cluster
++        b(Primary, 0.885, 0.76, 0.13),
++        b(Secondary, 0.75, 0.86, 0.085),
++        b(Block, 0.715, 0.655, 0.07),
++        b(Jump, 0.95, 0.53, 0.085),
++        b(Roll, 0.83, 0.545, 0.075),
++        b(Ability1, 0.62, 0.37, 0.055),
++        b(Ability2, 0.69, 0.37, 0.055),
++        b(Ability3, 0.76, 0.37, 0.055),
++        b(Ability4, 0.83, 0.37, 0.055),
++        b(Ability5, 0.90, 0.37, 0.055),
++        // contextual (appear only when possible)
++        b(Interact, 0.62, 0.62, 0.075),
++        b(Mount, 0.62, 0.80, 0.065),
++        b(SwimUp, 0.53, 0.55, 0.06),
++        b(SwimDown, 0.53, 0.75, 0.06),
++        b(Respawn, 0.40, 0.40, 0.08),
++        // left column (movement modifiers)
++        b(Glide, 0.05, 0.32, 0.055),
++        b(Sneak, 0.05, 0.45, 0.045),
++        b(Wield, 0.05, 0.58, 0.045),
++        b(Lantern, 0.05, 0.71, 0.045),
++        // top menu bar
++        b(Menu, 0.27, 0.065, 0.045),
++        b(Bag, 0.34, 0.065, 0.045),
++        b(Map, 0.41, 0.065, 0.045),
++        b(Skills, 0.48, 0.065, 0.045),
++        b(Crafting, 0.55, 0.065, 0.045),
++        b(Social, 0.62, 0.065, 0.045),
++        b(Chat, 0.69, 0.065, 0.045),
++        b(Edit, 0.76, 0.065, 0.045),
++    ]
++}
++
++/// `settings.ron` → `touch: (...)` (3.8).
++#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
++#[serde(default)]
++pub struct TouchSettings {
++    /// Draw and use the on-screen controls (Android always uses touch).
++    pub enabled: bool,
++    /// Global opacity of the overlay (0.1..=1).
++    pub opacity: f32,
++    /// Camera drag sensitivity multiplier.
++    pub camera_sensitivity: f32,
++    /// Camera drag smoothing, 0 = raw, 0.9 = very smooth.
++    pub camera_smoothing: f32,
++    /// Pinch zoom speed multiplier.
++    pub zoom_sensitivity: f32,
++    /// Virtual stick radius (fraction of window height).
++    pub stick_radius: f32,
++    /// Dead-zone as a fraction of the stick radius.
++    pub stick_deadzone: f32,
++    /// Vibrate on hits taken / dealt.
++    pub haptics: bool,
++    pub buttons: Vec<ButtonLayout>,
++}
++
++impl Default for TouchSettings {
++    fn default() -> Self {
++        Self {
++            enabled: true,
++            opacity: 0.6,
++            camera_sensitivity: 1.0,
++            camera_smoothing: 0.35,
++            zoom_sensitivity: 1.0,
++            stick_radius: 0.13,
++            stick_deadzone: 0.15,
++            haptics: true,
++            buttons: default_layout(),
++        }
++    }
++}
++
++impl TouchSettings {
++    /// Layout of `ctl`, falling back to the default for buttons missing in an
++    /// older settings file.
++    pub fn layout(&self, ctl: Ctl) -> ButtonLayout {
++        self.buttons
++            .iter()
++            .find(|b| b.ctl == ctl)
++            .copied()
++            .or_else(|| default_layout().into_iter().find(|b| b.ctl == ctl))
++            .expect("every Ctl has a default layout")
++    }
++
++    fn layout_mut(&mut self, ctl: Ctl) -> &mut ButtonLayout {
++        if !self.buttons.iter().any(|b| b.ctl == ctl) {
++            let d = self.layout(ctl);
++            self.buttons.push(d);
++        }
++        self.buttons.iter_mut().find(|b| b.ctl == ctl).unwrap()
++    }
++
++    pub fn reset_layout(&mut self) {
++        let fresh = TouchSettings::default();
++        self.buttons = fresh.buttons;
++        self.opacity = fresh.opacity;
++    }
++}
++
++/// What the player can currently do; published by the session every tick.
++#[derive(Clone, Copy, Debug, Default, PartialEq)]
++pub struct Context {
++    pub in_session: bool,
++    /// The game owns the input (cursor grabbed, no HUD window open).
++    pub game_input: bool,
++    pub can_interact: bool,
++    pub can_mount: bool,
++    pub riding: bool,
++    pub in_liquid: bool,
++    pub dead: bool,
++}
++
++impl Context {
++    pub fn visible(&self, ctl: Ctl) -> bool {
++        if !self.in_session {
++            return false;
++        }
++        match ctl.group() {
++            Group::MenuBar => ctl != Ctl::Edit || self.game_input,
++            Group::Game => self.game_input && !self.dead,
++            Group::Contextual => match ctl {
++                Ctl::Respawn => self.dead,
++                Ctl::Interact => self.game_input && !self.dead && self.can_interact,
++                Ctl::Mount => self.game_input && !self.dead && (self.can_mount || self.riding),
++                Ctl::SwimUp | Ctl::SwimDown => self.game_input && !self.dead && self.in_liquid,
++                _ => false,
++            },
++        }
++    }
++}
++
++// ---------------------------------------------------------------- outputs ---
++
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub enum Phase {
++    Started,
++    Moved,
++    Ended,
++    Cancelled,
++}
++
++/// Actions produced by the touch layer, mapped to voxygen events by the host.
++#[derive(Clone, Copy, Debug, PartialEq)]
++pub enum Out {
++    Press(Ctl),
++    Release(Ctl),
++    /// Analog movement, x = right, y = forward, magnitude 0..=1 (3.2).
++    Move(f32, f32),
++    /// Camera pan in "cursor pixels" (already scaled by sensitivity).
++    Pan(f32, f32),
++    /// Camera zoom delta (negative = closer), same unit as mouse wheel events.
++    Zoom(f32),
++    /// Mouse emulation (menus / open windows), physical pixels.
++    MouseMove(f64, f64),
++    MouseDown(f64, f64),
++    MouseUp(f64, f64),
++    /// Persist settings (layout editor "Done").
++    Save,
++}
++
++/// Edit-mode toolbar buttons (3.8).
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum Tool {
++    Smaller,
++    Bigger,
++    Fainter,
++    Stronger,
++    Reset,
++    Done,
++}
++
++impl Tool {
++    pub const ALL: [Tool; 6] = [
++        Tool::Smaller,
++        Tool::Bigger,
++        Tool::Fainter,
++        Tool::Stronger,
++        Tool::Reset,
++        Tool::Done,
++    ];
++
++    pub fn label(self) -> &'static str {
++        match self {
++            Tool::Smaller => "Size -",
++            Tool::Bigger => "Size +",
++            Tool::Fainter => "Alpha -",
++            Tool::Stronger => "Alpha +",
++            Tool::Reset => "Reset",
++            Tool::Done => "Done",
++        }
++    }
++
++    /// Center (fractions) and radius (fraction of height).
++    pub fn place(self) -> (f32, f32, f32) {
++        let i = Tool::ALL.iter().position(|t| *t == self).unwrap() as f32;
++        (0.30 + i * 0.08, 0.20, 0.05)
++    }
++}
++
++// ----------------------------------------------------------------- layer ---
++
++#[derive(Clone, Copy, Debug, PartialEq)]
++enum Finger {
++    Mouse,
++    Button(Ctl),
++    Stick { ox: f64, oy: f64 },
++    Camera { lx: f64, ly: f64 },
++    /// Second finger of a pinch on the camera area.
++    Pinch { lx: f64, ly: f64 },
++    EditDrag { ctl: Ctl, lx: f64, ly: f64 },
++    Ignored,
++}
++
++/// One drawable element, in window fractions.
++#[derive(Clone, Debug, PartialEq)]
++pub struct Prim {
++    pub x: f32,
++    pub y: f32,
++    /// Radius as a fraction of the window height; 0 = text only.
++    pub r: f32,
++    pub rgba: [f32; 4],
++    pub label: Option<&'static str>,
++    pub text_rgba: [f32; 4],
++}
++
++#[derive(Default)]
++pub struct TouchLayer {
++    fingers: Vec<(u64, Finger)>,
++    /// Current stick vector (x right, y forward).
++    stick: (f32, f32),
++    /// Camera pan waiting to be released by the smoother.
++    pan_pending: (f32, f32),
++    pinch_dist: Option<f64>,
++    pub edit: bool,
++    pub selected: Option<Ctl>,
++    last_ctx: Context,
++    /// Counters for logs / tests.
++    pub stats: Stats,
++}
++
++#[derive(Clone, Copy, Debug, Default, PartialEq)]
++pub struct Stats {
++    pub presses: u32,
++    pub pans: u32,
++    pub zooms: u32,
++    pub stick_moves: u32,
++    pub max_fingers: u32,
++}
++
++/// Pixel scale for camera pans: the dev2 value (0.6 at 1080 px height).
++const PAN_BASE: f64 = 0.6 * 1080.0;
++/// Pinch: zoom units per screen height of finger distance change.
++const ZOOM_PER_HEIGHT: f64 = 40.0;
++/// Extra touch radius around buttons (fingers are fat).
++const HIT_SLOP: f32 = 1.15;
++/// Left part of the screen that starts the virtual stick.
++const STICK_ZONE: f32 = 0.45;
++
++fn dist_h(ax: f32, ay: f32, bx: f32, by: f32, aspect: f32) -> f32 {
++    (((ax - bx) * aspect).powi(2) + (ay - by).powi(2)).sqrt()
++}
++
++impl TouchLayer {
++    pub fn finger_count(&self) -> usize { self.fingers.len() }
++
++    pub fn stick(&self) -> (f32, f32) { self.stick }
++
++    fn finger(&self, id: u64) -> Option<Finger> {
++        self.fingers.iter().find(|(f, _)| *f == id).map(|(_, k)| *k)
++    }
++
++    fn set_finger(&mut self, id: u64, k: Finger) {
++        if let Some(e) = self.fingers.iter_mut().find(|(f, _)| *f == id) {
++            e.1 = k;
++        } else {
++            self.fingers.push((id, k));
++            self.stats.max_fingers = self.stats.max_fingers.max(self.fingers.len() as u32);
++        }
++    }
++
++    fn remove_finger(&mut self, id: u64) -> Option<Finger> {
++        let i = self.fingers.iter().position(|(f, _)| *f == id)?;
++        Some(self.fingers.remove(i).1)
++    }
++
++    /// Topmost visible button under (fx, fy).
++    fn hit(
++        &self,
++        fx: f32,
++        fy: f32,
++        aspect: f32,
++        ctx: &Context,
++        s: &TouchSettings,
++        all: bool,
++    ) -> Option<Ctl> {
++        Ctl::ALL
++            .iter()
++            .rev()
++            .copied()
++            .filter(|c| all || ctx.visible(*c))
++            .filter(|c| !(all && *c == Ctl::Edit))
++            .map(|c| (c, s.layout(c)))
++            .filter(|(_, b)| dist_h(fx, fy, b.x, b.y, aspect) <= b.size * HIT_SLOP)
++            .min_by(|a, b| {
++                let da = dist_h(fx, fy, a.1.x, a.1.y, aspect) / a.1.size;
++                let db = dist_h(fx, fy, b.1.x, b.1.y, aspect) / b.1.size;
++                da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
++            })
++            .map(|(c, _)| c)
++    }
++
++    fn hit_tool(fx: f32, fy: f32, aspect: f32) -> Option<Tool> {
++        Tool::ALL.iter().copied().find(|t| {
++            let (x, y, r) = t.place();
++            dist_h(fx, fy, x, y, aspect) <= r * HIT_SLOP
++        })
++    }
++
++    /// Release everything that is held (window opened, edit mode, state change).
++    pub fn release_all(&mut self, out: &mut Vec<Out>) {
++        for (_, f) in self.fingers.drain(..) {
++            if let Finger::Button(c) = f {
++                out.push(Out::Release(c));
++            }
++        }
++        if self.stick != (0.0, 0.0) {
++            self.stick = (0.0, 0.0);
++            out.push(Out::Move(0.0, 0.0));
++        }
++        self.pinch_dist = None;
++        self.pan_pending = (0.0, 0.0);
++    }
++
++    /// A mode change (session entered/left, window opened/closed) drops all
++    /// held inputs so nothing gets stuck. Called per touch and per frame.
++    pub fn sync_context(&mut self, ctx: &Context) -> Vec<Out> {
++        let mut out = Vec::new();
++        if ctx.in_session != self.last_ctx.in_session
++            || ctx.game_input != self.last_ctx.game_input
++        {
++            self.release_all(&mut out);
++            if !ctx.game_input {
++                self.edit = false;
++                self.selected = None;
++            }
++        }
++        self.last_ctx = *ctx;
++        out
++    }
++
++    /// Feed one touch event. `w`/`h` = window size in physical pixels.
++    #[allow(clippy::too_many_arguments)]
++    pub fn on_touch(
++        &mut self,
++        id: u64,
++        phase: Phase,
++        x: f64,
++        y: f64,
++        w: f64,
++        h: f64,
++        ctx: &Context,
++        s: &mut TouchSettings,
++    ) -> Vec<Out> {
++        let mut out = Vec::new();
++        let (w, h) = (w.max(1.0), h.max(1.0));
++        set_window_height(h);
++        let aspect = (w / h) as f32;
++        let (fx, fy) = ((x / w) as f32, (y / h) as f32);
++
++        out.extend(self.sync_context(ctx));
++
++        // ---- menus / open windows: one finger = mouse, menu bar still works --
++        if !ctx.in_session || !ctx.game_input {
++            match phase {
++                Phase::Started => {
++                    if let Some(c) = self
++                        .hit(fx, fy, aspect, ctx, s, false)
++                        .filter(|c| c.group() == Group::MenuBar)
++                    {
++                        self.set_finger(id, Finger::Button(c));
++                        self.stats.presses += 1;
++                        out.push(Out::Press(c));
++                    } else if !self.fingers.iter().any(|(_, f)| *f == Finger::Mouse) {
++                        self.set_finger(id, Finger::Mouse);
++                        out.push(Out::MouseMove(x, y));
++                        out.push(Out::MouseDown(x, y));
++                    } else {
++                        self.set_finger(id, Finger::Ignored);
++                    }
++                },
++                Phase::Moved => {
++                    if self.finger(id) == Some(Finger::Mouse) {
++                        out.push(Out::MouseMove(x, y));
++                    }
++                },
++                Phase::Ended | Phase::Cancelled => match self.remove_finger(id) {
++                    Some(Finger::Mouse) => {
++                        out.push(Out::MouseMove(x, y));
++                        out.push(Out::MouseUp(x, y));
++                    },
++                    Some(Finger::Button(c)) => out.push(Out::Release(c)),
++                    _ => {},
++                },
++            }
++            return out;
++        }
++
++        // ---- layout editor (3.8) ---------------------------------------------
++        if self.edit {
++            match phase {
++                Phase::Started => {
++                    if let Some(t) = Self::hit_tool(fx, fy, aspect) {
++                        self.apply_tool(t, s, &mut out);
++                        self.set_finger(id, Finger::Ignored);
++                    } else if let Some(c) = self.hit(fx, fy, aspect, ctx, s, true) {
++                        self.selected = Some(c);
++                        self.set_finger(id, Finger::EditDrag { ctl: c, lx: x, ly: y });
++                    } else {
++                        self.set_finger(id, Finger::Ignored);
++                    }
++                },
++                Phase::Moved => {
++                    if let Some(Finger::EditDrag { ctl, lx, ly }) = self.finger(id) {
++                        let b = s.layout_mut(ctl);
++                        b.x = (b.x + ((x - lx) / w) as f32).clamp(0.02, 0.98);
++                        b.y = (b.y + ((y - ly) / h) as f32).clamp(0.03, 0.97);
++                        self.set_finger(id, Finger::EditDrag { ctl, lx: x, ly: y });
++                    }
++                },
++                Phase::Ended | Phase::Cancelled => {
++                    self.remove_finger(id);
++                },
++            }
++            return out;
++        }
++
++        // ---- gameplay (3.2 - 3.5, 3.9) -----------------------------------------
++        match phase {
++            Phase::Started => {
++                if self.finger(id).is_some() {
++                    return out;
++                }
++                if let Some(c) = self.hit(fx, fy, aspect, ctx, s, false) {
++                    if c == Ctl::Edit {
++                        self.release_all(&mut out);
++                        self.edit = true;
++                        self.selected = None;
++                        self.set_finger(id, Finger::Ignored);
++                    } else {
++                        self.set_finger(id, Finger::Button(c));
++                        self.stats.presses += 1;
++                        out.push(Out::Press(c));
++                    }
++                } else if fx < STICK_ZONE
++                    && !self
++                        .fingers
++                        .iter()
++                        .any(|(_, f)| matches!(f, Finger::Stick { .. }))
++                {
++                    self.set_finger(id, Finger::Stick { ox: x, oy: y });
++                } else if !self
++                    .fingers
++                    .iter()
++                    .any(|(_, f)| matches!(f, Finger::Camera { .. }))
++                {
++                    self.set_finger(id, Finger::Camera { lx: x, ly: y });
++                } else if !self
++                    .fingers
++                    .iter()
++                    .any(|(_, f)| matches!(f, Finger::Pinch { .. }))
++                {
++                    self.set_finger(id, Finger::Pinch { lx: x, ly: y });
++                    self.pinch_dist = self.pinch_distance();
++                } else {
++                    self.set_finger(id, Finger::Ignored);
++                }
++            },
++            Phase::Moved => match self.finger(id) {
++                Some(Finger::Stick { ox, oy }) => {
++                    let r = (s.stick_radius.max(0.02) as f64) * h;
++                    let (mut vx, mut vy) = (((x - ox) / r) as f32, (-(y - oy) / r) as f32);
++                    let m = (vx * vx + vy * vy).sqrt();
++                    if m > 1.0 {
++                        vx /= m;
++                        vy /= m;
++                    }
++                    let m = m.min(1.0);
++                    let dz = s.stick_deadzone.clamp(0.0, 0.9);
++                    let (vx, vy) = if m <= dz {
++                        (0.0, 0.0)
++                    } else {
++                        let k = (m - dz) / (1.0 - dz) / m;
++                        (vx * k, vy * k)
++                    };
++                    if (vx - self.stick.0).abs() > 0.01 || (vy - self.stick.1).abs() > 0.01 {
++                        self.stick = (vx, vy);
++                        self.stats.stick_moves += 1;
++                        out.push(Out::Move(vx, vy));
++                    }
++                },
++                Some(Finger::Camera { lx, ly }) => {
++                    self.set_finger(id, Finger::Camera { lx: x, ly: y });
++                    if self.pinch_dist.is_some() {
++                        self.pinch(s, &mut out);
++                    } else {
++                        let k = PAN_BASE / h * s.camera_sensitivity as f64;
++                        self.pan_pending.0 += ((x - lx) * k) as f32;
++                        self.pan_pending.1 += ((y - ly) * k) as f32;
++                    }
++                },
++                Some(Finger::Pinch { .. }) => {
++                    self.set_finger(id, Finger::Pinch { lx: x, ly: y });
++                    self.pinch(s, &mut out);
++                },
++                // Button fingers never leak into the camera (3.9).
++                _ => {},
++            },
++            Phase::Ended | Phase::Cancelled => match self.remove_finger(id) {
++                Some(Finger::Button(c)) => out.push(Out::Release(c)),
++                Some(Finger::Stick { .. }) => {
++                    self.stick = (0.0, 0.0);
++                    out.push(Out::Move(0.0, 0.0));
++                },
++                Some(Finger::Camera { .. }) => {
++                    self.pinch_dist = None;
++                    // The pinch partner keeps steering the camera.
++                    if let Some(e) = self
++                        .fingers
++                        .iter_mut()
++                        .find(|(_, f)| matches!(f, Finger::Pinch { .. }))
++                        && let Finger::Pinch { lx, ly } = e.1
++                    {
++                        e.1 = Finger::Camera { lx, ly };
++                    }
++                },
++                Some(Finger::Pinch { .. }) => self.pinch_dist = None,
++                _ => {},
++            },
++        }
++        out
++    }
++
++    fn pinch_distance(&self) -> Option<f64> {
++        let cam = self.fingers.iter().find_map(|(_, f)| match f {
++            Finger::Camera { lx, ly } => Some((*lx, *ly)),
++            _ => None,
++        })?;
++        let pin = self.fingers.iter().find_map(|(_, f)| match f {
++            Finger::Pinch { lx, ly } => Some((*lx, *ly)),
++            _ => None,
++        })?;
++        Some(((cam.0 - pin.0).powi(2) + (cam.1 - pin.1).powi(2)).sqrt())
++    }
++
++    fn pinch(&mut self, s: &TouchSettings, out: &mut Vec<Out>) {
++        let (Some(prev), Some(now)) = (self.pinch_dist, self.pinch_distance()) else {
++            return;
++        };
++        let h = self.last_h();
++        let d = (now - prev) / h;
++        if d.abs() > 0.002 {
++            // Fingers apart (d > 0) = zoom in = negative zoom delta.
++            out.push(Out::Zoom(
++                (-d * ZOOM_PER_HEIGHT * s.zoom_sensitivity as f64) as f32,
++            ));
++            self.stats.zooms += 1;
++            self.pinch_dist = Some(now);
++        }
++    }
++
++    fn last_h(&self) -> f64 { LAST_H.with(|h| *h.borrow()).max(1.0) }
++
++    fn apply_tool(&mut self, t: Tool, s: &mut TouchSettings, out: &mut Vec<Out>) {
++        match t {
++            Tool::Smaller | Tool::Bigger | Tool::Fainter | Tool::Stronger => {
++                if let Some(c) = self.selected {
++                    let b = s.layout_mut(c);
++                    match t {
++                        Tool::Smaller => b.size = (b.size * 0.9).clamp(MIN_SIZE, MAX_SIZE),
++                        Tool::Bigger => b.size = (b.size * 1.1).clamp(MIN_SIZE, MAX_SIZE),
++                        Tool::Fainter => b.alpha = (b.alpha - 0.15).clamp(MIN_ALPHA, 1.0),
++                        _ => b.alpha = (b.alpha + 0.15).clamp(MIN_ALPHA, 1.0),
++                    }
++                } else {
++                    // No button selected: change the global overlay opacity.
++                    match t {
++                        Tool::Fainter => s.opacity = (s.opacity - 0.1).clamp(0.1, 1.0),
++                        Tool::Stronger => s.opacity = (s.opacity + 0.1).clamp(0.1, 1.0),
++                        _ => {},
++                    }
++                }
++            },
++            Tool::Reset => {
++                s.reset_layout();
++                self.selected = None;
++            },
++            Tool::Done => {
++                self.edit = false;
++                self.selected = None;
++                out.push(Out::Save);
++            },
++        }
++    }
++
++    /// Per-frame update: releases smoothed camera motion (3.3).
++    pub fn on_frame(&mut self, s: &TouchSettings) -> Vec<Out> {
++        let (px, py) = self.pan_pending;
++        if px.abs() < 0.01 && py.abs() < 0.01 {
++            self.pan_pending = (0.0, 0.0);
++            return Vec::new();
++        }
++        let keep = s.camera_smoothing.clamp(0.0, 0.9);
++        let (ex, ey) = (px * (1.0 - keep), py * (1.0 - keep));
++        self.pan_pending = (px - ex, py - ey);
++        self.stats.pans += 1;
++        vec![Out::Pan(ex, ey)]
++    }
++
++    /// Everything to draw this frame.
++    pub fn primitives(&self, ctx: &Context, s: &TouchSettings, aspect: f32) -> Vec<Prim> {
++        let mut p = Vec::new();
++        if !ctx.in_session || !s.enabled {
++            return p;
++        }
++        let ga = s.opacity.clamp(0.1, 1.0);
++        let held: Vec<Ctl> = self
++            .fingers
++            .iter()
++            .filter_map(|(_, f)| match f {
++                Finger::Button(c) => Some(*c),
++                _ => None,
++            })
++            .collect();
++
++        // Virtual stick (3.2): base + knob where the finger is.
++        if ctx.game_input && !ctx.dead && !self.edit {
++            let r = s.stick_radius;
++            let stick = self.fingers.iter().find_map(|(_, f)| match f {
++                Finger::Stick { ox, oy } => Some((*ox, *oy)),
++                _ => None,
++            });
++            let h = self.last_h();
++            let w = h * aspect as f64;
++            let (bx, by, a) = match stick {
++                Some((ox, oy)) => ((ox / w) as f32, (oy / h) as f32, 1.0),
++                None => (0.20, 0.72, 0.45),
++            };
++            p.push(Prim {
++                x: bx,
++                y: by,
++                r,
++                rgba: [0.1, 0.1, 0.12, 0.35 * ga * a],
++                label: None,
++                text_rgba: [0.0; 4],
++            });
++            let (kx, ky) = (
++                bx + self.stick.0 * r / aspect,
++                by - self.stick.1 * r,
++            );
++            p.push(Prim {
++                x: kx,
++                y: ky,
++                r: r * 0.42,
++                rgba: [0.85, 0.85, 0.9, 0.55 * ga * a],
++                label: None,
++                text_rgba: [0.0; 4],
++            });
++        }
++
++        for c in Ctl::ALL {
++            let shown = if self.edit {
++                c != Ctl::Edit
++            } else {
++                ctx.visible(c)
++            };
++            if !shown {
++                continue;
++            }
++            let b = s.layout(c);
++            let pressed = held.contains(&c);
++            let selected = self.edit && self.selected == Some(c);
++            let a = (ga * b.alpha).clamp(0.05, 1.0);
++            let t = c.tint();
++            // Border
++            p.push(Prim {
++                x: b.x,
++                y: b.y,
++                r: b.size,
++                rgba: if selected {
++                    [1.0, 0.85, 0.2, 0.95]
++                } else {
++                    [0.05, 0.05, 0.05, 0.55 * a]
++                },
++                label: None,
++                text_rgba: [0.0; 4],
++            });
++            // Face
++            let k = if pressed { 1.35 } else { 1.0 };
++            let face_a = if self.edit && c.group() == Group::Contextual {
++                0.5 * a
++            } else if pressed {
++                (0.95 * a).max(0.7)
++            } else {
++                0.7 * a
++            };
++            p.push(Prim {
++                x: b.x,
++                y: b.y,
++                r: b.size * 0.88,
++                rgba: [
++                    (t[0] * k).min(1.0),
++                    (t[1] * k).min(1.0),
++                    (t[2] * k).min(1.0),
++                    face_a,
++                ],
++                label: Some(c.label(ctx)),
++                text_rgba: [1.0, 1.0, 1.0, (a * 1.4).clamp(0.5, 1.0)],
++            });
++        }
++
++        if self.edit {
++            p.push(Prim {
++                x: 0.5,
++                y: 0.30,
++                r: 0.0,
++                rgba: [0.0; 4],
++                label: Some(if self.selected.is_some() {
++                    "Drag to move - Size/Alpha change the selected button"
++                } else {
++                    "Edit layout: drag a button, or tap one to select it"
++                }),
++                text_rgba: [1.0, 0.9, 0.4, 1.0],
++            });
++            for t in Tool::ALL {
++                let (x, y, r) = t.place();
++                p.push(Prim {
++                    x,
++                    y,
++                    r,
++                    rgba: [0.05, 0.05, 0.05, 0.85],
++                    label: None,
++                    text_rgba: [0.0; 4],
++                });
++                p.push(Prim {
++                    x,
++                    y,
++                    r: r * 0.88,
++                    rgba: if t == Tool::Done {
++                        [0.2, 0.6, 0.3, 0.95]
++                    } else if t == Tool::Reset {
++                        [0.7, 0.25, 0.2, 0.95]
++                    } else {
++                        [0.3, 0.3, 0.38, 0.95]
++                    },
++                    label: Some(t.label()),
++                    text_rgba: [1.0, 1.0, 1.0, 1.0],
++                });
++            }
++        }
++        p
++    }
++}
++
++thread_local! {
++    static LAST_H: std::cell::RefCell<f64> = const { std::cell::RefCell::new(1080.0) };
++}
++
++/// Remember the window height (used by pinch/stick drawing helpers).
++pub fn set_window_height(h: f64) { LAST_H.with(|c| *c.borrow_mut() = h.max(1.0)); }
++
++// --------------------------------------------------------------- globals ---
++
++/// The single touch layer (UI thread).
++pub static LAYER: Mutex<Option<TouchLayer>> = Mutex::new(None);
++static CONTEXT: Mutex<Context> = Mutex::new(Context {
++    in_session: false,
++    game_input: false,
++    can_interact: false,
++    can_mount: false,
++    riding: false,
++    in_liquid: false,
++    dead: false,
++});
++static HAPTICS: Mutex<VecDeque<u32>> = Mutex::new(VecDeque::new());
++
++/// Whether the touch overlay is active on this platform.
++pub fn active() -> bool { cfg!(target_os = "android") }
++
++pub fn with_layer<R>(f: impl FnOnce(&mut TouchLayer) -> R) -> R {
++    let mut g = LAYER.lock().unwrap_or_else(|e| e.into_inner());
++    f(g.get_or_insert_with(TouchLayer::default))
++}
++
++pub fn set_context(c: Context) { *CONTEXT.lock().unwrap_or_else(|e| e.into_inner()) = c; }
++
++pub fn context() -> Context { *CONTEXT.lock().unwrap_or_else(|e| e.into_inner()) }
++
++/// Ask for a vibration pulse (3.10); drained by the platform layer.
++pub fn request_haptic(ms: u32) {
++    if active() {
++        let mut q = HAPTICS.lock().unwrap_or_else(|e| e.into_inner());
++        if q.len() < 8 {
++            q.push_back(ms);
++        }
++    }
++}
++
++pub fn take_haptics() -> Vec<u32> {
++    HAPTICS
++        .lock()
++        .unwrap_or_else(|e| e.into_inner())
++        .drain(..)
++        .collect()
++}
++
++/// Keyboard hints on touch devices name the on-screen button instead of a key
++/// (3.10), e.g. "Press [Use] to talk".
++pub fn hint_label_for(ctl: Option<Ctl>) -> Option<&'static str> {
++    if !active() {
++        return None;
++    }
++    ctl.map(|c| c.label(&context()))
++}
++
++// ------------------------------------------------------------------ tests ---
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    const W: f64 = 2400.0;
++    const H: f64 = 1080.0;
++
++    fn ctx() -> Context {
++        Context {
++            in_session: true,
++            game_input: true,
++            ..Default::default()
++        }
++    }
++
++    fn px(b: ButtonLayout) -> (f64, f64) { (b.x as f64 * W, b.y as f64 * H) }
++
++    #[test]
++    fn default_layout_has_every_control_once() {
++        let l = default_layout();
++        for c in Ctl::ALL {
++            assert_eq!(l.iter().filter(|b| b.ctl == c).count(), 1, "{c:?}");
++        }
++        assert_eq!(l.len(), Ctl::ALL.len());
++    }
++
++    #[test]
++    fn default_layout_does_not_overlap_and_fits() {
++        for aspect in [16.0 / 9.0, 2.0, 2400.0 / 1080.0, 22.0 / 9.0] {
++            let l = default_layout();
++            for (i, a) in l.iter().enumerate() {
++                assert!(a.x - a.size / aspect >= 0.0, "{:?} off left @{aspect}", a.ctl);
++                assert!(a.x + a.size / aspect <= 1.0, "{:?} off right @{aspect}", a.ctl);
++                assert!(a.y - a.size >= 0.0 && a.y + a.size <= 1.0, "{:?} off v", a.ctl);
++                for b in &l[i + 1..] {
++                    let d = dist_h(a.x, a.y, b.x, b.y, aspect);
++                    assert!(
++                        d > a.size + b.size,
++                        "{:?} overlaps {:?} @{aspect}: {d} <= {}",
++                        a.ctl,
++                        b.ctl,
++                        a.size + b.size
++                    );
++                }
++            }
++            // Tools do not overlap each other.
++            for (i, a) in Tool::ALL.iter().enumerate() {
++                for b in &Tool::ALL[i + 1..] {
++                    let (ax, ay, ar) = a.place();
++                    let (bx, by, br) = b.place();
++                    assert!(dist_h(ax, ay, bx, by, aspect) > ar + br);
++                }
++            }
++        }
++    }
++
++    #[test]
++    fn button_press_and_release() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        let (x, y) = px(s.layout(Ctl::Jump));
++        let o = t.on_touch(1, Phase::Started, x, y, W, H, &ctx(), &mut s);
++        assert_eq!(o, vec![Out::Press(Ctl::Jump)]);
++        let o = t.on_touch(1, Phase::Moved, x + 30.0, y, W, H, &ctx(), &mut s);
++        assert!(o.is_empty(), "button finger must not pan: {o:?}");
++        assert_eq!(t.on_frame(&s), vec![]);
++        let o = t.on_touch(1, Phase::Ended, x + 30.0, y, W, H, &ctx(), &mut s);
++        assert_eq!(o, vec![Out::Release(Ctl::Jump)]);
++    }
++
++    #[test]
++    fn analog_stick_walk_and_run() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        let (ox, oy) = (0.2 * W, 0.75 * H);
++        assert!(t.on_touch(1, Phase::Started, ox, oy, W, H, &ctx(), &mut s).is_empty());
++        // inside dead-zone
++        let o = t.on_touch(1, Phase::Moved, ox + 5.0, oy, W, H, &ctx(), &mut s);
++        assert!(o.is_empty());
++        let r = s.stick_radius as f64 * H;
++        // light tilt forward → slow
++        let o = t.on_touch(1, Phase::Moved, ox, oy - 0.4 * r, W, H, &ctx(), &mut s);
++        let Out::Move(x, y) = o[0] else { panic!() };
++        assert!(x.abs() < 1e-3 && y > 0.2 && y < 0.4, "{y}");
++        // full tilt beyond radius → clamped to 1
++        let o = t.on_touch(1, Phase::Moved, ox + 3.0 * r, oy, W, H, &ctx(), &mut s);
++        let Out::Move(x, y) = o[0] else { panic!() };
++        assert!((x - 1.0).abs() < 1e-3 && y.abs() < 1e-3);
++        let o = t.on_touch(1, Phase::Ended, ox, oy, W, H, &ctx(), &mut s);
++        assert_eq!(o, vec![Out::Move(0.0, 0.0)]);
++    }
++
++    #[test]
++    fn multitouch_stick_camera_attack_together() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        s.camera_smoothing = 0.0;
++        let c = ctx();
++        let (ax, ay) = px(s.layout(Ctl::Primary));
++        t.on_touch(1, Phase::Started, 0.2 * W, 0.75 * H, W, H, &c, &mut s);
++        t.on_touch(2, Phase::Started, 0.5 * W, 0.22 * H, W, H, &c, &mut s);
++        assert_eq!(t.on_touch(3, Phase::Started, ax, ay, W, H, &c, &mut s), vec![
++            Out::Press(Ctl::Primary)
++        ]);
++        let m = t.on_touch(1, Phase::Moved, 0.2 * W, 0.75 * H - 200.0, W, H, &c, &mut s);
++        assert!(matches!(m[0], Out::Move(_, y) if y > 0.9));
++        t.on_touch(2, Phase::Moved, 0.5 * W + 100.0, 0.22 * H, W, H, &c, &mut s);
++        let p = t.on_frame(&s);
++        assert!(matches!(p[0], Out::Pan(x, y) if x > 50.0 && y.abs() < 1e-3), "{p:?}");
++        // jitter on the attack finger does not touch the camera
++        t.on_touch(3, Phase::Moved, ax + 20.0, ay + 20.0, W, H, &c, &mut s);
++        assert!(t.on_frame(&s).is_empty());
++        assert_eq!(t.finger_count(), 3);
++    }
++
++    #[test]
++    fn camera_smoothing_converges() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        s.camera_smoothing = 0.5;
++        let c = ctx();
++        t.on_touch(2, Phase::Started, 0.5 * W, 0.22 * H, W, H, &c, &mut s);
++        t.on_touch(2, Phase::Moved, 0.5 * W + 100.0, 0.22 * H, W, H, &c, &mut s);
++        let mut total = 0.0;
++        for _ in 0..40 {
++            for o in t.on_frame(&s) {
++                if let Out::Pan(x, _) = o {
++                    total += x;
++                }
++            }
++        }
++        let expect = 100.0 * PAN_BASE as f32 / H as f32;
++        assert!((total - expect).abs() < 0.05 * expect, "{total} vs {expect}");
++    }
++
++    #[test]
++    fn pinch_zoom() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        let c = ctx();
++        set_window_height(H);
++        t.on_touch(1, Phase::Started, 0.55 * W, 0.25 * H, W, H, &c, &mut s);
++        t.on_touch(2, Phase::Started, 0.65 * W, 0.25 * H, W, H, &c, &mut s);
++        let o = t.on_touch(2, Phase::Moved, 0.75 * W, 0.25 * H, W, H, &c, &mut s);
++        assert!(matches!(o[0], Out::Zoom(z) if z < 0.0), "{o:?}");
++        // no pan while pinching
++        assert!(t.on_frame(&s).is_empty());
++        let o = t.on_touch(2, Phase::Moved, 0.66 * W, 0.25 * H, W, H, &c, &mut s);
++        assert!(matches!(o[0], Out::Zoom(z) if z > 0.0), "{o:?}");
++    }
++
++    #[test]
++    fn contextual_buttons() {
++        let mut c = ctx();
++        assert!(!c.visible(Ctl::Interact));
++        assert!(!c.visible(Ctl::Mount));
++        assert!(!c.visible(Ctl::SwimUp));
++        c.can_interact = true;
++        c.riding = true;
++        c.in_liquid = true;
++        assert!(c.visible(Ctl::Interact));
++        assert!(c.visible(Ctl::Mount));
++        assert_eq!(Ctl::Mount.label(&c), "Dismount");
++        assert!(c.visible(Ctl::SwimDown));
++        c.dead = true;
++        assert!(c.visible(Ctl::Respawn));
++        assert!(!c.visible(Ctl::Primary));
++        c.dead = false;
++        c.game_input = false;
++        assert!(!c.visible(Ctl::Primary));
++        assert!(c.visible(Ctl::Bag), "menu bar stays to close windows");
++        assert!(!c.visible(Ctl::Edit));
++    }
++
++    #[test]
++    fn window_open_means_mouse_and_releases_held() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        let mut c = ctx();
++        let (x, y) = px(s.layout(Ctl::Primary));
++        t.on_touch(1, Phase::Started, x, y, W, H, &c, &mut s);
++        c.game_input = false;
++        let o = t.on_touch(2, Phase::Started, 0.5 * W, 0.5 * H, W, H, &c, &mut s);
++        assert_eq!(o, vec![
++            Out::Release(Ctl::Primary),
++            Out::MouseMove(0.5 * W, 0.5 * H),
++            Out::MouseDown(0.5 * W, 0.5 * H)
++        ]);
++        let (bx, by) = px(s.layout(Ctl::Bag));
++        assert_eq!(t.on_touch(3, Phase::Started, bx, by, W, H, &c, &mut s), vec![
++            Out::Press(Ctl::Bag)
++        ]);
++    }
++
++    #[test]
++    fn layout_editor_move_resize_save_reset() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        let c = ctx();
++        let (ex, ey) = px(s.layout(Ctl::Edit));
++        t.on_touch(1, Phase::Started, ex, ey, W, H, &c, &mut s);
++        t.on_touch(1, Phase::Ended, ex, ey, W, H, &c, &mut s);
++        assert!(t.edit);
++        let (jx, jy) = px(s.layout(Ctl::Jump));
++        assert!(t.on_touch(2, Phase::Started, jx, jy, W, H, &c, &mut s).is_empty());
++        t.on_touch(2, Phase::Moved, jx - 240.0, jy - 108.0, W, H, &c, &mut s);
++        t.on_touch(2, Phase::Ended, jx - 240.0, jy - 108.0, W, H, &c, &mut s);
++        let j = s.layout(Ctl::Jump);
++        assert!((j.x - 0.85).abs() < 1e-3 && (j.y - 0.43).abs() < 1e-3, "{j:?}");
++        let tap = |t: &mut TouchLayer, s: &mut TouchSettings, tool: Tool| {
++            let (x, y, _) = tool.place();
++            let o = t.on_touch(9, Phase::Started, x as f64 * W, y as f64 * H, W, H, &c, s);
++            t.on_touch(9, Phase::Ended, x as f64 * W, y as f64 * H, W, H, &c, s);
++            o
++        };
++        tap(&mut t, &mut s, Tool::Bigger);
++        tap(&mut t, &mut s, Tool::Fainter);
++        let j = s.layout(Ctl::Jump);
++        assert!((j.size - 0.085 * 1.1).abs() < 1e-4 && (j.alpha - 0.85).abs() < 1e-4);
++        // round trip through RON like settings.ron
++        let ron = ron::ser::to_string(&s).unwrap();
++        let back: TouchSettings = ron::from_str(&ron).unwrap();
++        assert_eq!(back, s);
++        // missing field / older file → defaults
++        let old: TouchSettings = ron::from_str("(opacity: 0.4)").unwrap();
++        assert_eq!(old.buttons, default_layout());
++        assert_eq!(tap(&mut t, &mut s, Tool::Done), vec![Out::Save]);
++        assert!(!t.edit);
++        // Reset
++        t.on_touch(1, Phase::Started, ex, ey, W, H, &c, &mut s);
++        tap(&mut t, &mut s, Tool::Reset);
++        assert_eq!(s.buttons, default_layout());
++    }
++
++    #[test]
++    fn primitives_draw_visible_buttons() {
++        let t = TouchLayer::default();
++        let s = TouchSettings::default();
++        let p = t.primitives(&ctx(), &s, 2.2);
++        let labels: Vec<_> = p.iter().filter_map(|p| p.label).collect();
++        assert!(labels.contains(&"Attack") && labels.contains(&"Bag"));
++        assert!(!labels.contains(&"Use"), "contextual hidden");
++        let none = t.primitives(&Context::default(), &s, 2.2);
++        assert!(none.is_empty());
++    }
++}
+diff --git a/voxygen/src/window.rs b/voxygen/src/window.rs
+index d4d2a79ed..60e1d7725 100644
+--- a/voxygen/src/window.rs
++++ b/voxygen/src/window.rs
+@@ -143,6 +143,12 @@ impl KeyMouse {
+         use self::KeyMouse::*;
+         use winit::{event::MouseButton, keyboard::Key::*};
+ 
++        // my-veloren dev.3: on touch devices name the on-screen button.
++        #[cfg(target_os = "android")]
++        if let Some(label) = crate::android::touch_hint(self) {
++            return format!("[{label}]");
++        }
++
+         match self {
+             Key(key) => match key {
+                 Named(key) => format!("{key:?}"),
+@@ -167,6 +173,10 @@ impl KeyMouse {
+     pub fn try_shortened(&self) -> Option<String> {
+         use self::KeyMouse::*;
+         use winit::event::MouseButton;
++        #[cfg(target_os = "android")]
++        if let Some(label) = crate::android::touch_hint(self) {
++            return Some(label.to_owned());
++        }
+         let key_string = match self {
+             Mouse(MouseButton::Left) => "M1",
+             Mouse(MouseButton::Right) => "M2",

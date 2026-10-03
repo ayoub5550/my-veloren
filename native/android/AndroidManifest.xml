@@ -1,17 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.ayoub.myveloren"
-    android:versionCode="20"
-    android:versionName="0.1.0-dev.2">
+    android:versionCode="30"
+    android:versionName="0.1.0-dev.3">
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
     <uses-feature android:glEsVersion="0x00030000" android:required="true" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <application
         android:label="Veloren"
         android:hasCode="true"
         android:extractNativeLibs="true"
         android:allowBackup="false"
         android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
+        <!-- Test Lab game loop: 1 = play + all dev.3 checks, 2 = layout restored after restart -->
+        <meta-data android:name="com.google.test.loops" android:value="2" />
         <activity
             android:name="com.ayoub.myveloren.VelorenActivity"
             android:exported="true"
