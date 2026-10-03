@@ -1,0 +1,164 @@
+{
+ "upstream": "https://github.com/veloren/veloren",
+ "commit": "585a91b4a76fcf5df7a4851127cf5907a3ce34df",
+ "license": "GPL-3.0 (upstream)",
+ "count": 26,
+ "files": [
+  {
+   "path": "assets/voxygen/voxel/figure/head/human/male.vox",
+   "key": "figure/head/human/male",
+   "bytes": 3384,
+   "sha256": "be4b14aafbbdb231a0ae97036201ad2a1d06f42b62130904b05e79c19557649b"
+  },
+  {
+   "path": "assets/voxygen/voxel/figure/eyes/general/male_default-0.vox",
+   "key": "figure/eyes/general/male_default-0",
+   "bytes": 1144,
+   "sha256": "371f458f43de8ab163a84231129fdcdde8e22ce457df8a484f15d7cb56b85603"
+  },
+  {
+   "path": "assets/voxygen/voxel/figure/hair/human/male-1.vox",
+   "key": "figure/hair/human/male-1",
+   "bytes": 2160,
+   "sha256": "764af85a91d77d937f736804abb18fe2bd15cafab1f6100bb06143173859071a"
+  },
+  {
+   "path": "assets/voxygen/voxel/figure/body/hand.vox",
+   "key": "figure/body/hand",
+   "bytes": 1272,
+   "sha256": "5dcbebd44d164284b79ab97a3d4f0bc4a3a7088094f4c85b10955a23fda5d344"
+  },
+  {
+   "path": "assets/voxygen/voxel/armor/misc/chest/grayscale.vox",
+   "key": "armor/misc/chest/grayscale",
+   "bytes": 2712,
+   "sha256": "66b912c68ee331a4d86c10a472855254bcffea1c62fef8daedf37231245a0280"
+  },
+  {
+   "path": "assets/voxygen/voxel/armor/misc/pants/grayscale.vox",
+   "key": "armor/misc/pants/grayscale",
+   "bytes": 1912,
+   "sha256": "7efe7e5563f5af4229118b9abb560f0e32472ae40416146bd5bbd12a99d66df5"
+  },
+  {
+   "path": "assets/voxygen/voxel/armor/misc/belt/dark.vox",
+   "key": "armor/misc/belt/dark",
+   "bytes": 1544,
+   "sha256": "9847871490b398a5266495c3df5ca776145548a3e7f68c4d394a1d95f2bed808"
+  },
+  {
+   "path": "assets/voxygen/voxel/armor/misc/foot/dark.vox",
+   "key": "armor/misc/foot/dark",
+   "bytes": 1480,
+   "sha256": "f3455ff634ecc5b09d9c459296e2b9d08aa091b9579547517cceb7f392669f5c"
+  },
+  {
+   "path": "assets/voxygen/voxel/weapon/sword/starter.vox",
+   "key": "weapon/sword/starter",
+   "bytes": 1580,
+   "sha256": "f417da93cf8c372d5cf4560e41b9db3878b9cdd5ead043641118c5a77be0799c"
+  },
+  {
+   "path": "assets/world/tree/pine_green/1.vox",
+   "key": "world/tree/pine_green/1",
+   "bytes": 7340,
+   "sha256": "452a242cff15ae0d80bc233a36ff673026015c6ff4c56acc03e315f395969802"
+  },
+  {
+   "path": "assets/world/tree/pine_green/2.vox",
+   "key": "world/tree/pine_green/2",
+   "bytes": 11040,
+   "sha256": "63f7af9419dd79437bbff5268811efe8bc9d383c2a679c00f16d8436ec40b1b0"
+  },
+  {
+   "path": "assets/world/tree/pine_green/3.vox",
+   "key": "world/tree/pine_green/3",
+   "bytes": 13032,
+   "sha256": "03f1d60dcaf4808b98629d11871ae720007bcdded0f27b37fdc98372258561df"
+  },
+  {
+   "path": "assets/world/tree/pine_green/4.vox",
+   "key": "world/tree/pine_green/4",
+   "bytes": 5192,
+   "sha256": "1e6f1eafbc4b594ae5be130c43301720f8aada84007a7552a40a79fe9b988233"
+  },
+  {
+   "path": "assets/world/tree/pine_green/5.vox",
+   "key": "world/tree/pine_green/5",
+   "bytes": 7844,
+   "sha256": "dcacca2633e35e45a6ee91ce4b7c2db788432c2631d52b2f263fa3c8519f786e"
+  },
+  {
+   "path": "assets/world/tree/pine_green/6.vox",
+   "key": "world/tree/pine_green/6",
+   "bytes": 5936,
+   "sha256": "0911b8fa5de4439e6b80c1b737e4dc3ccb838ae38ca6b3cccd484cd73bb21a4a"
+  },
+  {
+   "path": "assets/world/tree/pine_green/7.vox",
+   "key": "world/tree/pine_green/7",
+   "bytes": 11480,
+   "sha256": "044140ac4829f5268593e4f85fc8ee0cbc490f455bec51e15537a2d538955c9f"
+  },
+  {
+   "path": "assets/world/tree/pine_green/8.vox",
+   "key": "world/tree/pine_green/8",
+   "bytes": 7148,
+   "sha256": "57b6361728e93961360f6960f7c2333f80c54728c21c5e89310cb8eefa0ffceb"
+  },
+  {
+   "path": "assets/world/tree/temperate_small/1.vox",
+   "key": "world/tree/temperate_small/1",
+   "bytes": 2036,
+   "sha256": "14e448a46ff8dac488730dc11d873c6d4cfd185f8ff10c8209ebf27dd2602f1b"
+  },
+  {
+   "path": "assets/world/tree/temperate_small/2.vox",
+   "key": "world/tree/temperate_small/2",
+   "bytes": 2252,
+   "sha256": "f248fa9cb5f8831740d71096ad10943edc6abc49b63cc726840b8cab3e0ba956"
+  },
+  {
+   "path": "assets/world/tree/temperate_small/3.vox",
+   "key": "world/tree/temperate_small/3",
+   "bytes": 2232,
+   "sha256": "b58e2f1b8c9d02e5f1a3c529a4b8adc1c4268e48f78c0068ef5a690de8e402cf"
+  },
+  {
+   "path": "assets/world/tree/temperate_small/4.vox",
+   "key": "world/tree/temperate_small/4",
+   "bytes": 1900,
+   "sha256": "e762fa4f9824e0baeaa287a24b5dc3f726c4be9146eaf067b445c6c1800401a3"
+  },
+  {
+   "path": "assets/world/tree/temperate_small/5.vox",
+   "key": "world/tree/temperate_small/5",
+   "bytes": 1892,
+   "sha256": "85f7ec25448c758e1e62af70e77307096f1f6072e521a3b2b1672fbc2fee2d18"
+  },
+  {
+   "path": "assets/world/tree/temperate_small/6.vox",
+   "key": "world/tree/temperate_small/6",
+   "bytes": 2068,
+   "sha256": "053a32d35758d59b113bcc3a7c733b751a699f0bf521a274c83fe27c933dc81b"
+  },
+  {
+   "path": "assets/world/tree/oak_stump/1.vox",
+   "key": "world/tree/oak_stump/1",
+   "bytes": 6576,
+   "sha256": "247892994e6005f1976cf20ade31fb1326152a62a4323734ca588ab9dddb4f9c"
+  },
+  {
+   "path": "assets/world/tree/oak_stump/2.vox",
+   "key": "world/tree/oak_stump/2",
+   "bytes": 6864,
+   "sha256": "2eaa74f4f81276aac5111fd91b360e4b898fe18ce297eca274f0ce2f3d2a1a04"
+  },
+  {
+   "path": "assets/world/tree/oak_stump/3.vox",
+   "key": "world/tree/oak_stump/3",
+   "bytes": 7656,
+   "sha256": "3ae1917ba5eed0708123ba960529e6c2c4087bb10aeafbc7b55b69a61eb73707"
+  }
+ ]
+}

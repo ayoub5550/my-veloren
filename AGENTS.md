@@ -1,18 +1,14 @@
 # AGENTS.md — developer and AI-agent contract
 
-## 0. Authorization: STOP at planning
+## 0. Authorization: dev1 authorized (2026-10-03)
 
-The owner chose **Veloren → Unity → Android → offline**, requested all assets and a reusable
-agent guide, then explicitly corrected the immediate scope to **roadmap only** on 2026-10-03.
+The owner chose **Veloren → Unity → Android → offline**. On 2026-10-03 the owner instructed
+(Slack): "check my-veloren, start working on it, build an APK and push to the repo" and confirmed
+it is a Unity Android port like the earlier LibreQuake port. This authorizes **dev1 only**
+(Unity feasibility slice + APK + prerelease). Later milestones need a new owner instruction.
 
-**Do not implement gameplay, initialize Unity, import/download the asset corpus, install
-build toolchains, start CI builds, publish an APK or spend cloud-test credits from this plan.**
-Editing and reviewing documentation is authorized. A later owner instruction such as
-"implement dev1" authorizes that milestone, not every subsequent milestone.
-
-Current contents are Markdown and a JSON source-tree inventory. There are no executable
-tools, scenes, imported assets, tests or builds. Never report proposed commands as working.
-Do not merge or release without owner approval.
+Current state and evidence: [docs/DEV1.md](docs/DEV1.md). Never report a gate as PASS without
+its receipt. Do not merge PRs without owner approval.
 
 ## 1. Read order
 

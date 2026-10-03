@@ -1,0 +1,16 @@
+.worktrees/
+.local/
+*.keystore
+*.jks
+game/[Ll]ibrary/
+game/[Tt]emp/
+game/[Ll]ogs/
+game/[Oo]bj/
+game/[Bb]uilds/
+game/[Uu]ser[Ss]ettings/
+game/*.csproj
+game/*.sln
+Artifacts/
+__pycache__/
+*.apk
+!releases/*.apk
