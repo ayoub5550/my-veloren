@@ -1,8 +1,7 @@
 # Build and QA runbook specification
 
-**Planning only. No tools below exist in this repository yet and no commands have been run
-for a Unity project here.** Future developers must implement and verify the interfaces before
-replacing this statement with real commands.
+**dev1 update:** working entry points now exist: `python3 tools/build.py compile|playtest|android`
+(see [DEV1.md](DEV1.md) for receipts). The rest of this document is still the target specification.
 
 ## 1. Toolchain decision
 

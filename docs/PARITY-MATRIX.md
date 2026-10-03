@@ -1,7 +1,9 @@
 # Content and behavior coverage matrix
 
-**All implementation statuses below: NOT STARTED.** This is a planning baseline, not a
-test report. Expand each broad row into per-family/per-feature cases when implementation
+**dev1 status (2026-10-03):** Voxel geometry, Character creation, Equipment visuals, Procedural
+animation, Camera/movement, World generation/rendering and Android robustness are **STARTED**
+(sample/placeholder level, see [DEV1.md](DEV1.md)); APK built, real-device smoke NOT RUN.
+All other rows: NOT STARTED. Expand each broad row into per-family/per-feature cases when implementation
 is authorized. Every exception needs a reason, owner decision and impact on advertised scope.
 
 | Area | First evidence gate | Full-scope follow-up | Milestone |

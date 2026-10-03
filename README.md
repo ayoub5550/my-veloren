@@ -1,8 +1,9 @@
 # my-veloren — Unity / Android / Offline
 
-> **الحالة: خارطة تطوير فقط — ليست لعبة أو مشروع Unity جاهزاً.**
-> بناءً على توجيه المالك بتاريخ 2026-10-03، لا يبدأ التنفيذ أو البناء أو استيراد الأصول
-> قبل موافقة جديدة. لا توجد APK ولا اختبارات Unity أو هاتف لهذا المشروع.
+> **الحالة: dev1 (0.1.0-dev.1) — شريحة Unity أولى + APK تجريبي.**
+> مشروع Unity في `game/`، عينة 26 أصلاً حقيقياً من Veloren (شخصية بشرية بدرع وسيف، أشجار)،
+> عالم voxel مولد محلياً، تحكم لمس. البناء نجح؛ اختبار الهاتف الحقيقي لم يُشغَّل بعد.
+> التفاصيل والأدلة: [docs/DEV1.md](docs/DEV1.md).
 
 الهدف المستقبلي: إعادة تنفيذ تجربة Veloren على Unity لأندرويد، تعمل محلياً دون حساب
 أو اتصال، مع خط استيراد يشمل مكتبة الأصول كاملة، وتعليمات قابلة للتكرار لأي مطور أو
@@ -31,8 +32,7 @@
 
 ## English summary
 
-This is a **documentation-only planning repository**, not a playable port, Unity project,
-asset mirror or APK. The proposed product is an offline Android adaptation using Unity.
+Status: **dev1** — first Unity slice and a debug APK (see docs/DEV1.md). Not yet the full game. The proposed product is an offline Android adaptation using Unity.
 Implementation is explicitly paused until the owner authorizes a milestone.
 
 Read [AGENTS.md](AGENTS.md) before editing. The requested lowercase
