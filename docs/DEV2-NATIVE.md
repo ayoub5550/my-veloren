@@ -40,3 +40,30 @@ Offline: singleplayer runs the server in-process; no account/login/network requi
 | Date | Step | Result |
 |---|---|---|
 | 2026-10-03 | ADR + branch `feat/dev2-native-android` | done |
+| 2026-10-03 | Toolchain (rustup nightly-2026-06-13 + aarch64-linux-android, NDK r27c, cmake/ninja) | done |
+| 2026-10-03 | Android cross-build of `veloren-voxygen` lib (`release-thinlto`, features `singleplayer,simd,shaderc-from-source`) | **PASS** — `libveloren_voxygen.so` 477 MB unstripped, exports `android_main` + `ANativeActivity_onCreate`; NEEDED libc++_shared, liblog, libandroid, libaaudio |
+| 2026-10-03 | Fixes needed: winit `android-native-activity`; mumble-link off on Android; shaderc cmake must get `ANDROID_ABI=arm64-v8a` (wrapper `native/android-arm64.toolchain.cmake`, else armeabi-v7a objects → link error) | done |
+| 2026-10-03 | APK packaging (`native/build_android.sh`: aapt2 + full `assets/` as uncompressed `assets/assets.tar` + zipalign + apksigner) | **PASS** — `my-veloren-dev2.apk` 465,945,142 bytes, sha256 `ce43b4f685c0682425a60326c29d807092a2504d319efe0a5897061fb59b40a2`, vc20 |
+| 2026-10-03 | Firebase Test Lab game-loop smoke r8q (A13) + e3q (A16) | running |
+
+## How to rebuild
+
+```bash
+git clone https://github.com/veloren/veloren /work/native/veloren && cd /work/native/veloren
+git checkout 585a91b4a76fcf5df7a4851127cf5907a3ce34df
+git apply <repo>/native/patches/0001-voxygen-android.patch
+# toolchain: see native/env.example.sh (+ native/android-arm64.toolchain.cmake)
+<repo>/native/build_android.sh          # -> native/out/my-veloren-dev2.apk
+FIREBASE_SA_JSON=... tools/ftl.sh native/out/my-veloren-dev2.apk dev2-r8q
+```
+
+## Android code map (patch 0001)
+
+- `voxygen/src/android.rs`: `android_main`, logcat redirect (tag `veloren`), first-launch extraction of
+  `assets.tar` → `<internal>/veloren/assets` (marker `.assets-<ver>`), env `VELOREN_ASSETS/USERDATA`,
+  `VOXYGEN_CONFIG/LOGS`, event loop pumped until `Resumed`, touch mapping:
+  menus = 1-finger mouse; session = left 40% virtual stick (WASD), right side drag = camera,
+  right edge: Primary (middle), Jump (bottom-right), Roll (left of Jump), Escape (top-right corner).
+- `voxygen/src/android_main_body.rs`: copy of `main.rs` body without CLI parsing.
+- `run.rs`: touch events translated before the normal pipeline. `window.rs`: android event loop.
+- Known gaps: surface loss on app pause/resume not handled yet; no on-screen drawing of touch zones yet.

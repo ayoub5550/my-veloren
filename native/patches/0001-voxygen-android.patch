@@ -1,0 +1,741 @@
+diff --git a/voxygen/Cargo.toml b/voxygen/Cargo.toml
+index 1d34a5f..0b9e461 100644
+--- a/voxygen/Cargo.toml
++++ b/voxygen/Cargo.toml
+@@ -8,6 +8,10 @@ default-run = "veloren-voxygen"
+ # Uncomment below and comment out default-run if you want to avoid this
+ # autobins = false
+ 
++[lib]
++name = "veloren_voxygen"
++crate-type = ["rlib", "cdylib"]
++
+ [lints]
+ workspace = true
+ 
+@@ -146,6 +150,13 @@ discord-sdk = { version = "0.4", optional = true }
+ enum-map = { workspace = true }
+ cpal = "0.18"
+ 
++[target.'cfg(target_os = "android")'.dependencies]
++winit = { version = "0.30.12", features = ["serde", "android-native-activity"] }
++android_logger = "0.14"
++log = "0.4"
++libc = "0.2"
++tar = "0.4"
++
+ [target.'cfg(target_os = "macos")'.dependencies]
+ dispatch = "0.2"
+ 
+@@ -156,7 +167,7 @@ winres = "0.1"
+ mimalloc = { workspace = true }
+ 
+ # Mumble
+-[target.'cfg(not(target_os="macos"))'.dependencies]
++[target.'cfg(not(any(target_os="macos", target_os="android")))'.dependencies]
+ mumble-link = "0.2.0"
+ 
+ [dev-dependencies]
+diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
+new file mode 100644
+index 0000000..6f87170
+--- /dev/null
++++ b/voxygen/src/android.rs
+@@ -0,0 +1,351 @@
++//! Android entry point for Voxygen (my-veloren dev2, ADR-002).
++//!
++//! * `android_main` is called by android-activity (NativeActivity).
++//! * stdout/stderr are redirected to logcat (tag `veloren`).
++//! * The full upstream `assets/` tree is shipped as `assets/assets.tar` inside the
++//!   APK and extracted once to the app's internal storage.
++//! * Touch input is mapped to mouse input in menus and to a virtual stick /
++//!   camera pan / action zones while in a game session.
++#![allow(unsafe_code)]
++
++use std::{
++    io::{BufRead, BufReader, Read, Write},
++    path::{Path, PathBuf},
++    sync::{Mutex, OnceLock},
++    time::{Duration, Instant},
++};
++use winit::{
++    application::ApplicationHandler,
++    event::{ElementState, Event, MouseButton, TouchPhase, WindowEvent},
++    event_loop::ActiveEventLoop,
++    platform::{
++        android::{EventLoopBuilderExtAndroid, activity::AndroidApp},
++        pump_events::EventLoopExtPumpEvents,
++    },
++};
++
++use crate::{game_input::GameInput, window::Event as VEvent};
++
++static APP: OnceLock<AndroidApp> = OnceLock::new();
++
++/// Bumped whenever the shipped asset tarball changes.
++const ASSET_VERSION: &str = env!("CARGO_PKG_VERSION");
++
++pub fn app() -> &'static AndroidApp { APP.get().expect("android app not set") }
++
++/// Build the winit event loop and pump it until the activity is resumed (the
++/// native window exists), so the window + wgpu surface can be created
++/// immediately afterwards like on desktop.
++pub fn build_event_loop() -> crate::window::EventLoop {
++    let mut event_loop = winit::event_loop::EventLoop::builder()
++        .with_android_app(app().clone())
++        .build()
++        .expect("failed to build android event loop");
++
++    struct WaitResumed(bool);
++    impl ApplicationHandler for WaitResumed {
++        fn resumed(&mut self, _: &ActiveEventLoop) { self.0 = true; }
++
++        fn window_event(
++            &mut self,
++            _: &ActiveEventLoop,
++            _: winit::window::WindowId,
++            _: WindowEvent,
++        ) {
++        }
++    }
++    let mut h = WaitResumed(false);
++    while !h.0 {
++        let _ = event_loop.pump_app_events(Some(Duration::from_millis(50)), &mut h);
++    }
++    // Give the surface a moment to settle.
++    while app().native_window().is_none() {
++        let _ = event_loop.pump_app_events(Some(Duration::from_millis(50)), &mut h);
++    }
++    log::info!("android: activity resumed, native window ready");
++    event_loop
++}
++
++fn redirect_stdio_to_logcat() {
++    unsafe {
++        let mut fds = [0i32; 2];
++        if libc::pipe(fds.as_mut_ptr()) != 0 {
++            return;
++        }
++        libc::dup2(fds[1], 1);
++        libc::dup2(fds[1], 2);
++        let read_fd = fds[0];
++        std::thread::Builder::new()
++            .name("stdio-logcat".into())
++            .spawn(move || {
++                use std::os::fd::FromRawFd;
++                let f = std::fs::File::from_raw_fd(read_fd);
++                let mut r = BufReader::new(f);
++                let mut line = String::new();
++                loop {
++                    line.clear();
++                    match r.read_line(&mut line) {
++                        Ok(0) | Err(_) => break,
++                        Ok(_) => log::info!("{}", line.trim_end()),
++                    }
++                }
++            })
++            .ok();
++    }
++}
++
++fn extract_assets(app: &AndroidApp, data: &Path) -> PathBuf {
++    let root = data.join("veloren");
++    let marker = root.join(format!(".assets-{ASSET_VERSION}"));
++    let assets = root.join("assets");
++    if marker.exists() && assets.is_dir() {
++        log::info!("android: assets already extracted at {}", assets.display());
++        return root;
++    }
++    let t0 = Instant::now();
++    let _ = std::fs::remove_dir_all(&assets);
++    std::fs::create_dir_all(&root).expect("create asset root");
++    let am = app.asset_manager();
++    let name = std::ffi::CString::new("assets.tar").unwrap();
++    let asset = am
++        .open(&name)
++        .expect("assets.tar missing from APK (assets/assets.tar)");
++    let reader = BufReader::with_capacity(1 << 20, asset);
++    let mut ar = tar::Archive::new(reader);
++    ar.unpack(&root).expect("failed to unpack assets.tar");
++    std::fs::File::create(&marker)
++        .and_then(|mut f| f.write_all(b"ok"))
++        .ok();
++    log::info!(
++        "android: extracted assets to {} in {:.1}s",
++        assets.display(),
++        t0.elapsed().as_secs_f32()
++    );
++    root
++}
++
++#[unsafe(no_mangle)]
++fn android_main(app: AndroidApp) {
++    android_logger::init_once(
++        android_logger::Config::default()
++            .with_max_level(log::LevelFilter::Info)
++            .with_tag("veloren"),
++    );
++    std::panic::set_hook(Box::new(|info| {
++        log::error!("PANIC: {info}");
++    }));
++    redirect_stdio_to_logcat();
++    let _ = APP.set(app.clone());
++
++    let data = app
++        .internal_data_path()
++        .unwrap_or_else(|| PathBuf::from("/data/local/tmp/veloren"));
++    log::info!("android: internal data path {}", data.display());
++    let root = extract_assets(&app, &data);
++    let userdata = data.join("userdata");
++    let config = userdata.join("voxygen");
++    let logs = userdata.join("logs");
++    for d in [&userdata, &config, &logs] {
++        let _ = std::fs::create_dir_all(d);
++    }
++    // SAFETY: called before any other thread reads the environment.
++    unsafe {
++        std::env::set_var("VELOREN_ASSETS", &root);
++        std::env::set_var("VELOREN_USERDATA", &userdata);
++        std::env::set_var("VOXYGEN_CONFIG", &config);
++        std::env::set_var("VOXYGEN_LOGS", &logs);
++        if std::env::var_os("RUST_BACKTRACE").is_none() {
++            std::env::set_var("RUST_BACKTRACE", "1");
++        }
++    }
++    let _ = std::io::stdout().flush();
++    crate::android_main_body::run();
++    log::info!("android: game loop returned");
++}
++
++// ------------------------------------------------------------------ touch ---
++
++#[derive(Default)]
++struct TouchState {
++    /// Finger driving the mouse in menus.
++    mouse_finger: Option<u64>,
++    /// Virtual stick finger, its origin.
++    stick: Option<(u64, (f64, f64))>,
++    stick_dirs: [bool; 4],
++    /// Camera finger and its last position.
++    cam: Option<(u64, (f64, f64))>,
++    /// Action buttons held: (finger, input)
++    actions: Vec<(u64, GameInput)>,
++}
++
++static TOUCH: Mutex<Option<TouchState>> = Mutex::new(None);
++
++const STICK_DEADZONE: f64 = 0.03; // fraction of screen height
++
++/// Translate winit touch events. Returns the (possibly synthesized) winit
++/// events that should be processed by the normal event pipeline.
++pub fn translate_touch(
++    event: Event<()>,
++    state_name: Option<&'static str>,
++    window: &mut crate::window::Window,
++) -> Vec<Event<()>> {
++    let (window_id, touch) = match event {
++        Event::WindowEvent {
++            window_id,
++            event: WindowEvent::Touch(t),
++        } => (window_id, t),
++        other => return vec![other],
++    };
++    let mut guard = TOUCH.lock().unwrap();
++    let ts = guard.get_or_insert_with(TouchState::default);
++    let size = window.window().inner_size();
++    let (w, h) = (size.width.max(1) as f64, size.height.max(1) as f64);
++    let (x, y) = (touch.location.x, touch.location.y);
++    let id = touch.id;
++    let dev = touch.device_id;
++    let in_session = state_name == Some("Session");
++
++    let mut out = Vec::new();
++    let cursor = |out: &mut Vec<Event<()>>| {
++        out.push(Event::WindowEvent {
++            window_id,
++            event: WindowEvent::CursorMoved {
++                device_id: dev,
++                position: touch.location,
++            },
++        })
++    };
++    let button = |out: &mut Vec<Event<()>>, st: ElementState| {
++        out.push(Event::WindowEvent {
++            window_id,
++            event: WindowEvent::MouseInput {
++                device_id: dev,
++                state: st,
++                button: MouseButton::Left,
++            },
++        })
++    };
++
++    if !in_session {
++        // Release anything held from a previous session.
++        release_all(ts, window);
++        match touch.phase {
++            TouchPhase::Started => {
++                if ts.mouse_finger.is_none() {
++                    ts.mouse_finger = Some(id);
++                    cursor(&mut out);
++                    button(&mut out, ElementState::Pressed);
++                }
++            },
++            TouchPhase::Moved => {
++                if ts.mouse_finger == Some(id) {
++                    cursor(&mut out);
++                }
++            },
++            TouchPhase::Ended | TouchPhase::Cancelled => {
++                if ts.mouse_finger == Some(id) {
++                    ts.mouse_finger = None;
++                    cursor(&mut out);
++                    button(&mut out, ElementState::Released);
++                }
++            },
++        }
++        return out;
++    }
++
++    // ---- in game session ----
++    ts.mouse_finger = None;
++    let (fx, fy) = (x / w, y / h);
++    match touch.phase {
++        TouchPhase::Started => {
++            if fx < 0.4 && ts.stick.is_none() {
++                ts.stick = Some((id, (x, y)));
++            } else if fx > 0.85 && fy > 0.72 {
++                ts.actions.push((id, GameInput::Jump));
++                window.send_event(VEvent::InputUpdate(GameInput::Jump, true));
++            } else if fx > 0.85 && fy > 0.45 {
++                ts.actions.push((id, GameInput::Primary));
++                window.send_event(VEvent::InputUpdate(GameInput::Primary, true));
++            } else if fx > 0.70 && fy > 0.72 {
++                ts.actions.push((id, GameInput::Roll));
++                window.send_event(VEvent::InputUpdate(GameInput::Roll, true));
++            } else if fx > 0.90 && fy < 0.10 {
++                ts.actions.push((id, GameInput::Escape));
++                window.send_event(VEvent::InputUpdate(GameInput::Escape, true));
++            } else if ts.cam.is_none() {
++                ts.cam = Some((id, (x, y)));
++            }
++        },
++        TouchPhase::Moved => {
++            if let Some((sid, (ox, oy))) = ts.stick
++                && sid == id
++            {
++                let (dx, dy) = ((x - ox) / h, (y - oy) / h);
++                let dirs = [
++                    dy < -STICK_DEADZONE,
++                    dy > STICK_DEADZONE,
++                    dx < -STICK_DEADZONE,
++                    dx > STICK_DEADZONE,
++                ];
++                set_dirs(ts, window, dirs);
++            } else if let Some((cid, (lx, ly))) = ts.cam
++                && cid == id
++            {
++                let sens = 0.6 * (1080.0 / h) as f32;
++                window.send_event(VEvent::CursorPan(vek::Vec2::new(
++                    (x - lx) as f32 * sens,
++                    (y - ly) as f32 * sens,
++                )));
++                ts.cam = Some((id, (x, y)));
++            }
++        },
++        TouchPhase::Ended | TouchPhase::Cancelled => {
++            if ts.stick.map(|s| s.0) == Some(id) {
++                ts.stick = None;
++                set_dirs(ts, window, [false; 4]);
++            }
++            if ts.cam.map(|c| c.0) == Some(id) {
++                ts.cam = None;
++            }
++            ts.actions.retain(|(f, input)| {
++                if *f == id {
++                    window.send_event(VEvent::InputUpdate(*input, false));
++                    false
++                } else {
++                    true
++                }
++            });
++        },
++    }
++    out
++}
++
++const DIR_INPUTS: [GameInput; 4] = [
++    GameInput::MoveForward,
++    GameInput::MoveBack,
++    GameInput::MoveLeft,
++    GameInput::MoveRight,
++];
++
++fn set_dirs(ts: &mut TouchState, window: &mut crate::window::Window, dirs: [bool; 4]) {
++    for i in 0..4 {
++        if ts.stick_dirs[i] != dirs[i] {
++            window.send_event(VEvent::InputUpdate(DIR_INPUTS[i], dirs[i]));
++        }
++    }
++    ts.stick_dirs = dirs;
++}
++
++fn release_all(ts: &mut TouchState, window: &mut crate::window::Window) {
++    if ts.stick.is_some() || ts.stick_dirs.iter().any(|d| *d) {
++        ts.stick = None;
++        set_dirs(ts, window, [false; 4]);
++    }
++    ts.cam = None;
++    for (_, input) in ts.actions.drain(..) {
++        window.send_event(VEvent::InputUpdate(input, false));
++    }
++}
++
++#[allow(dead_code)]
++fn _assert_read<R: Read>(_: R) {}
+diff --git a/voxygen/src/android_main_body.rs b/voxygen/src/android_main_body.rs
+new file mode 100644
+index 0000000..bd88294
+--- /dev/null
++++ b/voxygen/src/android_main_body.rs
+@@ -0,0 +1,208 @@
++//! Android copy of `main.rs` (without CLI parsing). Keep in sync with main.rs.
++use crate as veloren_voxygen;
++use i18n::{self, LocalizationHandle};
++#[cfg(feature = "singleplayer")]
++use veloren_voxygen::singleplayer::SingleplayerState;
++use veloren_voxygen::{
++    GlobalState,
++    audio::AudioFrontend,
++    cli,
++    profile::Profile,
++    run,
++    scene::terrain::SpriteRenderContext,
++    settings::{AudioOutput, Settings, get_fps},
++    window::Window,
++};
++use chrono::Utc;
++use common::clock::Clock;
++use std::path::PathBuf;
++use tracing::{info, warn};
++#[cfg(feature = "egui-ui")]
++use veloren_voxygen::ui::egui::EguiState;
++
++pub fn run() {
++    use clap::Parser;
++    let args = cli::Args::parse_from(["veloren-voxygen"]);
++    #[cfg(feature = "tracy")]
++    common_base::tracy_client::Client::start();
++
++    let userdata_dir = common_base::userdata_dir();
++
++    // Determine where Voxygen's logs should go
++    // Choose a path to store the logs by the following order:
++    //  - The VOXYGEN_LOGS environment variable
++    //  - The <userdata>/voxygen/logs
++    let logs_dir = std::env::var_os("VOXYGEN_LOGS")
++        .map(PathBuf::from)
++        .unwrap_or_else(|| userdata_dir.join("voxygen").join("logs"));
++
++    // Init logging and hold the guards.
++    let now = Utc::now();
++    let log_filename = format!("{}_voxygen.log", now.format("%Y-%m-%d"));
++    let _guards = common_frontend::init_stdout(Some((&logs_dir, &log_filename)));
++
++    // Re-run userdata selection so any warnings will be logged
++    common_base::userdata_dir();
++
++    info!("Using userdata dir at: {}", userdata_dir.display());
++
++    // Determine Voxygen's config directory either by env var or placed in veloren's
++    // userdata folder
++    let config_dir = std::env::var_os("VOXYGEN_CONFIG")
++        .map(PathBuf::from)
++        .and_then(|path| {
++            if path.exists() {
++                Some(path)
++            } else {
++                warn!(?path, "VOXYGEN_CONFIG points to invalid path.");
++                None
++            }
++        })
++        .unwrap_or_else(|| userdata_dir.join("voxygen"));
++    info!("Using config dir at: {}", config_dir.display());
++
++    // Load the settings
++    let mut settings = Settings::load(&config_dir);
++    settings.display_warnings();
++
++    let _ = (log_filename, logs_dir); // keep logcat panic hook from android.rs
++
++    // Setup tokio runtime
++    use common::consts::MIN_RECOMMENDED_TOKIO_THREADS;
++    use std::sync::{
++        Arc,
++        atomic::{AtomicUsize, Ordering},
++    };
++    use tokio::runtime::Builder;
++
++    // TODO: evaluate std::thread::available_concurrency as a num_cpus replacement
++    let cores = num_cpus::get();
++    let tokio_runtime = Arc::new(
++        Builder::new_multi_thread()
++            .enable_all()
++            .worker_threads((cores / 4).max(MIN_RECOMMENDED_TOKIO_THREADS))
++            .thread_name_fn(|| {
++                static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
++                let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
++                format!("tokio-voxygen-{}", id)
++            })
++            .build()
++            .unwrap(),
++    );
++
++    // Initialise watcher for animation hot-reloading
++    #[cfg(feature = "hot-anim")]
++    {
++        anim::init();
++    }
++
++    // Initialise watcher for egui hot-reloading
++    #[cfg(feature = "hot-egui")]
++    {
++        voxygen_egui::init();
++    }
++
++    // Setup audio
++    let mut audio = match settings.audio.output {
++        AudioOutput::Off => AudioFrontend::no_audio(),
++        AudioOutput::Automatic => AudioFrontend::new(
++            settings.audio.num_sfx_channels,
++            settings.audio.num_ui_channels,
++            settings.audio.subtitles,
++            // settings.audio.combat_music_enabled,
++            false, // We're disabling combat music for now
++            settings.audio.buffer_size.samples,
++            settings.audio.sample_rate,
++        ),
++    };
++
++    audio.set_master_volume(settings.audio.master_volume.get_checked());
++    audio.set_music_volume(settings.audio.music_volume.get_checked());
++    audio.set_sfx_volume(settings.audio.sfx_volume.get_checked());
++    audio.set_instrument_volume(settings.audio.instrument_volume.get_checked());
++    audio.set_ambience_volume(settings.audio.ambience_volume.get_checked());
++    audio.set_music_spacing(settings.audio.music_spacing);
++
++    // Load the profile.
++    let profile = Profile::load(&config_dir);
++
++    let mut i18n =
++        LocalizationHandle::load(&settings.language.selected_language).unwrap_or_else(|error| {
++            let selected_language = &settings.language.selected_language;
++            warn!(
++                ?error,
++                ?selected_language,
++                "Impossible to load language: change to the default language (English) instead.",
++            );
++            i18n::REFERENCE_LANG.clone_into(&mut settings.language.selected_language);
++            LocalizationHandle::load_expect(&settings.language.selected_language)
++        });
++    i18n.set_english_fallback(settings.language.use_english_fallback);
++
++    // Create window
++    use veloren_voxygen::{error::Error, render::RenderError};
++    let (mut window, event_loop) = match Window::new(&settings, &tokio_runtime) {
++        Ok(ok) => ok,
++        // Custom panic message when a graphics backend could not be found
++        Err(Error::RenderError(RenderError::CouldNotFindAdapter)) => {
++            #[cfg(target_os = "windows")]
++            const POTENTIAL_FIX: &str =
++                " Updating the graphics drivers on this system may resolve this issue.";
++            #[cfg(target_os = "macos")]
++            const POTENTIAL_FIX: &str = "";
++            #[cfg(not(any(target_os = "windows", target_os = "macos")))]
++            const POTENTIAL_FIX: &str =
++                " Installing or updating vulkan drivers may resolve this issue.";
++
++            panic!(
++                "Failed to select a rendering backend! No compatible backends were found. We \
++                 currently support vulkan, metal, dx12, and opengl.{} If the issue persists, \
++                 please include the operating system and GPU details in your bug report to help \
++                 us identify the cause.",
++                POTENTIAL_FIX
++            );
++        },
++        Err(error) => panic!("Failed to create window!: {:?}", error),
++    };
++
++    let clipboard = veloren_voxygen::ui::ice::Clipboard::connect(window.window());
++
++    let lazy_init = SpriteRenderContext::new(window.renderer_mut());
++
++    #[cfg(feature = "egui-ui")]
++    let egui_state = EguiState::new(&window);
++
++    #[cfg(feature = "discord")]
++    let discord = if settings.networking.enable_discord_integration {
++        veloren_voxygen::discord::Discord::start(&tokio_runtime)
++    } else {
++        veloren_voxygen::discord::Discord::Inactive
++    };
++
++    let global_state = GlobalState {
++        userdata_dir,
++        config_dir,
++        audio,
++        profile,
++        window,
++        tokio_runtime,
++        #[cfg(feature = "egui-ui")]
++        egui_state,
++        lazy_init,
++        clock: Clock::new(std::time::Duration::from_secs_f64(
++            1.0 / get_fps(settings.graphics.max_fps) as f64,
++        )),
++        settings,
++        info_message: None,
++        #[cfg(feature = "singleplayer")]
++        singleplayer: SingleplayerState::None,
++        i18n,
++        clipboard,
++        clear_shadows_next_frame: false,
++        #[cfg(feature = "discord")]
++        discord,
++        args: args.clone(),
++    };
++
++    run::run(global_state, event_loop).unwrap();
++}
+diff --git a/voxygen/src/lib.rs b/voxygen/src/lib.rs
+index 3d5f777..a46bdba 100644
+--- a/voxygen/src/lib.rs
++++ b/voxygen/src/lib.rs
+@@ -11,6 +11,8 @@
+ 
+ #[macro_use]
+ pub mod ui;
++#[cfg(target_os = "android")] pub mod android;
++#[cfg(target_os = "android")] mod android_main_body;
+ pub mod audio;
+ pub mod cli;
+ pub mod cmd;
+diff --git a/voxygen/src/run.rs b/voxygen/src/run.rs
+index 8cbfb22..05fee39 100644
+--- a/voxygen/src/run.rs
++++ b/voxygen/src/run.rs
+@@ -33,6 +33,15 @@ pub fn run(
+ 
+     #[expect(deprecated)]
+     event_loop.run(move |event, event_loop| {
++        #[cfg(target_os = "android")]
++        let events = crate::android::translate_touch(
++            event,
++            states.last().map(|s| s.name()),
++            &mut global_state.window,
++        );
++        #[cfg(not(target_os = "android"))]
++        let events = [event];
++        for event in events {
+         // Continuously run loop since we handle sleeping
+         event_loop.set_control_flow(winit::event_loop::ControlFlow::Poll);
+ 
+@@ -47,7 +56,7 @@ pub fn run(
+                     .winit_state
+                     .on_window_event(global_state.window.window(), event);
+                 if response.consumed {
+-                    return;
++                    continue;
+                 }
+             }
+         }
+@@ -125,6 +134,7 @@ pub fn run(
+             },
+             _ => {},
+         }
++        }
+     })
+ }
+ 
+diff --git a/voxygen/src/session/mod.rs b/voxygen/src/session/mod.rs
+index a1bf518..e358de4 100644
+--- a/voxygen/src/session/mod.rs
++++ b/voxygen/src/session/mod.rs
+@@ -5,7 +5,7 @@ mod target;
+ use std::{cell::RefCell, collections::HashSet, rc::Rc, result::Result, time::Duration};
+ 
+ use itertools::Itertools;
+-#[cfg(not(target_os = "macos"))]
++#[cfg(not(any(target_os = "macos", target_os = "android")))]
+ use mumble_link::SharedLink;
+ use ordered_float::OrderedFloat;
+ use specs::WorldExt;
+@@ -118,7 +118,7 @@ pub struct SessionState {
+     pub(crate) selected_entity: Option<(specs::Entity, std::time::Instant)>,
+     pub(crate) viewpoint_entity: Option<specs::Entity>,
+     interactables: interactable::Interactables,
+-    #[cfg(not(target_os = "macos"))]
++    #[cfg(not(any(target_os = "macos", target_os = "android")))]
+     mumble_link: SharedLink,
+     hitboxes: HashMap<specs::Entity, DebugShapeId>,
+     lines: PlayerDebugLines,
+@@ -149,7 +149,7 @@ impl SessionState {
+         client
+             .borrow_mut()
+             .set_lod_distance(global_state.settings.graphics.lod_distance);
+-        #[cfg(not(target_os = "macos"))]
++        #[cfg(not(any(target_os = "macos", target_os = "android")))]
+         let mut mumble_link = SharedLink::new("veloren", "veloren-voxygen");
+         {
+             let mut client = client.borrow_mut();
+@@ -157,7 +157,7 @@ impl SessionState {
+             client.request_lossy_terrain_compression(
+                 global_state.settings.networking.lossy_terrain_compression,
+             );
+-            #[cfg(not(target_os = "macos"))]
++            #[cfg(not(any(target_os = "macos", target_os = "android")))]
+             if let Some(uid) = client.uid() {
+                 let identiy = if let Some(info) = client.player_list().get(&uid) {
+                     format!("{}-{}", info.player_alias, uid)
+@@ -193,7 +193,7 @@ impl SessionState {
+             selected_entity: None,
+             viewpoint_entity: None,
+             interactables: Default::default(),
+-            #[cfg(not(target_os = "macos"))]
++            #[cfg(not(any(target_os = "macos", target_os = "android")))]
+             mumble_link,
+             hitboxes: HashMap::new(),
+             metadata,
+@@ -264,7 +264,7 @@ impl SessionState {
+         self.scene.maintain_debug_vectors(&client, &mut self.lines);
+         let pos = client.position().unwrap_or_default();
+ 
+-        #[cfg(not(target_os = "macos"))]
++        #[cfg(not(any(target_os = "macos", target_os = "android")))]
+         {
+             // Update mumble positional audio
+             let ori = client
+diff --git a/voxygen/src/window.rs b/voxygen/src/window.rs
+index fd70a7c..d4d2a79 100644
+--- a/voxygen/src/window.rs
++++ b/voxygen/src/window.rs
+@@ -261,7 +261,10 @@ impl Window {
+         settings: &Settings,
+         runtime: &tokio::runtime::Runtime,
+     ) -> Result<(Window, EventLoop), Error> {
++        #[cfg(not(target_os = "android"))]
+         let event_loop = EventLoop::new().unwrap();
++        #[cfg(target_os = "android")]
++        let event_loop = crate::android::build_event_loop();
+ 
+         let window = settings.graphics.window;
+ 
+@@ -274,7 +277,7 @@ impl Window {
+             ))
+             .with_maximized(window.maximised);
+ 
+-        #[cfg(not(any(target_os = "windows", target_os = "macos")))]
++        #[cfg(not(any(target_os = "windows", target_os = "macos", target_os = "android")))]
+         {
+             use winit::platform::wayland::WindowAttributesExtWayland;
+             attributes = attributes.with_name("net.veloren.veloren", "veloren");
