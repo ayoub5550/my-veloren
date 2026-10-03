@@ -1,0 +1,40 @@
+{
+  "status": "metadata_research_only_not_an_asset_import",
+  "observed_on": "2026-10-03",
+  "repository": "https://github.com/veloren/veloren",
+  "commit": "585a91b4a76fcf5df7a4851127cf5907a3ce34df",
+  "method": "GitHub recursive Git tree API; type=blob; path starts with assets/",
+  "tree_truncated": false,
+  "asset_path_count": 10654,
+  "tree_reported_blob_bytes": 435429176,
+  "payload_bytes_verified": false,
+  "assets_downloaded_or_imported": false,
+  "extensions": {
+    "bin": 3,
+    "canary": 1,
+    "desktop": 1,
+    "frag": 1,
+    "ftl": 1342,
+    "glsl": 67,
+    "ico": 1,
+    "jpg": 42,
+    "md": 2,
+    "obj": 26,
+    "ogg": 639,
+    "png": 898,
+    "ron": 2855,
+    "ttf": 13,
+    "txt": 9,
+    "vert": 1,
+    "vox": 4752,
+    "xml": 1
+  },
+  "caveats": [
+    "This is a source path inventory, not Unity import coverage or a file-level hash manifest.",
+    "Git blob sizes are not a verified archive, raw payload, Unity output or APK size.",
+    "The inspected source is the GitHub mirror; confirm the canonical upstream and approved snapshot before implementation.",
+    "The pinned .gitattributes ends with wildcard resets after LFS patterns; detect actual payload storage rather than assuming every asset uses LFS.",
+    "Actual acquisition must detect unresolved LFS pointers and verify every payload.",
+    "No Unity project, gameplay implementation, APK or device test exists in this revision."
+  ]
+}
