@@ -105,9 +105,11 @@ Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
 | `System's $HOME directory path not found!` | Android has no `$HOME` | set `HOME`/`XDG_*` to internal storage before starting |
 | `UnsupportedAlphaMode { requested: Opaque, available: [Inherit] }` | Android surface caps | choose alpha mode from caps |
 | `TEST_QUOTA_EXCEEDED` | daily Spark quota used | switch to virtual device or wait for tomorrow |
+| log spam `Failed to toggle cursor grab … NotSupported` | winit Android has no cursor grab | harmless; can be silenced on Android |
+| VM Session at 0.5–2 fps | virtual device renders on CPU (llvmpipe) | logic check only; judge fps on a physical device |
 
 ## 9. Known gaps / next
 
 - No on-screen drawing of touch zones yet; no pause/resume surface recreation.
 - Default graphics settings are desktop defaults → lower them on Android for fps.
-- Physical-device confirmation of the fixes after attempt 2 pending quota.
+- VM attempt 5 reached the world (Session) and ran 10 min without crash; physical-device confirmation pending quota.

@@ -51,7 +51,8 @@ Offline: singleplayer runs the server in-process; no account/login/network requi
 | 2026-10-03 | Test Lab attempt 3 r8q | not run: `TEST_QUOTA_EXCEEDED` (daily physical quota used) → virtual `MediumPhone.arm` v34 |
 | 2026-10-03 | VM attempt 3 | FAIL: `System's $HOME directory path not found!` (settings defaults) → set `HOME`/`XDG_*`/`VOXYGEN_SCREENSHOT` |
 | 2026-10-03 | VM attempt 4 | FAIL: audio + assets OK, wgpu picks device, then `UnsupportedAlphaMode {Opaque, available [Inherit]}` → alpha mode from surface caps |
-| 2026-10-03 | VM attempt 5 | running |
+| 2026-10-03 | VM attempt 5 (`MediumPhone.arm` v34, game-loop 15 min, CPU llvmpipe Vulkan) | **PASS** (outcome `Passed`, 0 `PANIC`): assets extracted 1.8 s → Title menu 34–47 fps → singleplayer server on official world `veloren_0_18_0_0` → Character Selection (t=40 s) → auto-created character → **Session in world at t=45 s**, ran ~10 min to the end without crash (Session 0.5–2 fps on software rendering). Video frames: [title](evidence/dev2/vm5_t30s.jpg), [in world + HUD + minimap](evidence/dev2/vm5_t120s.jpg), [autopilot died → respawn prompt](evidence/dev2/vm5_t400s.jpg). APK 465,945,199 B sha256 `b2fc7065950874ba7e72f76befd3dcd9cce28c45d3ca9310baaaa79d2f380db5` |
+| next | Physical r8q/e3q run (quota resets daily) | NOT RUN — needed for real GPU fps |
 
 Full method (toolchain, patch, build, Test Lab, lessons): **[ANDROID-PORT-METHOD.md](ANDROID-PORT-METHOD.md)**.
 
