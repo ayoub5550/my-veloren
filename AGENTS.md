@@ -9,6 +9,10 @@
 > **2026-10-03:** dev2 merged to `main` by owner (PR #3, prerelease v0.1.0-dev.2). Next milestones
 > (dev.3 touch controls → dev.9 distribution) are in [docs/ROADMAP.md](docs/ROADMAP.md); each needs an
 > owner instruction «نفّذ dev.N». The old Unity roadmap is `docs/ROADMAP-UNITY-ARCHIVED.md`.
+>
+> **2026-10-03:** owner instructed «نفّذ dev.3 كاملا من غير اخطاء وتجرب في firebase» → dev.3 (touch
+> controls) authorized: branch `feat/dev3-touch-controls`, patch `native/patches/0002-…`, status and
+> evidence in [docs/DEV3.md](docs/DEV3.md). Not merged without owner approval.
 
 ## 0. Authorization: dev1 authorized (2026-10-03)
 

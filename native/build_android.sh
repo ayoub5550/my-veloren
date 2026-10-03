@@ -1,14 +1,16 @@
 #!/bin/bash
-# Build the native Veloren Android APK (dev2, ADR-002).
-# Usage: native/build_android.sh [VELOREN_SRC=/work/native/veloren] ; output: native/out/my-veloren-dev2.apk
+# Build the native Veloren Android APK (dev2+, ADR-002).
+# Usage: native/build_android.sh [VELOREN_SRC=/work/native/veloren] [APK_NAME=my-veloren-dev3.apk]
+# Output: native/out/$APK_NAME. Patches 0001 + 0002 must already be applied to VELOREN_SRC.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 SRC=${VELOREN_SRC:-/work/native/veloren}
-SDK=${ANDROID_SDK:-/work/unity/android-sdk}
+source /work/native/env.sh
+SDK=${ANDROID_SDK:-/work/native/android-sdk}
+APK_NAME=${APK_NAME:-my-veloren-dev3.apk}
 BT=$SDK/build-tools/34.0.0
 JAR=$SDK/platforms/android-34/android.jar
-source /work/native/env.sh
-export JAVA_HOME=${JAVA_HOME:-/work/unity/editor/Editor/Data/PlaybackEngines/AndroidPlayer/OpenJDK}
+export JAVA_HOME=${JAVA_HOME:-/work/native/jdk}
 export PATH=$JAVA_HOME/bin:$PATH
 OUT=$HERE/out; STAGE=$OUT/stage; rm -rf "$STAGE"; mkdir -p "$STAGE/lib/arm64-v8a" "$STAGE/assets"
 if [ "${SKIP_CARGO:-0}" != 1 ]; then
@@ -31,6 +33,6 @@ python3 -c "import zipfile,os,sys;z=zipfile.ZipFile(sys.argv[1],'a',zipfile.ZIP_
 KS=$OUT/debug.keystore
 [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias androiddebugkey \
    -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
-"$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android --out "$OUT/my-veloren-dev2.apk" "$OUT/aligned.apk"
+"$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android --out "$OUT/$APK_NAME" "$OUT/aligned.apk"
 rm -f "$OUT/base.apk" "$OUT/aligned.apk"
-ls -l "$OUT/my-veloren-dev2.apk"; sha256sum "$OUT/my-veloren-dev2.apk"
+ls -l "$OUT/$APK_NAME"; sha256sum "$OUT/$APK_NAME"

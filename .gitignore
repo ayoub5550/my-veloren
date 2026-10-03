@@ -16,3 +16,6 @@ __pycache__/
 !releases/*.apk
 native/out/
 Artifacts/
+native/touch-tests/src/touch.rs
+native/touch-tests/target/
+native/touch-tests/Cargo.lock
