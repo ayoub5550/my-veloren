@@ -27,7 +27,7 @@ Debug-signed APK (no custom keystore in dev1).
 | Script compile | `python3 tools/build.py compile` | **PASS** — `[VelBuild] compile ok`, 0 `error CS` |
 | Android APK | `VEL_VERSION_CODE=10 python3 tools/build.py android` | **PASS** — `result=Succeeded errors=0`; APK 10,095,353 bytes; sha256 `b2af484b9c86972ed32560073e1f3f53fcb41def1bf9e292cd8be0212a647f6f`; contains `lib/arm64-v8a/libil2cpp.so` |
 | Linux player boot (xvfb, llvmpipe) | `python3 tools/build.py playtest` | **PASS (boot only)** — `[MyVeloren] boot version=0.1.0-dev.1 chunks=64 trees=140 parts=11`, 0 exceptions in player.log |
-| Linux autopilot (walk/jump/attack) + screenshots | same | **NOT COMPLETED** — sandbox restarted mid-run (llvmpipe is very slow); re-run next session |
+| Linux autopilot (walk/jump/attack) + screenshots | same | **FAIL (timeout)** — first run lost to a sandbox restart; second run hit the 900 s player timeout with no results (llvmpipe too slow). Use a GPU host or a device |
 | Real Android device (Firebase Test Lab) | — | **NOT RUN** — awaiting owner go-ahead (quota) |
 | Visual review of character orientation/assembly | — | **NOT RUN** |
 
