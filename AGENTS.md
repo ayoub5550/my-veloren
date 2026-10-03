@@ -5,6 +5,10 @@
 > full pinned asset tree in the APK, official world map). For dev2+ this supersedes the "Unity is the
 > Android host" rule in §2 and the planning-only stop in §0 for the dev2 milestone. Start with
 > `docs/DEV2-NATIVE.md` (status log, rebuild steps, Android code map).
+>
+> **2026-10-03:** dev2 merged to `main` by owner (PR #3, prerelease v0.1.0-dev.2). Next milestones
+> (dev.3 touch controls → dev.9 distribution) are in [docs/ROADMAP.md](docs/ROADMAP.md); each needs an
+> owner instruction «نفّذ dev.N». The old Unity roadmap is `docs/ROADMAP-UNITY-ARCHIVED.md`.
 
 ## 0. Authorization: dev1 authorized (2026-10-03)
 
