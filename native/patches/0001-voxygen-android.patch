@@ -38,10 +38,10 @@ index 1d34a5f..0b9e461 100644
  [dev-dependencies]
 diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
 new file mode 100644
-index 0000000..3152fcb
+index 0000000..30079c4
 --- /dev/null
 +++ b/voxygen/src/android.rs
-@@ -0,0 +1,426 @@
+@@ -0,0 +1,444 @@
 +//! Android entry point for Voxygen (my-veloren dev2, ADR-002).
 +//!
 +//! * `android_main` is called by android-activity (NativeActivity).
@@ -71,6 +71,27 @@ index 0000000..3152fcb
 +use crate::{game_input::GameInput, window::Event as VEvent};
 +
 +static APP: OnceLock<AndroidApp> = OnceLock::new();
++
++#[link(name = "log")]
++unsafe extern "C" {
++    fn __android_log_write(
++        prio: std::ffi::c_int,
++        tag: *const std::ffi::c_char,
++        text: *const std::ffi::c_char,
++    ) -> std::ffi::c_int;
++}
++
++/// Write one line straight to logcat (tag `veloren`) without touching the global
++/// `log`/`tracing` dispatchers, which voxygen owns.
++pub(crate) fn alog(prio: i32, msg: &str) {
++    let m = std::ffi::CString::new(msg.replace('\0', "")).unwrap_or_default();
++    unsafe {
++        __android_log_write(prio, c"veloren".as_ptr(), m.as_ptr());
++    }
++}
++
++macro_rules! ainfo { ($($t:tt)*) => { alog(4, &format!($($t)*)) } }
++macro_rules! aerror { ($($t:tt)*) => { alog(6, &format!($($t)*)) } }
 +
 +/// Bumped whenever the shipped asset tarball changes.
 +const ASSET_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -108,7 +129,7 @@ index 0000000..3152fcb
 +    while app().native_window().is_none() {
 +        let _ = event_loop.pump_app_events(Some(Duration::from_millis(50)), &mut h);
 +    }
-+    log::info!("android: activity resumed, native window ready");
++    ainfo!("android: activity resumed, native window ready");
 +    event_loop
 +}
 +
@@ -132,7 +153,7 @@ index 0000000..3152fcb
 +                    line.clear();
 +                    match r.read_line(&mut line) {
 +                        Ok(0) | Err(_) => break,
-+                        Ok(_) => log::info!("{}", line.trim_end()),
++                        Ok(_) => ainfo!("{}", line.trim_end()),
 +                    }
 +                }
 +            })
@@ -145,7 +166,7 @@ index 0000000..3152fcb
 +    let marker = root.join(format!(".assets-{ASSET_VERSION}"));
 +    let assets = root.join("assets");
 +    if marker.exists() && assets.is_dir() {
-+        log::info!("android: assets already extracted at {}", assets.display());
++        ainfo!("android: assets already extracted at {}", assets.display());
 +        return root;
 +    }
 +    let t0 = Instant::now();
@@ -162,7 +183,7 @@ index 0000000..3152fcb
 +    std::fs::File::create(&marker)
 +        .and_then(|mut f| f.write_all(b"ok"))
 +        .ok();
-+    log::info!(
++    ainfo!(
 +        "android: extracted assets to {} in {:.1}s",
 +        assets.display(),
 +        t0.elapsed().as_secs_f32()
@@ -172,13 +193,10 @@ index 0000000..3152fcb
 +
 +#[unsafe(no_mangle)]
 +fn android_main(app: AndroidApp) {
-+    android_logger::init_once(
-+        android_logger::Config::default()
-+            .with_max_level(log::LevelFilter::Info)
-+            .with_tag("veloren"),
-+    );
++    // NOTE: no android_logger here: voxygen installs its own tracing subscriber
++    // (with a `log` bridge) and a second global logger aborts with SetLoggerError.
 +    std::panic::set_hook(Box::new(|info| {
-+        log::error!("PANIC: {info}");
++        aerror!("PANIC: {info}");
 +    }));
 +    redirect_stdio_to_logcat();
 +    let _ = APP.set(app.clone());
@@ -186,10 +204,10 @@ index 0000000..3152fcb
 +    let data = app
 +        .internal_data_path()
 +        .unwrap_or_else(|| PathBuf::from("/data/local/tmp/veloren"));
-+    log::info!("android: internal data path {}", data.display());
++    ainfo!("android: internal data path {}", data.display());
 +    let root = extract_assets(&app, &data);
 +    let autostart = data.join("autostart").exists();
-+    log::info!("android: autostart={autostart}");
++    ainfo!("android: autostart={autostart}");
 +    let userdata = data.join("userdata");
 +    let config = userdata.join("voxygen");
 +    let logs = userdata.join("logs");
@@ -211,7 +229,7 @@ index 0000000..3152fcb
 +    }
 +    let _ = std::io::stdout().flush();
 +    crate::android_main_body::run();
-+    log::info!("android: game loop returned");
++    ainfo!("android: game loop returned");
 +}
 +
 +// ------------------------------------------------------------------ touch ---
@@ -432,7 +450,7 @@ index 0000000..3152fcb
 +    p.frames += 1;
 +    let dt = now.duration_since(p.last_log).as_secs_f32();
 +    if dt >= 5.0 {
-+        log::info!(
++        ainfo!(
 +            "VEL-STAT t={:.0}s state={} fps={:.1}",
 +            now.duration_since(p.start).as_secs_f32(),
 +            state_name.unwrap_or("-"),
