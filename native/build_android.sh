@@ -20,8 +20,13 @@ llvm-strip --strip-unneeded -o "$STAGE/lib/arm64-v8a/libveloren_voxygen.so" "$SO
 cp "$NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so" "$STAGE/lib/arm64-v8a/"
 # Full upstream asset tree, as one tar (extracted on first launch by voxygen/src/android.rs)
 tar -C "$SRC" --exclude='*.blend' -cf "$STAGE/assets/assets.tar" assets
+# Java shim (VelorenActivity extends NativeActivity) -> classes.dex
+rm -rf "$OUT/classes"; mkdir -p "$OUT/classes" "$OUT/dex"
+javac -source 8 -target 8 -nowarn -bootclasspath "$JAR" -d "$OUT/classes" $(find "$HERE/android/java" -name '*.java') 2>/dev/null
+"$BT/d8" --min-api 26 --lib "$JAR" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
+cp "$OUT/dex/classes.dex" "$STAGE/classes.dex"
 "$BT/aapt2" link -o "$OUT/base.apk" --manifest "$HERE/android/AndroidManifest.xml" -I "$JAR" -A "$STAGE/assets" -0 tar
-python3 -c "import zipfile,os,sys;z=zipfile.ZipFile(sys.argv[1],'a',zipfile.ZIP_DEFLATED,compresslevel=6);[z.write(os.path.join(r,f),os.path.relpath(os.path.join(r,f),sys.argv[2])) for r,_,fs in os.walk(os.path.join(sys.argv[2],'lib')) for f in fs];z.close()" "$OUT/base.apk" "$STAGE"
+python3 -c "import zipfile,os,sys;z=zipfile.ZipFile(sys.argv[1],'a',zipfile.ZIP_DEFLATED,compresslevel=6);[z.write(os.path.join(r,f),os.path.relpath(os.path.join(r,f),sys.argv[2])) for r,_,fs in os.walk(os.path.join(sys.argv[2],'lib')) for f in fs];z.write(os.path.join(sys.argv[2],'classes.dex'),'classes.dex');z.close()" "$OUT/base.apk" "$STAGE"
 "$BT/zipalign" -f -p 16 "$OUT/base.apk" "$OUT/aligned.apk"
 KS=$OUT/debug.keystore
 [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias androiddebugkey \

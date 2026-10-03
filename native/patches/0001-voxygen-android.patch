@@ -38,10 +38,10 @@ index 1d34a5f..0b9e461 100644
  [dev-dependencies]
 diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
 new file mode 100644
-index 0000000..6f87170
+index 0000000..3152fcb
 --- /dev/null
 +++ b/voxygen/src/android.rs
-@@ -0,0 +1,351 @@
+@@ -0,0 +1,426 @@
 +//! Android entry point for Voxygen (my-veloren dev2, ADR-002).
 +//!
 +//! * `android_main` is called by android-activity (NativeActivity).
@@ -74,6 +74,8 @@ index 0000000..6f87170
 +
 +/// Bumped whenever the shipped asset tarball changes.
 +const ASSET_VERSION: &str = env!("CARGO_PKG_VERSION");
++
++pub fn autostart_enabled() -> bool { std::env::var_os("VELOREN_ANDROID_AUTOSTART").is_some() }
 +
 +pub fn app() -> &'static AndroidApp { APP.get().expect("android app not set") }
 +
@@ -186,6 +188,8 @@ index 0000000..6f87170
 +        .unwrap_or_else(|| PathBuf::from("/data/local/tmp/veloren"));
 +    log::info!("android: internal data path {}", data.display());
 +    let root = extract_assets(&app, &data);
++    let autostart = data.join("autostart").exists();
++    log::info!("android: autostart={autostart}");
 +    let userdata = data.join("userdata");
 +    let config = userdata.join("voxygen");
 +    let logs = userdata.join("logs");
@@ -198,6 +202,9 @@ index 0000000..6f87170
 +        std::env::set_var("VELOREN_USERDATA", &userdata);
 +        std::env::set_var("VOXYGEN_CONFIG", &config);
 +        std::env::set_var("VOXYGEN_LOGS", &logs);
++        if autostart {
++            std::env::set_var("VELOREN_ANDROID_AUTOSTART", "1");
++        }
 +        if std::env::var_os("RUST_BACKTRACE").is_none() {
 +            std::env::set_var("RUST_BACKTRACE", "1");
 +        }
@@ -233,6 +240,9 @@ index 0000000..6f87170
 +    state_name: Option<&'static str>,
 +    window: &mut crate::window::Window,
 +) -> Vec<Event<()>> {
++    if matches!(event, Event::AboutToWait) {
++        autopilot(state_name, window);
++    }
 +    let (window_id, touch) = match event {
 +        Event::WindowEvent {
 +            window_id,
@@ -393,6 +403,71 @@ index 0000000..6f87170
 +
 +#[allow(dead_code)]
 +fn _assert_read<R: Read>(_: R) {}
++
++// -------------------------------------------------------------- autopilot ---
++
++struct Pilot {
++    start: Instant,
++    last_log: Instant,
++    frames: u32,
++    session_start: Option<Instant>,
++    phase: u32,
++}
++
++static PILOT: Mutex<Option<Pilot>> = Mutex::new(None);
++
++/// Logs an approximate frame rate every 5 s (AboutToWait fires twice per
++/// rendered frame, see run.rs) and, in game-loop mode, walks/looks around in
++/// the session so the Test Lab video shows real gameplay.
++fn autopilot(state_name: Option<&'static str>, window: &mut crate::window::Window) {
++    let mut g = PILOT.lock().unwrap();
++    let now = Instant::now();
++    let p = g.get_or_insert_with(|| Pilot {
++        start: now,
++        last_log: now,
++        frames: 0,
++        session_start: None,
++        phase: u32::MAX,
++    });
++    p.frames += 1;
++    let dt = now.duration_since(p.last_log).as_secs_f32();
++    if dt >= 5.0 {
++        log::info!(
++            "VEL-STAT t={:.0}s state={} fps={:.1}",
++            now.duration_since(p.start).as_secs_f32(),
++            state_name.unwrap_or("-"),
++            p.frames as f32 / 2.0 / dt
++        );
++        p.frames = 0;
++        p.last_log = now;
++    }
++    if !autostart_enabled() || state_name != Some("Session") {
++        return;
++    }
++    let ss = *p.session_start.get_or_insert(now);
++    let t = now.duration_since(ss).as_secs();
++    // 0-15 s: let terrain load; then cycles of 12 s: walk forward 8 s (jumping
++    // every 3 s), turn, attack.
++    if t < 15 {
++        return;
++    }
++    let phase = ((t - 15) % 12) as u32;
++    if phase != p.phase {
++        p.phase = phase;
++        match phase {
++            0 => window.send_event(VEvent::InputUpdate(GameInput::MoveForward, true)),
++            3 | 6 => window.send_event(VEvent::InputUpdate(GameInput::Jump, true)),
++            4 | 7 => window.send_event(VEvent::InputUpdate(GameInput::Jump, false)),
++            8 => window.send_event(VEvent::InputUpdate(GameInput::MoveForward, false)),
++            9 => window.send_event(VEvent::InputUpdate(GameInput::Primary, true)),
++            10 => window.send_event(VEvent::InputUpdate(GameInput::Primary, false)),
++            _ => {},
++        }
++        if phase == 11 {
++            window.send_event(VEvent::CursorPan(vek::Vec2::new(250.0, 0.0)));
++        }
++    }
++}
 diff --git a/voxygen/src/android_main_body.rs b/voxygen/src/android_main_body.rs
 new file mode 100644
 index 0000000..bd88294
@@ -620,6 +695,104 @@ index 3d5f777..a46bdba 100644
  pub mod audio;
  pub mod cli;
  pub mod cmd;
+diff --git a/voxygen/src/menu/char_selection/mod.rs b/voxygen/src/menu/char_selection/mod.rs
+index a33540f..87ec721 100644
+--- a/voxygen/src/menu/char_selection/mod.rs
++++ b/voxygen/src/menu/char_selection/mod.rs
+@@ -121,10 +121,54 @@ impl PlayState for CharSelectionState {
+             }
+ 
+             // Maintain the UI.
+-            let events = self
++            #[allow(unused_mut)]
++            let mut events = self
+                 .char_selection_ui
+                 .maintain(global_state, &self.client.borrow());
+ 
++            // Android Test Lab game-loop: create/select a character automatically.
++            #[cfg(target_os = "android")]
++            if crate::android::autostart_enabled() {
++                use std::sync::{
++                    Mutex,
++                    atomic::{AtomicU8, Ordering},
++                };
++                static STAGE: AtomicU8 = AtomicU8::new(0);
++                static SINCE: Mutex<Option<std::time::Instant>> = Mutex::new(None);
++                let ready = {
++                    let mut since = SINCE.lock().unwrap();
++                    since.get_or_insert_with(std::time::Instant::now).elapsed().as_secs() >= 5
++                };
++                let client = self.client.borrow();
++                let list = client.character_list();
++                if ready && !list.loading {
++                    match (STAGE.load(Ordering::Relaxed), list.characters.first()) {
++                        (0, None) => {
++                            tracing::info!("android-autostart: creating character");
++                            STAGE.store(1, Ordering::Relaxed);
++                            events.push(ui::Event::AddCharacter {
++                                alias: "Ayoub".to_owned(),
++                                mainhand: Some("common.items.weapons.sword.starter".to_owned()),
++                                offhand: None,
++                                body: common::comp::Body::Humanoid(
++                                    common::comp::humanoid::Body::random(),
++                                ),
++                                hardcore: false,
++                                start_site: None,
++                            });
++                        },
++                        (0 | 1, Some(c)) => {
++                            if let Some(id) = c.character.id {
++                                tracing::info!("android-autostart: entering world");
++                                STAGE.store(2, Ordering::Relaxed);
++                                events.push(ui::Event::Play(id));
++                            }
++                        },
++                        _ => {},
++                    }
++                }
++            }
++
+             for event in events {
+                 match event {
+                     ui::Event::Logout => {
+diff --git a/voxygen/src/menu/main/mod.rs b/voxygen/src/menu/main/mod.rs
+index f25f95b..891998c 100644
+--- a/voxygen/src/menu/main/mod.rs
++++ b/voxygen/src/menu/main/mod.rs
+@@ -111,6 +111,33 @@ impl PlayState for MainMenuState {
+         // Pull in localizations
+         let localized_strings = &global_state.i18n.read();
+ 
++        // Android Test Lab game-loop: start the default singleplayer world automatically.
++        #[cfg(all(target_os = "android", feature = "singleplayer"))]
++        if crate::android::autostart_enabled()
++            && matches!(global_state.singleplayer, SingleplayerState::None)
++        {
++            use std::sync::atomic::{AtomicBool, Ordering};
++            static DONE: AtomicBool = AtomicBool::new(false);
++            if !DONE.swap(true, Ordering::Relaxed) {
++                tracing::info!("android-autostart: starting singleplayer");
++                let mut st = SingleplayerState::init();
++                if let SingleplayerState::Init(w) = &mut st {
++                    if w.worlds.is_empty() {
++                        w.new_world();
++                    }
++                    if w.current.is_none() {
++                        w.current = Some(0);
++                    }
++                }
++                global_state.singleplayer = st;
++                global_state.singleplayer.run(
++                    &global_state.tokio_runtime,
++                    &global_state.settings.language.selected_language,
++                    &global_state.i18n,
++                );
++            }
++        }
++
+         // Poll server creation
+         #[cfg(feature = "singleplayer")]
+         {
 diff --git a/voxygen/src/run.rs b/voxygen/src/run.rs
 index 8cbfb22..05fee39 100644
 --- a/voxygen/src/run.rs
