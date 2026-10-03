@@ -3,7 +3,7 @@
 **dev3 status (2026-10-03, native port):** Camera/movement (touch stick/camera/pinch/glide) and
 UI touch (menu bar, context buttons, layout editor) are **IMPLEMENTED for touch** with Test Lab evidence:
 [DEV3.md](DEV3.md). Under the native port (ADR-002), gameplay rows run the upstream code as-is;
-Android-specific gaps are performance (dev4) and lifecycle (dev5).
+Android-specific gaps are performance (dev4: mobile tiers done, physical 30 fps gate NOT RUN, see [DEV4](DEV4.md)) and lifecycle (dev5).
 
 **dev1 status (2026-10-03, archived Unity slice):** Voxel geometry, Character creation, Equipment visuals, Procedural
 animation, Camera/movement, World generation/rendering and Android robustness are **STARTED**

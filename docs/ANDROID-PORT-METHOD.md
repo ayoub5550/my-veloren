@@ -117,9 +117,13 @@ Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
 | "Use" opened a crafting window instead of the NPC dialogue | the nearest interactable was a crafting station | tap Use only when the target is within 3.5 m; close stray windows with Menu (Esc) |
 | Analog speed test 0.00 m/s on a fast device | after a 36 m run the character stood against a wall | measure the walk back along the path just used |
 | Shell killed by `pkill -f <pattern>` | the pattern also matched the agent's own command line | kill by PID, never `pkill -f` with a pattern from your own command |
+- **Perf numbers (dev.4):** measure fps as frames ÷ wall clock, never as frames ÷ (sum of timed parts):
+  the parts miss work outside them, and that overstated fps about 10× in build8. On the Test Lab VM (llvmpipe),
+  `device.poll()` in `GlobalState::maintain` absorbs GPU work (~140 ms/frame), so VM fps only ranks tiers
+  against each other. Gate decisions need a real Adreno or Mali.
 
 ## 9. Known gaps / next
 
 - Touch overlay done in dev.3. Still missing: pause/resume surface recreation (dev.5).
-- Default graphics settings are desktop defaults → lower them on Android for fps.
+- Mobile graphics tiers done in dev.4 (auto Low/Medium by GPU). Physical fps gate pending (Test Lab quota).
 - VM attempt 5 reached the world (Session) and ran 10 min without crash; physical-device confirmation pending quota.

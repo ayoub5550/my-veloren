@@ -1,0 +1,48 @@
+# dev.4 evidence — logcat excerpts (Firebase Test Lab, MediumPhone.arm v34, llvmpipe CPU renderer)
+
+## vm4 — build8 (matrix-3npeodrx2spt3), scenarios 1,2,3
+NOTE: build8 VEL-PERF/VEL-BENCH fps + percentiles were wrong (sum-of-parts, seconds printed as ms). Wall fps = frames / 40 s window, see DEV4.md.
+[2m2026-10-03T21:22:02.336464Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m pipeline cache: /data/user/0/com.ayoub.myveloren/files/.cache/wgpu_pipeline_cache_vulkan_65541_0.bin loaded=0 bytes
+[2m2026-10-03T21:22:02.859592Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m mobile preset: gpu='llvmpipe (LLVM 21.1.4, 128 bits)' -> mobile-low
+[2m2026-10-03T21:22:33.645271Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m pipeline cache: saved 96 bytes
+VEL-SCENARIO 1 DONE pass=13 fail=1 failed=["npc_interact"] haptics=1
+[2m2026-10-03T21:26:37.816687Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m mobile preset: keeping user settings (dev4-v1 mobile-low llvmpipe (LLVM 21.1.4, 128 bits))
+[2m2026-10-03T21:26:38.049612Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m pipeline cache: /data/user/0/com.ayoub.myveloren/files/.cache/wgpu_pipeline_cache_vulkan_65541_0.bin loaded=96 bytes
+[2m2026-10-03T21:27:09.277527Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m pipeline cache: saved 96 bytes
+VEL-SCENARIO 2 DONE pass=3 fail=0 failed=[] haptics=0
+[2m2026-10-03T21:27:42.181322Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m mobile preset: keeping user settings (dev4-v1 mobile-low llvmpipe (LLVM 21.1.4, 128 bits))
+[2m2026-10-03T21:27:42.329035Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m pipeline cache: /data/user/0/com.ayoub.myveloren/files/.cache/wgpu_pipeline_cache_vulkan_65541_0.bin loaded=96 bytes
+[2m2026-10-03T21:28:08.305037Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m pipeline cache: saved 96 bytes
+[2m2026-10-03T21:28:33.882618Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m pipeline cache: saved 96 bytes
+VEL-BENCH desktop fps=27.5 frame=36.3ms tick=30.8ms acquire=0.5ms record=5.1ms sleep=0.0ms frames=45 p50=0.0ms p95=0.0ms p99=0.1ms vd=10 upscale=1.00 shadow=Map(ShadowMapMode { resolution: 1.0 }) gpu='llvmpipe (LLVM 21.1.4, 128 bits)' rss=1604MB temp=25.0C(battery)
+[2m2026-10-03T21:29:34.776322Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m pipeline cache: saved 96 bytes
+VEL-BENCH mobile-high fps=31.3 frame=32.0ms tick=27.3ms acquire=0.4ms record=4.2ms sleep=0.0ms frames=48 p50=0.0ms p95=0.0ms p99=0.0ms vd=10 upscale=0.85 shadow=Map(ShadowMapMode { resolution: 0.5 }) gpu='llvmpipe (LLVM 21.1.4, 128 bits)' rss=1799MB temp=25.0C(battery)
+[2m2026-10-03T21:30:35.553976Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m pipeline cache: saved 96 bytes
+VEL-BENCH mobile-medium fps=50.6 frame=19.7ms tick=16.6ms acquire=0.7ms record=2.4ms sleep=0.0ms frames=99 p50=0.0ms p95=0.0ms p99=0.0ms vd=8 upscale=0.75 shadow=Cheap gpu='llvmpipe (LLVM 21.1.4, 128 bits)' rss=1739MB temp=25.0C(battery)
+[2m2026-10-03T21:31:33.740697Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m pipeline cache: saved 96 bytes
+VEL-BENCH mobile-low fps=62.3 frame=16.1ms tick=13.2ms acquire=0.7ms record=2.3ms sleep=0.0ms frames=152 p50=0.0ms p95=0.0ms p99=0.0ms vd=6 upscale=0.60 shadow=None gpu='llvmpipe (LLVM 21.1.4, 128 bits)' rss=1567MB temp=25.0C(battery)
+[2m2026-10-03T21:32:27.436823Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m pipeline cache: saved 96 bytes
+VEL-BENCH soak fps=61.2 frame=16.3ms tick=13.2ms acquire=0.7ms record=2.4ms sleep=0.0ms frames=2239 p50=0.0ms p95=0.0ms p99=0.0ms vd=6 upscale=0.60 shadow=None gpu='llvmpipe (LLVM 21.1.4, 128 bits)' rss=1589MB temp=25.0C(battery)
+VEL-SCENARIO 3 DONE pass=0 fail=0 failed=[] haptics=0
+
+## vm5 — build9 (wall-clock fixed), scenario 1
+[2m2026-10-03T21:56:33.110836Z[0m [32m INFO[0m [2mveloren_voxygen::mobile[0m[2m:[0m mobile preset: gpu='llvmpipe (LLVM 21.1.4, 128 bits)' -> mobile-low
+VEL-CHECK haptics PASS self-test pulse sent via JNI (see 'jni:' errors if any)
+VEL-CHECK multitouch PASS moved=123.4m cam_yaw_delta=1.29rad attack_seen=true max_fingers=3 states={"ComboMelee2", "Equipping", "Idle", "Wielding"}
+VEL-CHECK analog_slow PASS light tilt (0.35) speed=0.66 m/s
+VEL-CHECK analog_fast PASS light=0.66 m/s full=1.91 m/s
+VEL-CHECK pinch_zoom PASS camera distance 10.00 -> 7.57
+VEL-CHECK buttons PASS no crash; character states seen {"BasicBlock", "ChargedMelee", "Equipping", "Idle", "Roll", "Wielding"}
+VEL-CHECK glide PASS glider_wielded=true gliding=true
+VEL-CHECK bag_open PASS bag=true game_input=false
+VEL-CHECK bag_closed PASS bag=false game_input=true
+VEL-CHECK map_open PASS map=true game_input=false
+VEL-CHECK map_closed PASS map=false game_input=true
+VEL-CHECK npc_interact PASS dialogue=true trade=false taps=1
+VEL-CHECK game_input_back PASS game_input=true
+VEL-CHECK layout_saved PASS jump=ButtonLayout { ctl: Jump, x: 0.7, y: 0.22, size: 0.102850005, alpha: 0.85 } on_disk=Some(ButtonLayout { ctl: Jump, x: 0.7, y: 0.22, size: 0.102850005, alpha: 0.85 })
+VEL-SCENARIO 1 DONE pass=14 fail=0 failed=[] haptics=1
+VEL-PERF t=5s state=Title tier=mobile-low fps=53.4 frame=18.7ms tick=0.3ms acquire=1.6ms record=1.2ms sleep=13.4ms maintain=2.1ms hook=0.0ms cb_other=0.5ms winit=0.0ms rss=662MB temp=25.0C(battery) cpu_total=? threads=43
+VEL-PERF t=20s state=Character Selection tier=mobile-low fps=29.0 frame=34.5ms tick=1.7ms acquire=1.9ms record=1.0ms sleep=11.5ms maintain=18.4ms hook=0.0ms cb_other=0.1ms winit=0.0ms rss=884MB temp=25.0C(battery) cpu_total=102% threads=58 cpu=[android_main:58,tokio-voxygen:19,rayon-s:18,singleplayer-se:5,slowjob:1]
+VEL-PERF t=40s state=Session tier=mobile-low fps=5.7 frame=176.7ms tick=14.6ms acquire=0.5ms record=1.7ms sleep=0.0ms maintain=159.8ms hook=0.1ms cb_other=0.0ms winit=0.0ms rss=1330MB temp=25.0C(battery) cpu_total=228% threads=64 cpu=[slowjob:121,android_main:90,rayon-s:9,AudioTrack:5,singleplayer-se:2]
+VEL-PERF t=116s state=Session tier=mobile-low fps=6.3 frame=159.2ms tick=13.0ms acquire=0.4ms record=1.4ms sleep=0.0ms maintain=144.4ms hook=0.1ms cb_other=0.0ms winit=0.2ms rss=1445MB temp=25.0C(battery) cpu_total=108% threads=64 cpu=[android_main:92,rayon-s:8,AudioTrack:5,singleplayer-se:2]

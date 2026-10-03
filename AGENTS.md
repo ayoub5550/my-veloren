@@ -10,6 +10,10 @@
 > (dev.3 touch controls → dev.9 distribution) are in [docs/ROADMAP.md](docs/ROADMAP.md); each needs an
 > owner instruction «نفّذ dev.N». The old Unity roadmap is `docs/ROADMAP-UNITY-ARCHIVED.md`.
 >
+> **2026-10-03:** dev.3 merged (PR #4). dev.4 (mobile tiers, pipeline cache, perf telemetry; patch 0003)
+> was closed by the owner («اغلق dev4 وابدأ في dev5») with its physical 30 fps gate NOT RUN (Test Lab quota),
+> carried to the first physical run of dev.5. See [docs/DEV4.md](docs/DEV4.md).
+>
 > **2026-10-03:** owner instructed «نفّذ dev.3 كاملا من غير اخطاء وتجرب في firebase» → dev.3 (touch
 > controls) authorized: branch `feat/dev3-touch-controls`, patch `native/patches/0002-…`, status and
 > evidence in [docs/DEV3.md](docs/DEV3.md). Not merged without owner approval.
