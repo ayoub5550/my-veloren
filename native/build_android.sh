@@ -1,13 +1,13 @@
 #!/bin/bash
 # Build the native Veloren Android APK (dev2+, ADR-002).
-# Usage: native/build_android.sh [VELOREN_SRC=/work/native/veloren] [APK_NAME=my-veloren-dev3.apk]
-# Output: native/out/$APK_NAME. Patches 0001 + 0002 must already be applied to VELOREN_SRC.
+# Usage: native/build_android.sh [VELOREN_SRC=/work/native/veloren] [APK_NAME=my-veloren-dev4.apk]
+# Output: native/out/$APK_NAME. Patches 0001 + 0002 + 0003 must already be applied to VELOREN_SRC.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 SRC=${VELOREN_SRC:-/work/native/veloren}
 source /work/native/env.sh
 SDK=${ANDROID_SDK:-/work/native/android-sdk}
-APK_NAME=${APK_NAME:-my-veloren-dev3.apk}
+APK_NAME=${APK_NAME:-my-veloren-dev4.apk}
 BT=$SDK/build-tools/34.0.0
 JAR=$SDK/platforms/android-34/android.jar
 export JAVA_HOME=${JAVA_HOME:-/work/native/jdk}

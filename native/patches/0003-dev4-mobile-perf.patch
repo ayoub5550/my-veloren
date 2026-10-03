@@ -1,0 +1,1276 @@
+diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
+index 3b8cbe67a..4cdf71b91 100644
+--- a/voxygen/src/android.rs
++++ b/voxygen/src/android.rs
+@@ -291,6 +291,10 @@ pub struct Probe {
+     /// Stick vector (right, forward) that walks towards the nearest villager.
+     pub npc_stick: Option<[f32; 2]>,
+     pub npc_dist: Option<f32>,
++    /// diagnostics: villagers known to the client (any floor) and the
++    /// nearest one's 3-D offset
++    pub npc_count: usize,
++    pub npc_any: Option<[f32; 3]>,
+     pub dialogue_open: bool,
+     pub trade_open: bool,
+     pub bag_open: bool,
+@@ -476,7 +480,9 @@ pub fn translate_touch(
+             );
+         },
+         Event::AboutToWait => {
++            let t_hook = std::time::Instant::now();
+             frame(state_name, gs, &mut out);
++            crate::mobile::add_hook(t_hook.elapsed().as_secs_f64());
+             out.push(event);
+         },
+         other => out.push(other),
+@@ -527,6 +533,14 @@ enum Act {
+     /// 'Use'), tap the menu-bar "Menu" (Escape) button to close it.
+     EnsureGameInput(u8),
+     Log(&'static str),
++    /// dev.4 benchmark: switch graphics tier (applied by the session next tick).
++    Tier(crate::mobile::Tier),
++    BenchBegin(&'static str),
++    BenchEnd(&'static str),
++    /// Persist the pipeline cache now.
++    SaveCache,
++    /// Wait until (re)created pipelines are ready, at most this many seconds.
++    WaitPipelines(f32),
+     Finish,
+ }
+ 
+@@ -637,6 +651,46 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
+         q.push(Act::Wait(1.0));
+     };
+     match scenario {
++        3 => {
++            // dev.4 benchmark: same spot, slow camera sweep, one window per tier,
++            // then a 10 min soak on the automatic tier walking in circles.
++            use crate::mobile::Tier;
++            let auto = crate::mobile::Tier::parse(current_tier_name()).unwrap_or(Tier::Low);
++            q.push(Act::EnsureAlive(3));
++            for (t, name) in [
++                (Tier::Desktop, "desktop"),
++                (Tier::High, "mobile-high"),
++                (Tier::Medium, "mobile-medium"),
++                (Tier::Low, "mobile-low"),
++            ] {
++                q.push(Act::Tier(t));
++                q.push(Act::Wait(1.0));
++                q.push(Act::WaitPipelines(90.0));
++                q.push(Act::Wait(12.0));
++                q.push(Act::Down(CAM_ID, 0.40, 0.22));
++                q.push(Act::BenchBegin(name));
++                q.push(Act::MoveTo(CAM_ID, 0.70, 0.22, 40.0));
++                q.push(Act::BenchEnd(name));
++                q.push(Act::Up(CAM_ID));
++            }
++            q.push(Act::Tier(auto));
++            q.push(Act::Wait(5.0));
++            q.push(Act::SaveCache);
++            q.push(Act::Log("soak: 10 min on the automatic tier"));
++            q.push(Act::BenchBegin("soak"));
++            for _ in 0..20 {
++                q.push(Act::EnsureAlive(3));
++                q.push(Act::Down(STICK_ID, STICK_BASE.0, STICK_BASE.1));
++                let (sx, sy) = stick_pos(gs, aspect, (0.0, 1.0));
++                q.push(Act::MoveTo(STICK_ID, sx, sy, 0.3));
++                q.push(Act::Down(CAM_ID, 0.50, 0.22));
++                q.push(Act::MoveTo(CAM_ID, 0.62, 0.22, 29.0));
++                q.push(Act::Up(CAM_ID));
++                q.push(Act::Up(STICK_ID));
++                q.push(Act::Wait(0.7));
++            }
++            q.push(Act::BenchEnd("soak"));
++        },
+         2 => {
+             q.push(Act::Check("layout_restored"));
+             multitouch(&mut q, 6.0);
+@@ -874,6 +928,24 @@ fn avg(v: &[f32]) -> f32 {
+     }
+ }
+ 
++static CACHE_SAVED: Mutex<bool> = Mutex::new(false);
++static TIER_NAME: Mutex<Option<&'static str>> = Mutex::new(None);
++
++fn current_tier_name() -> &'static str {
++    TIER_NAME.lock().unwrap().unwrap_or_else(|| {
++        let marker = DATA_DIR
++            .get()
++            .and_then(|d| std::fs::read_to_string(d.join("userdata/voxygen/mobile_preset")).ok())
++            .unwrap_or_default();
++        marker
++            .split_whitespace()
++            .nth(1)
++            .and_then(crate::mobile::Tier::parse)
++            .map(|t| t.name())
++            .unwrap_or("?")
++    })
++}
++
+ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut Vec<Event<()>>) {
+     let mut g = PILOT.lock().unwrap();
+     let now = Instant::now();
+@@ -904,7 +976,7 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+         let stats = touch::with_layer(|l| l.stats);
+         ainfo!(
+             "VEL-STAT t={:.0}s state={} fps={:.1} pos={:?} char={} dead={} game_input={} \
+-             touch={:?} haptics={}",
++             npcs={} touch={:?} haptics={}",
+             now.duration_since(p.start).as_secs_f32(),
+             state_name.unwrap_or("-"),
+             p.frames as f32 / 2.0 / dt,
+@@ -912,9 +984,31 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+             pr.as_ref().map(|p| p.char_state.as_str()).unwrap_or("-"),
+             pr.as_ref().is_some_and(|p| p.ctx.dead),
+             gs.window.is_cursor_grabbed(),
++            pr.as_ref().map(|p| p.npc_count).unwrap_or(0),
+             stats,
+             *HAPTIC_COUNT.lock().unwrap(),
+         );
++        ainfo!(
++            "VEL-PERF t={:.0}s state={} tier={} {} rss={:.0}MB temp={} {}",
++            now.duration_since(p.start).as_secs_f32(),
++            state_name.unwrap_or("-"),
++            current_tier_name(),
++            crate::mobile::take_window(),
++            crate::mobile::sys::rss_mb(),
++            crate::mobile::sys::max_temp(),
++            crate::mobile::sys::cpu_by_thread(),
++        );
++        // dev.4 (4.5): persist the pipeline cache once all pipelines exist.
++        let busy = gs.window.renderer().pipeline_creation_status().is_some()
++            || gs.window.renderer().pipeline_recreation_status().is_some();
++        let mut saved = CACHE_SAVED.lock().unwrap();
++        if !busy && state_name == Some("Session") && !*saved {
++            crate::mobile::save_pipeline_cache();
++            *saved = true;
++        } else if busy {
++            *saved = false;
++        }
++        drop(saved);
+         p.frames = 0;
+         p.last_log = now;
+     }
+@@ -1031,9 +1125,11 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+                 finished = true;
+             } else if t > timeout {
+                 ainfo!(
+-                    "VEL-CHECK npc_interact FAIL timeout npc_dist={:?} can_interact={} taps={} \
+-                     dead={} respawns={} detours={} closes={}",
++                    "VEL-CHECK npc_interact FAIL timeout npc_dist={:?} npc_count={} npc_any={:?} \
++                     can_interact={} taps={} dead={} respawns={} detours={} closes={}",
+                     pr.npc_dist,
++                    pr.npc_count,
++                    pr.npc_any,
+                     pr.ctx.can_interact,
+                     s.taps,
+                     pr.ctx.dead,
+@@ -1192,6 +1288,44 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+             }
+             finished
+         },
++        Act::Tier(t) => {
++            ainfo!("VEL-STEP graphics tier -> {}", t.name());
++            crate::mobile::request_graphics(t.apply(gs.settings.graphics.clone()));
++            *TIER_NAME.lock().unwrap() = Some(t.name());
++            true
++        },
++        Act::BenchBegin(name) => {
++            ainfo!("VEL-STEP bench begin {name}");
++            crate::mobile::bench_begin();
++            true
++        },
++        Act::BenchEnd(name) => {
++            let g = &gs.settings.graphics;
++            ainfo!(
++                "VEL-BENCH {name} {} vd={} upscale={:.2} shadow={:?} gpu='{}' rss={:.0}MB temp={}",
++                crate::mobile::bench_end(),
++                g.terrain_view_distance,
++                g.render_mode.upscale_mode.factor,
++                g.render_mode.shadow,
++                crate::mobile::gpu_name(),
++                crate::mobile::sys::rss_mb(),
++                crate::mobile::sys::max_temp(),
++            );
++            true
++        },
++        Act::WaitPipelines(max) => {
++            let r = gs.window.renderer();
++            let busy = r.pipeline_creation_status().is_some()
++                || r.pipeline_recreation_status().is_some();
++            if !busy || t > max {
++                ainfo!("VEL-STEP pipelines ready after {t:.1}s (busy={busy})");
++            }
++            (!busy || t > max) && p.act_frames >= MIN_FRAMES
++        },
++        Act::SaveCache => {
++            crate::mobile::save_pipeline_cache();
++            true
++        },
+         Act::Finish => {
+             let pass = p.results.iter().filter(|r| r.1).count();
+             let fail: Vec<_> = p.results.iter().filter(|r| !r.1).map(|r| r.0.clone()).collect();
+diff --git a/voxygen/src/android_main_body.rs b/voxygen/src/android_main_body.rs
+index bd8829422..e075fed61 100644
+--- a/voxygen/src/android_main_body.rs
++++ b/voxygen/src/android_main_body.rs
+@@ -139,6 +139,9 @@ pub fn run() {
+         });
+     i18n.set_english_fallback(settings.language.use_english_fallback);
+ 
++    // my-veloren dev.4 (4.2/4.3): phone graphics on first launch.
++    let mobile_pending = crate::mobile::first_launch(&mut settings.graphics, &config_dir);
++
+     // Create window
+     use veloren_voxygen::{error::Error, render::RenderError};
+     let (mut window, event_loop) = match Window::new(&settings, &tokio_runtime) {
+@@ -165,6 +168,20 @@ pub fn run() {
+         Err(error) => panic!("Failed to create window!: {:?}", error),
+     };
+ 
++    if mobile_pending {
++        let tier = crate::mobile::choose_tier(&config_dir);
++        if tier != crate::mobile::Tier::Low {
++            settings.graphics = tier.apply(settings.graphics.clone());
++            if let Err(e) = window
++                .renderer_mut()
++                .set_render_mode(settings.graphics.render_mode.clone())
++            {
++                warn!(?e, "mobile preset: set_render_mode failed");
++            }
++        }
++        settings.save_to_file_warn(&config_dir);
++    }
++
+     let clipboard = veloren_voxygen::ui::ice::Clipboard::connect(window.window());
+ 
+     let lazy_init = SpriteRenderContext::new(window.renderer_mut());
+diff --git a/voxygen/src/hud/settings_window/video.rs b/voxygen/src/hud/settings_window/video.rs
+index c1c22f20f..d76f470b7 100644
+--- a/voxygen/src/hud/settings_window/video.rs
++++ b/voxygen/src/hud/settings_window/video.rs
+@@ -323,16 +323,28 @@ impl Widget for Video<'_> {
+             (
+                 "hud-settings-low_graphics",
+                 state.ids.low_graphics_button,
++                // my-veloren dev.4 (4.3): phone tiers on Android
++                #[cfg(target_os = "android")]
++                crate::mobile::into_mobile_low,
++                #[cfg(not(target_os = "android"))]
+                 GraphicsSettings::into_low,
+             ),
+             (
+                 "hud-settings-medium_graphics",
+                 state.ids.medium_graphics_button,
++                // my-veloren dev.4 (4.3): phone tiers on Android
++                #[cfg(target_os = "android")]
++                crate::mobile::into_mobile_medium,
++                #[cfg(not(target_os = "android"))]
+                 GraphicsSettings::into_medium,
+             ),
+             (
+                 "hud-settings-high_graphics",
+                 state.ids.high_graphics_button,
++                // my-veloren dev.4 (4.3): phone tiers on Android
++                #[cfg(target_os = "android")]
++                crate::mobile::into_mobile_high,
++                #[cfg(not(target_os = "android"))]
+                 GraphicsSettings::into_high,
+             ),
+             (
+diff --git a/voxygen/src/lib.rs b/voxygen/src/lib.rs
+index c5a3ad5b7..aaabb48a1 100644
+--- a/voxygen/src/lib.rs
++++ b/voxygen/src/lib.rs
+@@ -15,6 +15,8 @@ pub mod ui;
+ #[cfg(target_os = "android")] mod android_main_body;
+ pub mod audio;
+ pub mod touch;
++pub mod mobile;
++pub mod mobile_gpu;
+ pub mod cli;
+ pub mod cmd;
+ mod credits;
+diff --git a/voxygen/src/mobile.rs b/voxygen/src/mobile.rs
+new file mode 100644
+index 000000000..fcfe3b856
+--- /dev/null
++++ b/voxygen/src/mobile.rs
+@@ -0,0 +1,479 @@
++//! my-veloren dev.4: phone performance.
++//!
++//! * mobile graphics tiers (4.2) and an automatic choice by GPU on first launch (4.3),
++//! * a persistent Vulkan pipeline cache (4.5),
++//! * frame-time / per-thread CPU / memory / temperature measurement (4.1), logged as
++//!   `VEL-PERF` every 5 s and `VEL-BENCH` per benchmark window (Test Lab scenario 3).
++//!
++//! Everything here is pure data or Android-only; desktop builds only see
++//! `pipeline_cache()` returning `None`.
++
++use crate::settings::{Fps, GraphicsSettings};
++use std::sync::{Mutex, OnceLock};
++
++// ------------------------------------------------------------------ tiers ---
++
++#[derive(Copy, Clone, Debug, PartialEq, Eq)]
++pub enum Tier {
++    /// Upstream desktop defaults (the dev.2/dev.3 baseline).
++    Desktop,
++    Low,
++    Medium,
++    High,
++}
++
++impl Tier {
++    pub fn name(self) -> &'static str {
++        match self {
++            Tier::Desktop => "desktop",
++            Tier::Low => "mobile-low",
++            Tier::Medium => "mobile-medium",
++            Tier::High => "mobile-high",
++        }
++    }
++
++    pub fn parse(s: &str) -> Option<Self> {
++        Some(match s.trim() {
++            "desktop" => Tier::Desktop,
++            "mobile-low" | "low" => Tier::Low,
++            "mobile-medium" | "medium" => Tier::Medium,
++            "mobile-high" | "high" => Tier::High,
++            _ => return None,
++        })
++    }
++
++    /// Graphics settings for this tier. Window/fullscreen/gamma etc. are kept.
++    pub fn apply(self, g: GraphicsSettings) -> GraphicsSettings {
++        use crate::render::*;
++        let keep = |d: GraphicsSettings, g: &GraphicsSettings| GraphicsSettings {
++            window: g.window.clone(),
++            fullscreen: g.fullscreen.clone(),
++            gamma: g.gamma,
++            exposure: g.exposure,
++            ambiance: g.ambiance,
++            fov: g.fov,
++            ..d
++        };
++        match self {
++            Tier::Desktop => keep(GraphicsSettings::default(), &g),
++            Tier::Low => {
++                let base = g.into_minimal();
++                GraphicsSettings {
++                    terrain_view_distance: 6,
++                    entity_view_distance: 6,
++                    lod_distance: 60,
++                    lod_detail: 100,
++                    sprite_render_distance: 60,
++                    figure_lod_render_distance: 120,
++                    particles_chance: 0.15,
++                    max_fps: Fps::Max(60),
++                    max_background_fps: Fps::Max(10),
++                    render_mode: RenderMode {
++                        aa: AaMode::FxUpscale,
++                        cloud: CloudMode::Minimal,
++                        reflection: ReflectionMode::Low,
++                        fluid: FluidMode::Low,
++                        lighting: LightingMode::Lambertian,
++                        shadow: ShadowMode::None,
++                        rain_occlusion: ShadowMapMode { resolution: 0.25 },
++                        bloom: BloomMode::Off,
++                        point_glow: 0.0,
++                        upscale_mode: UpscaleMode { factor: 0.6 },
++                        present_mode: PresentMode::Fifo,
++                        ..base.render_mode
++                    },
++                    ..base
++                }
++            },
++            Tier::Medium => {
++                let base = g.into_low();
++                GraphicsSettings {
++                    terrain_view_distance: 8,
++                    entity_view_distance: 8,
++                    sprite_render_distance: 100,
++                    max_fps: Fps::Max(60),
++                    max_background_fps: Fps::Max(10),
++                    render_mode: RenderMode {
++                        cloud: CloudMode::Minimal,
++                        reflection: ReflectionMode::Low,
++                        upscale_mode: UpscaleMode { factor: 0.75 },
++                        present_mode: PresentMode::Fifo,
++                        ..base.render_mode
++                    },
++                    ..base
++                }
++            },
++            Tier::High => {
++                let base = g.into_low();
++                GraphicsSettings {
++                    terrain_view_distance: 10,
++                    entity_view_distance: 10,
++                    lod_distance: 120,
++                    lod_detail: 200,
++                    sprite_render_distance: 150,
++                    max_fps: Fps::Max(60),
++                    max_background_fps: Fps::Max(10),
++                    render_mode: RenderMode {
++                        cloud: CloudMode::Low,
++                        reflection: ReflectionMode::Medium,
++                        fluid: FluidMode::Medium,
++                        lighting: LightingMode::BlinnPhong,
++                        shadow: ShadowMode::Map(ShadowMapMode { resolution: 0.5 }),
++                        upscale_mode: UpscaleMode { factor: 0.85 },
++                        present_mode: PresentMode::Fifo,
++                        ..base.render_mode
++                    },
++                    ..base
++                }
++            },
++        }
++    }
++}
++
++/// Plain fns for the settings window preset buttons (Low / Medium / High on Android).
++pub fn into_mobile_low(g: GraphicsSettings) -> GraphicsSettings { Tier::Low.apply(g) }
++pub fn into_mobile_medium(g: GraphicsSettings) -> GraphicsSettings { Tier::Medium.apply(g) }
++pub fn into_mobile_high(g: GraphicsSettings) -> GraphicsSettings { Tier::High.apply(g) }
++
++/// First-launch tier for a GPU (4.3), see `mobile_gpu.rs`.
++pub fn tier_for_gpu(name: &str) -> Tier {
++    match crate::mobile_gpu::class(name) {
++        crate::mobile_gpu::GpuClass::Strong => Tier::Medium,
++        crate::mobile_gpu::GpuClass::Baseline => Tier::Low,
++    }
++}
++
++static GPU_NAME: OnceLock<String> = OnceLock::new();
++
++pub fn set_gpu_name(name: &str) { let _ = GPU_NAME.set(name.to_owned()); }
++
++pub fn gpu_name() -> &'static str { GPU_NAME.get().map(|s| s.as_str()).unwrap_or("?") }
++
++// --------------------------------------------------------- pipeline cache ---
++
++static PIPELINE_CACHE: OnceLock<(wgpu::PipelineCache, std::path::PathBuf)> = OnceLock::new();
++
++/// The shared pipeline cache, if the device supports it (Vulkan on Android).
++pub fn pipeline_cache() -> Option<&'static wgpu::PipelineCache> {
++    PIPELINE_CACHE.get().map(|(c, _)| c)
++}
++
++/// Feature to request on the device when available.
++pub fn wanted_features(adapter: &wgpu::Adapter) -> wgpu::Features {
++    if cfg!(target_os = "android") {
++        adapter.features() & wgpu::Features::PIPELINE_CACHE
++    } else {
++        wgpu::Features::empty()
++    }
++}
++
++/// Create the cache from the file saved by a previous launch (4.5).
++#[allow(unsafe_code)]
++pub fn init_pipeline_cache(device: &wgpu::Device, info: &wgpu::AdapterInfo) {
++    if !cfg!(target_os = "android") || !device.features().contains(wgpu::Features::PIPELINE_CACHE) {
++        tracing::info!("pipeline cache: not supported on this device");
++        return;
++    }
++    let Some(dir) = std::env::var_os("XDG_CACHE_HOME").map(std::path::PathBuf::from) else {
++        return;
++    };
++    let key = wgpu::util::pipeline_cache_key(info).unwrap_or_else(|| "pipeline_cache".into());
++    let path = dir.join(format!("{key}.bin"));
++    let data = std::fs::read(&path).ok();
++    let loaded = data.as_ref().map(|d| d.len()).unwrap_or(0);
++    // SAFETY: the data was produced by `PipelineCache::get_data` for the same
++    // adapter (the file name is the wgpu adapter key); `fallback: true` makes
++    // wgpu start empty if the driver rejects it.
++    let cache = unsafe {
++        device.create_pipeline_cache(&wgpu::PipelineCacheDescriptor {
++            label: Some("my-veloren pipeline cache"),
++            data: data.as_deref(),
++            fallback: true,
++        })
++    };
++    tracing::info!("pipeline cache: {} loaded={loaded} bytes", path.display());
++    let _ = PIPELINE_CACHE.set((cache, path));
++}
++
++/// Write the cache to disk (called once all pipelines exist).
++pub fn save_pipeline_cache() {
++    let Some((cache, path)) = PIPELINE_CACHE.get() else { return };
++    if let Some(data) = cache.get_data() {
++        if let Some(dir) = path.parent() {
++            let _ = std::fs::create_dir_all(dir);
++        }
++        let tmp = path.with_extension("tmp");
++        match std::fs::write(&tmp, &data).and_then(|_| std::fs::rename(&tmp, path)) {
++            Ok(()) => tracing::info!("pipeline cache: saved {} bytes", data.len()),
++            Err(e) => tracing::warn!("pipeline cache: save failed: {e}"),
++        }
++    }
++}
++
++// ------------------------------------------------------------ frame times ---
++
++#[derive(Default, Clone)]
++struct Acc {
++    frames: u32,
++    /// wall-clock seconds between consecutive `frame_done` calls (the real
++    /// frame time; the parts below do not cover everything the loop does)
++    wall: f64,
++    tick: f64,
++    acquire: f64,
++    record: f64,
++    sleep: f64,
++    /// `GlobalState::maintain` (audio + renderer maintenance)
++    maintain: f64,
++    /// Android touch/autopilot hook (`android::frame`)
++    hook: f64,
++    /// time spent inside the winit event-loop callback (all events)
++    in_cb: f64,
++    /// per-frame wall time (ms), only for benchmark windows
++    times: Vec<f32>,
++}
++
++impl Acc {
++    fn add(&mut self, wall: f64, f: [f64; 4], x: [f64; 3], keep: bool) {
++        self.frames += 1;
++        self.wall += wall;
++        self.tick += f[0];
++        self.acquire += f[1];
++        self.record += f[2];
++        self.sleep += f[3];
++        self.maintain += x[0];
++        self.hook += x[1];
++        self.in_cb += x[2];
++        if keep {
++            self.times.push((wall * 1000.0) as f32);
++        }
++    }
++
++    fn ms(&self, v: f64) -> f64 { if self.frames == 0 { 0.0 } else { v * 1000.0 / self.frames as f64 } }
++
++    fn summary(&self) -> String {
++        let parts = self.tick + self.acquire + self.record + self.sleep + self.maintain + self.hook;
++        format!(
++            "fps={:.1} frame={:.1}ms tick={:.1}ms acquire={:.1}ms record={:.1}ms sleep={:.1}ms \
++             maintain={:.1}ms hook={:.1}ms cb_other={:.1}ms winit={:.1}ms",
++            if self.wall > 0.0 { self.frames as f64 / self.wall } else { 0.0 },
++            self.ms(self.wall),
++            self.ms(self.tick),
++            self.ms(self.acquire),
++            self.ms(self.record),
++            self.ms(self.sleep),
++            self.ms(self.maintain),
++            self.ms(self.hook),
++            self.ms((self.in_cb - parts).max(0.0)),
++            self.ms((self.wall - self.in_cb).max(0.0)),
++        )
++    }
++}
++
++static WINDOW: Mutex<Option<Acc>> = Mutex::new(None);
++static BENCH: Mutex<Option<Acc>> = Mutex::new(None);
++
++/// Main-thread timing state between two `frame_done` calls.
++struct Clock {
++    last: Option<std::time::Instant>,
++    /// maintain, hook, in-callback
++    extra: [f64; 3],
++}
++static CLOCK: Mutex<Clock> = Mutex::new(Clock { last: None, extra: [0.0; 3] });
++
++/// Seconds spent in `GlobalState::maintain` (called from the main loop).
++pub fn add_maintain(s: f64) { CLOCK.lock().unwrap().extra[0] += s; }
++/// Seconds spent in the Android touch/autopilot hook.
++pub fn add_hook(s: f64) { CLOCK.lock().unwrap().extra[1] += s; }
++/// Seconds spent inside one winit event-loop callback invocation.
++pub fn add_callback(s: f64) { CLOCK.lock().unwrap().extra[2] += s; }
++
++/// Called by the main loop once per rendered frame with the seconds spent in
++/// state tick, swapchain acquire (blocks when GPU bound), command recording +
++/// submit/present, and the FPS-cap sleep. FPS is computed from the wall clock
++/// between calls, so time spent anywhere else is still counted.
++pub fn frame_done(tick: f64, acquire: f64, record: f64, sleep: f64) {
++    let now = std::time::Instant::now();
++    let (wall, extra) = {
++        let mut c = CLOCK.lock().unwrap();
++        let wall = c.last.map(|l| now.duration_since(l).as_secs_f64());
++        c.last = Some(now);
++        (wall, std::mem::take(&mut c.extra))
++    };
++    // first frame (or after a long gap such as a pause): no meaningful wall time
++    let Some(wall) = wall.filter(|w| *w < 10.0) else { return };
++    let f = [tick, acquire, record, sleep];
++    WINDOW.lock().unwrap().get_or_insert_with(Acc::default).add(wall, f, extra, false);
++    if let Some(b) = BENCH.lock().unwrap().as_mut() {
++        b.add(wall, f, extra, true);
++    }
++}
++
++/// Take the 5 s window summary (for `VEL-PERF`).
++pub fn take_window() -> String {
++    let a = WINDOW.lock().unwrap().take().unwrap_or_default();
++    a.summary()
++}
++
++pub fn bench_begin() { *BENCH.lock().unwrap() = Some(Acc::default()); }
++
++/// End a benchmark window: summary + frame-time percentiles (wall clock).
++pub fn bench_end() -> String {
++    let Some(mut a) = BENCH.lock().unwrap().take() else { return "no data".into() };
++    a.times.sort_by(|x, y| x.partial_cmp(y).unwrap_or(std::cmp::Ordering::Equal));
++    let pct = |p: f32| -> f32 {
++        if a.times.is_empty() {
++            0.0
++        } else {
++            a.times[((a.times.len() - 1) as f32 * p) as usize]
++        }
++    };
++    format!(
++        "{} frames={} secs={:.1} p50={:.1}ms p95={:.1}ms p99={:.1}ms",
++        a.summary(),
++        a.frames,
++        a.wall,
++        pct(0.5),
++        pct(0.95),
++        pct(0.99)
++    )
++}
++
++// ------------------------------------------------- pending graphics change ---
++
++/// Graphics settings the autopilot wants the session to apply (benchmark).
++static PENDING: Mutex<Option<GraphicsSettings>> = Mutex::new(None);
++
++pub fn request_graphics(g: GraphicsSettings) { *PENDING.lock().unwrap() = Some(g); }
++
++pub fn take_pending_graphics() -> Option<GraphicsSettings> { PENDING.lock().unwrap().take() }
++
++// ------------------------------------------------ system stats (Android) ---
++
++#[cfg(target_os = "android")]
++pub mod sys {
++    use std::collections::HashMap;
++    use std::sync::Mutex;
++
++    static LAST: Mutex<Option<(std::time::Instant, HashMap<u32, (String, u64)>)>> =
++        Mutex::new(None);
++
++    fn read_threads() -> HashMap<u32, (String, u64)> {
++        let mut m = HashMap::new();
++        let Ok(rd) = std::fs::read_dir("/proc/self/task") else { return m };
++        for e in rd.flatten() {
++            let Ok(tid) = e.file_name().to_string_lossy().parse::<u32>() else { continue };
++            let Ok(s) = std::fs::read_to_string(e.path().join("stat")) else { continue };
++            let (Some(a), Some(b)) = (s.find('('), s.rfind(')')) else { continue };
++            let comm = s[a + 1..b].to_owned();
++            let f: Vec<&str> = s[b + 1..].split_whitespace().collect();
++            // fields after ')' start at #3 (state); utime #14, stime #15
++            let (Some(u), Some(st)) = (f.get(11), f.get(12)) else { continue };
++            let ticks = u.parse::<u64>().unwrap_or(0) + st.parse::<u64>().unwrap_or(0);
++            m.insert(tid, (comm, ticks));
++        }
++        m
++    }
++
++    fn group(comm: &str) -> String {
++        let t = comm.trim_end_matches(|c: char| c.is_ascii_digit() || c == '-' || c == '_');
++        if t.is_empty() { comm.to_owned() } else { t.to_owned() }
++    }
++
++    /// CPU use per thread group since the last call, in % of one core, top 8,
++    /// plus the total over all threads.
++    pub fn cpu_by_thread() -> String {
++        let now = std::time::Instant::now();
++        let cur = read_threads();
++        let mut last = LAST.lock().unwrap();
++        let out = if let Some((t0, prev)) = last.as_ref() {
++            let secs = now.duration_since(*t0).as_secs_f64().max(0.001);
++            let mut by: HashMap<String, f64> = HashMap::new();
++            let mut total = 0.0;
++            for (tid, (comm, ticks)) in &cur {
++                let before = prev.get(tid).map(|p| p.1).unwrap_or(0);
++                // CLK_TCK is 100 on Android
++                let pct = ticks.saturating_sub(before) as f64 / 100.0 / secs * 100.0;
++                total += pct;
++                *by.entry(group(comm)).or_default() += pct;
++            }
++            let mut v: Vec<_> = by.into_iter().filter(|(_, p)| *p >= 1.0).collect();
++            v.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
++            let top: Vec<String> = v.iter().take(8).map(|(n, p)| format!("{n}:{p:.0}")).collect();
++            format!("cpu_total={total:.0}% threads={} cpu=[{}]", cur.len(), top.join(","))
++        } else {
++            format!("cpu_total=? threads={}", cur.len())
++        };
++        *last = Some((now, cur));
++        out
++    }
++
++    pub fn rss_mb() -> f64 {
++        std::fs::read_to_string("/proc/self/status")
++            .ok()
++            .and_then(|s| {
++                s.lines()
++                    .find(|l| l.starts_with("VmRSS:"))
++                    .and_then(|l| l.split_whitespace().nth(1))
++                    .and_then(|kb| kb.parse::<f64>().ok())
++            })
++            .map(|kb| kb / 1024.0)
++            .unwrap_or(0.0)
++    }
++
++    /// Hottest readable thermal zone (°C); apps can often read these on Samsung.
++    pub fn max_temp() -> String {
++        let mut best: Option<(f64, String)> = None;
++        for i in 0..80 {
++            let base = format!("/sys/class/thermal/thermal_zone{i}");
++            let Ok(t) = std::fs::read_to_string(format!("{base}/temp")) else { continue };
++            let Ok(v) = t.trim().parse::<f64>() else { continue };
++            let c = if v > 1000.0 { v / 1000.0 } else { v };
++            if !(5.0..130.0).contains(&c) {
++                continue;
++            }
++            let ty = std::fs::read_to_string(format!("{base}/type")).unwrap_or_default();
++            if best.as_ref().is_none_or(|b| c > b.0) {
++                best = Some((c, ty.trim().to_owned()));
++            }
++        }
++        match best {
++            Some((c, ty)) => format!("{c:.1}C({ty})"),
++            None => "n/a".into(),
++        }
++    }
++}
++
++// ------------------------------------------------------ first launch (4.3) ---
++
++/// Marker in the config dir: `<version> <tier> <gpu>`. Bumping the version
++/// re-applies the automatic tier once (e.g. after better presets ship).
++pub const PRESET_VERSION: &str = "dev4-v1";
++
++/// Before the window exists: apply Low so the very first frames are cheap.
++/// Returns true if the automatic choice is still pending (needs the GPU name).
++pub fn first_launch(g: &mut GraphicsSettings, config_dir: &std::path::Path) -> bool {
++    let marker = std::fs::read_to_string(config_dir.join("mobile_preset")).unwrap_or_default();
++    if marker.split_whitespace().next() == Some(PRESET_VERSION) {
++        tracing::info!("mobile preset: keeping user settings ({})", marker.trim());
++        return false;
++    }
++    *g = Tier::Low.apply(g.clone());
++    true
++}
++
++/// After the renderer picked a GPU: choose the tier, return it if it differs from Low.
++pub fn choose_tier(config_dir: &std::path::Path) -> Tier {
++    let forced = std::fs::read_to_string(config_dir.join("force_tier"))
++        .ok()
++        .and_then(|s| Tier::parse(&s));
++    let tier = forced.unwrap_or_else(|| tier_for_gpu(gpu_name()));
++    let line = format!("{PRESET_VERSION} {} {}\n", tier.name(), gpu_name());
++    let _ = std::fs::write(config_dir.join("mobile_preset"), &line);
++    tracing::info!(
++        "mobile preset: gpu='{}' -> {}{}",
++        gpu_name(),
++        tier.name(),
++        if forced.is_some() { " (forced)" } else { "" }
++    );
++    tier
++}
+diff --git a/voxygen/src/mobile_gpu.rs b/voxygen/src/mobile_gpu.rs
+new file mode 100644
+index 000000000..0d81e0b4a
+--- /dev/null
++++ b/voxygen/src/mobile_gpu.rs
+@@ -0,0 +1,34 @@
++//! my-veloren dev.4 (4.3): classify a phone GPU by its driver name. Pure code,
++//! host-tested by `native/touch-tests` in the my-veloren repo.
++
++#[derive(Copy, Clone, Debug, PartialEq, Eq)]
++pub enum GpuClass {
++    /// Snapdragon 865-class and older/unknown: mobile-low.
++    Baseline,
++    /// Adreno 730+ (Snapdragon 8 Gen 1+), Mali-G710+, Immortalis, Xclipse: mobile-medium.
++    Strong,
++}
++
++fn number_after(n: &str, prefix: &str) -> Option<u32> {
++    let i = n.find(prefix)? + prefix.len();
++    let digits: String = n[i..]
++        .chars()
++        .skip_while(|c| !c.is_ascii_digit())
++        .take_while(|c| c.is_ascii_digit())
++        .collect();
++    digits.parse().ok()
++}
++
++pub fn class(name: &str) -> GpuClass {
++    let n = name.to_ascii_lowercase();
++    let strong = if let Some(a) = number_after(&n, "adreno") {
++        a >= 730
++    } else if n.contains("immortalis") || n.contains("xclipse") {
++        true
++    } else if let Some(m) = number_after(&n, "mali-g") {
++        m >= 710
++    } else {
++        false
++    };
++    if strong { GpuClass::Strong } else { GpuClass::Baseline }
++}
+diff --git a/voxygen/src/render/pipelines/blit.rs b/voxygen/src/render/pipelines/blit.rs
+index 0060dc8d4..c3a5d991b 100644
+--- a/voxygen/src/render/pipelines/blit.rs
++++ b/voxygen/src/render/pipelines/blit.rs
+@@ -114,7 +114,7 @@ impl BlitPipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/bloom.rs b/voxygen/src/render/pipelines/bloom.rs
+index 9018b9298..e416c1be7 100644
+--- a/voxygen/src/render/pipelines/bloom.rs
++++ b/voxygen/src/render/pipelines/bloom.rs
+@@ -197,7 +197,7 @@ impl BloomPipelines {
+                     compilation_options: Default::default(),
+                 }),
+                 multiview: None,
+-                cache: None,
++                cache: crate::mobile::pipeline_cache(),
+             })
+         };
+ 
+diff --git a/voxygen/src/render/pipelines/clouds.rs b/voxygen/src/render/pipelines/clouds.rs
+index 6c1018b17..b88b343f1 100644
+--- a/voxygen/src/render/pipelines/clouds.rs
++++ b/voxygen/src/render/pipelines/clouds.rs
+@@ -206,7 +206,7 @@ impl CloudsPipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/debug.rs b/voxygen/src/render/pipelines/debug.rs
+index a99ee15a5..ce4f09a26 100644
+--- a/voxygen/src/render/pipelines/debug.rs
++++ b/voxygen/src/render/pipelines/debug.rs
+@@ -147,7 +147,7 @@ impl DebugPipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/figure.rs b/voxygen/src/render/pipelines/figure.rs
+index fcd366a47..ae40dfd93 100644
+--- a/voxygen/src/render/pipelines/figure.rs
++++ b/voxygen/src/render/pipelines/figure.rs
+@@ -258,7 +258,7 @@ impl FigurePipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/fluid.rs b/voxygen/src/render/pipelines/fluid.rs
+index 2474218f2..5d8a95f08 100644
+--- a/voxygen/src/render/pipelines/fluid.rs
++++ b/voxygen/src/render/pipelines/fluid.rs
+@@ -159,7 +159,7 @@ impl FluidPipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/lod_object.rs b/voxygen/src/render/pipelines/lod_object.rs
+index 5380a8847..aa1ce94bc 100644
+--- a/voxygen/src/render/pipelines/lod_object.rs
++++ b/voxygen/src/render/pipelines/lod_object.rs
+@@ -169,7 +169,7 @@ impl LodObjectPipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/lod_terrain.rs b/voxygen/src/render/pipelines/lod_terrain.rs
+index 6650b6817..da13e7949 100644
+--- a/voxygen/src/render/pipelines/lod_terrain.rs
++++ b/voxygen/src/render/pipelines/lod_terrain.rs
+@@ -282,7 +282,7 @@ impl LodTerrainPipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/particle.rs b/voxygen/src/render/pipelines/particle.rs
+index 97a6e7c16..4eeedba54 100644
+--- a/voxygen/src/render/pipelines/particle.rs
++++ b/voxygen/src/render/pipelines/particle.rs
+@@ -373,7 +373,7 @@ impl ParticlePipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/postprocess.rs b/voxygen/src/render/pipelines/postprocess.rs
+index 023b465f0..454825a59 100644
+--- a/voxygen/src/render/pipelines/postprocess.rs
++++ b/voxygen/src/render/pipelines/postprocess.rs
+@@ -245,7 +245,7 @@ impl PostProcessPipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/rain_occlusion.rs b/voxygen/src/render/pipelines/rain_occlusion.rs
+index 9c744a9a0..ef831e3cf 100644
+--- a/voxygen/src/render/pipelines/rain_occlusion.rs
++++ b/voxygen/src/render/pipelines/rain_occlusion.rs
+@@ -146,7 +146,7 @@ impl RainOcclusionFigurePipeline {
+             },
+             fragment: None,
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+@@ -217,7 +217,7 @@ impl RainOcclusionPipeline {
+             },
+             fragment: None,
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/rope.rs b/voxygen/src/render/pipelines/rope.rs
+index 6d8481d67..abf2ce740 100644
+--- a/voxygen/src/render/pipelines/rope.rs
++++ b/voxygen/src/render/pipelines/rope.rs
+@@ -199,7 +199,7 @@ impl RopePipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/shadow.rs b/voxygen/src/render/pipelines/shadow.rs
+index 5d1638fce..473439237 100644
+--- a/voxygen/src/render/pipelines/shadow.rs
++++ b/voxygen/src/render/pipelines/shadow.rs
+@@ -143,7 +143,7 @@ impl ShadowFigurePipeline {
+             },
+             fragment: None,
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+@@ -214,7 +214,7 @@ impl ShadowPipeline {
+             },
+             fragment: None,
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+@@ -287,7 +287,7 @@ impl PointShadowPipeline {
+             },
+             fragment: None,
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+@@ -358,7 +358,7 @@ impl ShadowDebugPipeline {
+             },
+             fragment: None,
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/skybox.rs b/voxygen/src/render/pipelines/skybox.rs
+index e60d1d1ea..690b6d5d4 100644
+--- a/voxygen/src/render/pipelines/skybox.rs
++++ b/voxygen/src/render/pipelines/skybox.rs
+@@ -115,7 +115,7 @@ impl SkyboxPipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/sprite.rs b/voxygen/src/render/pipelines/sprite.rs
+index 99e97f239..6579a5156 100644
+--- a/voxygen/src/render/pipelines/sprite.rs
++++ b/voxygen/src/render/pipelines/sprite.rs
+@@ -361,7 +361,7 @@ impl SpritePipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/terrain.rs b/voxygen/src/render/pipelines/terrain.rs
+index 3ab5c3508..925abde56 100644
+--- a/voxygen/src/render/pipelines/terrain.rs
++++ b/voxygen/src/render/pipelines/terrain.rs
+@@ -315,7 +315,7 @@ impl TerrainPipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/trail.rs b/voxygen/src/render/pipelines/trail.rs
+index 5c1fd9177..141e6c719 100644
+--- a/voxygen/src/render/pipelines/trail.rs
++++ b/voxygen/src/render/pipelines/trail.rs
+@@ -137,7 +137,7 @@ impl TrailPipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+diff --git a/voxygen/src/render/pipelines/ui.rs b/voxygen/src/render/pipelines/ui.rs
+index 0af0786f2..0aaed63de 100644
+--- a/voxygen/src/render/pipelines/ui.rs
++++ b/voxygen/src/render/pipelines/ui.rs
+@@ -325,7 +325,7 @@ impl UiPipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self {
+@@ -541,7 +541,7 @@ impl PremultiplyAlphaPipeline {
+                 compilation_options: Default::default(),
+             }),
+             multiview: None,
+-            cache: None,
++            cache: crate::mobile::pipeline_cache(),
+         });
+ 
+         Self { pipeline }
+diff --git a/voxygen/src/render/renderer/mod.rs b/voxygen/src/render/renderer/mod.rs
+index e2804a922..d71454a2d 100644
+--- a/voxygen/src/render/renderer/mod.rs
++++ b/voxygen/src/render/renderer/mod.rs
+@@ -337,13 +337,19 @@ impl Renderer {
+                     } else {
+                         wgpu::Features::empty()
+                     }
+-                    | (adapter.features() & wgpu_profiler::GpuProfiler::ALL_WGPU_TIMER_FEATURES),
++                    | (adapter.features() & wgpu_profiler::GpuProfiler::ALL_WGPU_TIMER_FEATURES)
++                    // my-veloren dev.4 (4.5): persistent pipeline cache
++                    | crate::mobile::wanted_features(&adapter),
+                 required_limits,
+                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
+                 memory_hints: wgpu::MemoryHints::Performance,
+                 trace: wgpu::Trace::Off,
+             }))?;
+ 
++        // my-veloren dev.4: GPU name for the automatic mobile tier, pipeline cache.
++        crate::mobile::set_gpu_name(&info.name);
++        crate::mobile::init_pipeline_cache(&device, &info);
++
+         // Set error handler for wgpu errors
+         // This is better for use than their default because it includes the error in
+         // the panic message
+diff --git a/voxygen/src/run.rs b/voxygen/src/run.rs
+index a79a06db5..e6999dff0 100644
+--- a/voxygen/src/run.rs
++++ b/voxygen/src/run.rs
+@@ -33,6 +33,8 @@ pub fn run(
+ 
+     #[expect(deprecated)]
+     event_loop.run(move |event, event_loop| {
++        #[cfg(target_os = "android")]
++        let t_cb = std::time::Instant::now();
+         #[cfg(target_os = "android")]
+         let events = crate::android::translate_touch(
+             event,
+@@ -135,6 +137,8 @@ pub fn run(
+             _ => {},
+         }
+         }
++        #[cfg(target_os = "android")]
++        crate::mobile::add_callback(t_cb.elapsed().as_secs_f64());
+     })
+ }
+ 
+@@ -159,6 +163,8 @@ fn handle_main_events_cleared(
+     // The code below manages the state transfer logic automatically so that we
+     // don't have to re-engineer it for each menu we decide to add
+     // to the game.
++    #[cfg(target_os = "android")]
++    let t_tick = std::time::Instant::now();
+     let mut exit = true;
+     while let Some(state_result) = states.last_mut().map(|last| {
+         let events = global_state.window.fetch_events(&mut global_state.settings);
+@@ -221,6 +227,9 @@ fn handle_main_events_cleared(
+ 
+     drop(guard);
+ 
++    #[cfg(target_os = "android")]
++    let (d_tick, mut d_acquire, mut d_record) = (t_tick.elapsed().as_secs_f64(), 0.0, 0.0);
++
+     #[cfg(feature = "egui-ui")]
+     let scale_factor = global_state.window.scale_factor() as f32;
+ 
+@@ -233,11 +242,19 @@ fn handle_main_events_cleared(
+         let mut platform_output = None;
+ 
+         // Render the screen using the global renderer
+-        if let Some(mut drawer) = global_state
++        #[cfg(target_os = "android")]
++        let t_acquire = std::time::Instant::now();
++        let drawer = global_state
+             .window
+             .renderer_mut()
+             .start_recording_frame(last.globals_bind_group())
+-            .expect("Unrecoverable render error when starting a new frame!")
++            .expect("Unrecoverable render error when starting a new frame!");
++        #[cfg(target_os = "android")]
++        let t_record = {
++            d_acquire = t_acquire.elapsed().as_secs_f64();
++            std::time::Instant::now()
++        };
++        if let Some(mut drawer) = drawer
+         {
+             if global_state.clear_shadows_next_frame {
+                 drawer.clear_shadows();
+@@ -264,6 +281,10 @@ fn handle_main_events_cleared(
+             global_state.clear_shadows_next_frame = false;
+         }
+ 
++        #[cfg(target_os = "android")]
++        {
++            d_record = t_record.elapsed().as_secs_f64();
++        }
+         drop(guard);
+     }
+ 
+@@ -296,12 +317,20 @@ fn handle_main_events_cleared(
+         global_state
+             .clock
+             .set_target_dt(Duration::from_secs_f64(1.0 / target_fps as f64));
++        #[cfg(target_os = "android")]
++        let t_sleep = std::time::Instant::now();
+         global_state.clock.tick();
++        #[cfg(target_os = "android")]
++        crate::mobile::frame_done(d_tick, d_acquire, d_record, t_sleep.elapsed().as_secs_f64());
+         drop(guard);
+         #[cfg(feature = "tracy")]
+         common_base::tracy_client::frame_mark();
+ 
+         // Maintain global state.
++        #[cfg(target_os = "android")]
++        let t_maintain = std::time::Instant::now();
+         global_state.maintain();
++        #[cfg(target_os = "android")]
++        crate::mobile::add_maintain(t_maintain.elapsed().as_secs_f64());
+     }
+ }
+diff --git a/voxygen/src/session/mod.rs b/voxygen/src/session/mod.rs
+index 669316ec8..4cd03d646 100644
+--- a/voxygen/src/session/mod.rs
++++ b/voxygen/src/session/mod.rs
+@@ -160,7 +160,7 @@ impl SessionState {
+             let bodies = ecs.read_storage::<comp::Body>();
+             let char_states = ecs.read_storage::<comp::CharacterState>();
+             let my_pos = positions.get(me).map(|p| p.0).unwrap_or_default();
+-            let npc = (&ecs.entities(), &positions, &alignments, &bodies)
++            let villagers = (&ecs.entities(), &positions, &alignments, &bodies)
+                 .join()
+                 .filter(|(e, _, a, b)| {
+                     *e != me
+@@ -168,6 +168,19 @@ impl SessionState {
+                         && matches!(b, comp::Body::Humanoid(_))
+                         && !healths.get(*e).is_some_and(|h| h.is_dead)
+                 })
++                .collect::<Vec<_>>();
++            let npc_count = villagers.len();
++            let npc_any = villagers
++                .iter()
++                .map(|(_, p, _, _)| p.0 - my_pos)
++                .min_by(|a, b| {
++                    a.magnitude_squared()
++                        .partial_cmp(&b.magnitude_squared())
++                        .unwrap_or(std::cmp::Ordering::Equal)
++                })
++                .map(|d| d.into_array());
++            let npc = villagers
++                .into_iter()
+                 // same floor only: villagers upstairs are unreachable by walking
+                 .filter(|(_, p, _, _)| (p.0.z - my_pos.z).abs() < 3.0)
+                 .map(|(_, p, _, _)| (p.0 - my_pos).xy())
+@@ -199,6 +212,8 @@ impl SessionState {
+                 attacking: char_states.get(me).is_some_and(|c| c.is_attack()),
+                 npc_stick: npc.map(|n| n.0),
+                 npc_dist: npc.map(|n| n.1),
++                npc_count,
++                npc_any,
+                 dialogue_open: quest,
+                 trade_open: trade || client.pending_trade().is_some(),
+                 bag_open: bag,
+@@ -1702,6 +1717,16 @@ impl PlayState for SessionState {
+                 self.publish_touch_context(global_state);
+             }
+ 
++            // my-veloren dev.4: graphics tier switch requested by the benchmark.
++            if let Some(g) = crate::mobile::take_pending_graphics() {
++                settings_change::SettingsChange::Graphics(
++                    settings_change::Graphics::ChangeGraphicsSettings(std::rc::Rc::new(
++                        move |_| g.clone(),
++                    )),
++                )
++                .process(global_state, self);
++            }
++
+             let mut outcomes = Vec::new();
+ 
+             // Runs if either in a multiplayer server or the singleplayer server is unpaused
