@@ -20,6 +20,9 @@
 # 13 = dev.9 multiplayer on the official server. FTL_MP_ACCOUNT=<file with username, password[, server] lines>
 #      pushes the test account to the app's external files folder (never commit it). Without it the run logs in with
 #      a non-existent account and passes when the server + auth server answer. Run 12,13,1.
+# 14 = dev.10 smoothness: Snapdragon GSR active, frame generation off/on camera sweeps (ABBA, 25 s each; generated
+#      frames counted, presented fps compared), display frame rate API, then a walk on the phone Ultra tier with
+#      frame generation for the video. Run 14,1.
 # Spark quota: ~10 virtual-device tests/day as well; a rejected matrix ends with TEST_QUOTA_EXCEEDED.
 # Results: grep 'VEL-CHECK\|VEL-SCENARIO' in <OUT>/<device>/logcat.
 # Project ayoub-261d7 (Spark: ~5 physical tests/day). Never enable billing; never cancel a running matrix.

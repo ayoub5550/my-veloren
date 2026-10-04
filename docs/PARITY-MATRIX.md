@@ -3,7 +3,7 @@
 **dev3 status (2026-10-03, native port):** Camera/movement (touch stick/camera/pinch/glide) and
 UI touch (menu bar, context buttons, layout editor) are **IMPLEMENTED for touch** with Test Lab evidence:
 [DEV3.md](DEV3.md). Under the native port (ADR-002), gameplay rows run the upstream code as-is;
-Android-specific gaps are performance (dev4: mobile tiers done, physical 30 fps gate NOT RUN, see [DEV4](DEV4.md)) and lifecycle (dev5: pause/resume, autosave, Back, crash report PASS on VM, see [DEV5](DEV5.md)) and touch UI (dev6: window gestures, Android keyboard for chat/name, DPI UI scale, Arabic display: 7/7 + 1/1 PASS on VM, physical NOT RUN; see [DEV6](DEV6.md)) and the owner's phone fixes (dev7: phone-safe Ultra + thermal guard, icon buttons without overlap, floating stick, touch-only controls settings, new launcher icon: VM 9/9 + 15/15 + 3/3, 0 PANIC (vm13), owner's Poco F3 is the physical gate; see [DEV7](DEV7.md)) and the content audit (dev8: per-feature table below, see [DEV8](DEV8.md)) and accessories + multiplayer (dev9: gamepad, Bluetooth keyboard and mouse VM PASS through the window input pipeline; login, character creation and walking on the Official Veloren Server PASS with the owner's account; real Bluetooth devices NOT RUN; see [DEV9](DEV9.md)).
+Android-specific gaps are performance (dev4: mobile tiers done, physical 30 fps gate NOT RUN, see [DEV4](DEV4.md)) and lifecycle (dev5: pause/resume, autosave, Back, crash report PASS on VM, see [DEV5](DEV5.md)) and touch UI (dev6: window gestures, Android keyboard for chat/name, DPI UI scale, Arabic display: 7/7 + 1/1 PASS on VM, physical NOT RUN; see [DEV6](DEV6.md)) and the owner's phone fixes (dev7: phone-safe Ultra + thermal guard, icon buttons without overlap, floating stick, touch-only controls settings, new launcher icon: VM 9/9 + 15/15 + 3/3, 0 PANIC (vm13), owner's Poco F3 is the physical gate; see [DEV7](DEV7.md)) and the content audit (dev8: per-feature table below, see [DEV8](DEV8.md)) and accessories + multiplayer (dev9: gamepad, Bluetooth keyboard and mouse VM PASS through the window input pipeline; login, character creation and walking on the Official Veloren Server PASS with the owner's account; real Bluetooth devices NOT RUN; see [DEV9](DEV9.md)) and smoothness (dev10: frame generation, Snapdragon GSR, frame pacing, lighter APK; phone feel NOT RUN; see [DEV10](DEV10.md)).
 
 **dev1 status (2026-10-03, archived Unity slice):** Voxel geometry, Character creation, Equipment visuals, Procedural
 animation, Camera/movement, World generation/rendering and Android robustness are **STARTED**
@@ -65,6 +65,9 @@ receipt, owner's phone check needed. The physical gate for every row is the owne
 | (dev9) Bluetooth keyboard: WASD, Space, I, Esc | PASS (VM, injected) | Arabic-layout remap NOT RUN |
 | (dev9) Bluetooth mouse: look, click, wheel | PASS (VM, injected) | real MotionEvents, pointer capture granted |
 | (dev9) Multiplayer, official server | PASS | owner's account: rules, character «Ayoub», in world with 24 players, walked 5 m |
+| (dev10) Frame generation (camera at 60, world at 30) | PASS (VM, forced) — 1.61× presented fps, see [DEV10](DEV10.md) | host: rotation/strafe reprojection coherent; phone feel NOT RUN |
+| (dev10) Snapdragon GSR upscaler | PASS (VM) — active at 0.60/0.80 | host: sharp at render scale 0.6 |
+| (dev10) Frame pacing (setFrameRate + ADPF) | PASS (VM) — hz=60 rc=0, ADPF on | Android 11+/12+ APIs via dlsym |
 
 ## Explicit exclusions or separate decisions
 
