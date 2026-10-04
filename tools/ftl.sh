@@ -3,6 +3,9 @@
 #   FTL_DEVICE=r8q FTL_VERSION=33 FTL_TIMEOUT=15m FTL_SCENARIOS=1,2 tools/ftl.sh native/out/my-veloren-dev3.apk dev3-r8q
 # Scenarios: 1 = touch-injected play + all dev.3 checks, 2 = relaunch, layout restored + reset,
 # 3 = dev.4 graphics-tier benchmark (desktop/high/medium/low, 40 s each) + 10-min soak (use FTL_TIMEOUT=35m).
+# 4 = dev.5 background/foreground x5 (cover activity) + autosave + SIGKILL, 5 = relaunch after the kill:
+#     save kept, assets not re-extracted, crash report collected, Back opens/closes the Esc menu (run 4,5 together).
+# 6 = dev.5 (5.6) terrain occlusion culling A/B: same camera sweep with culling off/on (ABBA), 30 s each.
 # Results: grep 'VEL-CHECK\|VEL-SCENARIO' in <OUT>/<device>/logcat.
 # Project ayoub-261d7 (Spark: ~5 physical tests/day). Never enable billing; never cancel a running matrix.
 # Needs a service-account key (FIREBASE_SA_JSON, never committed). Run as a background job (~15 min with upload).

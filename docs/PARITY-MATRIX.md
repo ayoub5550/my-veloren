@@ -3,7 +3,7 @@
 **dev3 status (2026-10-03, native port):** Camera/movement (touch stick/camera/pinch/glide) and
 UI touch (menu bar, context buttons, layout editor) are **IMPLEMENTED for touch** with Test Lab evidence:
 [DEV3.md](DEV3.md). Under the native port (ADR-002), gameplay rows run the upstream code as-is;
-Android-specific gaps are performance (dev4: mobile tiers done, physical 30 fps gate NOT RUN, see [DEV4](DEV4.md)) and lifecycle (dev5).
+Android-specific gaps are performance (dev4: mobile tiers done, physical 30 fps gate NOT RUN, see [DEV4](DEV4.md)) and lifecycle (dev5: pause/resume, autosave, Back, crash report PASS on VM, see [DEV5](DEV5.md)).
 
 **dev1 status (2026-10-03, archived Unity slice):** Voxel geometry, Character creation, Equipment visuals, Procedural
 animation, Camera/movement, World generation/rendering and Android robustness are **STARTED**
@@ -20,7 +20,7 @@ is authorized. Every exception needs a reason, owner decision and impact on adve
 | Character creation | One valid assembled humanoid | Required appearances/races/body variations | dev3–6 |
 | Equipment visuals | Weapon + armor correctly attached | All required slots/items and visibility rules | dev3–6 |
 | Procedural animation | Idle/move/jump/attack/hit/death | Each required skeleton and state transition | dev3–6 |
-| Camera/movement | Touch + collision + pause — **dev3: touch stick/camera/pinch/glide PASS on r8q** ([DEV3](DEV3.md)); pause = dev5 | Swimming/climbing/gliding/mounts if required by agreed parity | dev3–6 |
+| Camera/movement | Touch + collision + pause — **dev3: touch stick/camera/pinch/glide PASS on r8q** ([DEV3](DEV3.md)); pause = **dev5: home/return ×5 + save after kill PASS on VM** ([DEV5](DEV5.md)) | Swimming/climbing/gliding/mounts if required by agreed parity | dev3–6 |
 | World generation | Repeatable seed and chunk boundaries | Biomes/sites/dungeons and original rules comparison | dev4–6 |
 | World rendering | Terrain/water/foliage with bounded meshes | Lighting/weather/time-of-day effects required by scope | dev4–7 |
 | Local simulation | Actors progress without a network transport | Server/world/rtsim responsibilities required for offline experience | dev4–6 |

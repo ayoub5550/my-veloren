@@ -1,0 +1,100 @@
+# vm7 (d5build2, MediumPhone.arm v34) — veloren markers
+10-03 16:06:10.055  9756  9780 I veloren : VEL-CHECK crash_report_written PASS Some("/data/user/0/com.ayoub.myveloren/files/userdata/crash/selftest-1791068770.txt")
+10-03 16:06:10.877  9756  9756 I veloren : VEL-LIFE cover activity shown for 3000 ms
+10-03 16:06:13.859  9756  9780 I veloren : VEL-LIFE suspend #1: surface dropped, audio muted, settings saved, persist requested + paused
+10-03 16:06:14.210  9756  9780 I veloren : VEL-LIFE resume #1: new surface 2400x1080, audio restored
+10-03 16:06:18.228  9756  9780 I veloren : VEL-CHECK pause_resume PASS cycle=1 suspends=1 resumes=1 bg_surface_gone=true bg_server_paused=true bg_muted=true back_after=0.4s frames_drawn_after_resume=14 resume_fails=0 game_paused_now=false
+10-03 16:06:19.158  9756  9756 I veloren : VEL-LIFE cover activity shown for 3000 ms
+10-03 16:06:21.231  9756  9780 I veloren : VEL-LIFE suspend #2: surface dropped, audio muted, settings saved, persist requested + paused
+10-03 16:06:22.432  9756  9780 I veloren : VEL-LIFE resume #2: new surface 2400x1080, audio restored
+10-03 16:06:26.645  9756  9780 I veloren : VEL-CHECK pause_resume PASS cycle=2 suspends=2 resumes=2 bg_surface_gone=true bg_server_paused=true bg_muted=true back_after=1.2s frames_drawn_after_resume=14 resume_fails=0 game_paused_now=false
+10-03 16:06:27.579  9756  9756 I veloren : VEL-LIFE cover activity shown for 3000 ms
+10-03 16:06:28.608  9756  9780 I veloren : VEL-LIFE suspend #3: surface dropped, audio muted, settings saved, persist requested + paused
+10-03 16:06:30.931  9756  9780 I veloren : VEL-LIFE resume #3: new surface 2400x1080, audio restored
+10-03 16:06:35.170  9756  9780 I veloren : VEL-CHECK pause_resume PASS cycle=3 suspends=3 resumes=3 bg_surface_gone=true bg_server_paused=true bg_muted=true back_after=2.3s frames_drawn_after_resume=12 resume_fails=0 game_paused_now=false
+10-03 16:06:36.125  9756  9756 I veloren : VEL-LIFE cover activity shown for 3000 ms
+10-03 16:06:36.703  9756  9780 I veloren : VEL-LIFE suspend #4: surface dropped, audio muted, settings saved, persist requested + paused
+10-03 16:06:39.302  9756  9780 I veloren : VEL-LIFE resume #4: new surface 2400x1080, audio restored
+10-03 16:06:43.559  9756  9780 I veloren : VEL-CHECK pause_resume PASS cycle=4 suspends=4 resumes=4 bg_surface_gone=true bg_server_paused=true bg_muted=true back_after=2.6s frames_drawn_after_resume=14 resume_fails=0 game_paused_now=false
+10-03 16:06:44.499  9756  9756 I veloren : VEL-LIFE cover activity shown for 3000 ms
+10-03 16:06:46.493  9756  9780 I veloren : VEL-LIFE suspend #5: surface dropped, audio muted, settings saved, persist requested + paused
+10-03 16:06:47.674  9756  9780 I veloren : VEL-LIFE resume #5: new surface 2400x1080, audio restored
+10-03 16:06:51.688  9756  9780 I veloren : VEL-CHECK pause_resume PASS cycle=5 suspends=5 resumes=5 bg_surface_gone=true bg_server_paused=true bg_muted=true back_after=1.2s frames_drawn_after_resume=13 resume_fails=0 game_paused_now=false
+10-03 16:06:51.972  9756  9780 I veloren : VEL-CHECK pause_resume_5x PASS 5/5 background->foreground cycles passed, no crash
+10-03 16:06:59.886  9756  9756 I veloren : VEL-LIFE cover activity shown for 120000 ms
+10-03 16:07:01.308  9756  9780 I veloren : VEL-LIFE suspend #6: surface dropped, audio muted, settings saved, persist requested + paused
+10-03 16:07:05.312  9756  9780 I veloren : VEL-CHECK autosave_before_kill PASS inventory slots 2 -> 1 items 2 -> 1; suspended=true server_paused=true; killing the process with SIGKILL while in background
+10-03 16:07:05.412  9756  9780 I veloren : VEL-SCENARIO 4 DONE pass=8 fail=0 failed=[] haptics=21
+10-03 16:07:09.529 10464 10464 I veloren : VEL-LIFE previous exit: SIGNALED status=9 
+10-03 16:07:09.533 10464 10464 I veloren : VEL-LIFE crash report collected: 360 bytes
+10-03 16:08:12.370 10464 10487 I veloren : VEL-CHECK assets_once PASS extracted_this_launch=false installed_version=7a139f53330942ae
+10-03 16:08:12.636 10464 10487 I veloren : VEL-CHECK save_after_kill PASS inventory after kill + relaunch: slots=1 items=1, expected Some([1, 1])
+10-03 16:08:12.637 10464 10487 I veloren : VEL-CHECK crash_report PASS Java collected the previous launch's report: 360 bytes, selftest=true, exit-info lines=1
+10-03 16:08:12.908 10464 10487 I veloren : VEL-CHECK activity_flags PASS keep_screen_on=1 landscape=1 cutout_mode=2 sdk=34 device=Google sdk_gphone64_arm64
+10-03 16:08:13.209 10464 10464 I veloren : sendBack: KEYCODE_BACK queued via window input pipeline
+10-03 16:08:15.922 10464 10487 I veloren : VEL-CHECK back_opens_menu PASS esc_menu=true game_input=false back_presses=1
+10-03 16:08:16.180 10464 10464 I veloren : sendBack: KEYCODE_BACK queued via window input pipeline
+10-03 16:08:18.710 10464 10487 I veloren : VEL-CHECK back_closes_menu PASS esc_menu=false game_input=true back_presses=2
+10-03 16:08:19.000 10464 10487 I veloren : VEL-SCENARIO 5 DONE pass=6 fail=0 failed=[] haptics=0
+10-03 16:08:20.491 10464 10487 I veloren : VEL-LIFE suspend #1: surface dropped, audio muted, settings saved, persist requested + paused
+10-03 16:08:22.283 10869 10869 I veloren : VEL-LIFE previous exit: EXIT_SELF status=0 
+10-03 16:08:22.287 10869 10869 I veloren : VEL-LIFE crash report collected: 167 bytes
+10-03 16:10:08.859 10869 10891 I veloren : VEL-BENCH occ-off-1 fps=2.9 frame=350.2ms tick=26.6ms acquire=1.5ms record=2.7ms sleep=0.0ms maintain=318.4ms hook=0.5ms cb_other=0.0ms winit=0.4ms frames=86 secs=30.1 p50=309.3ms p95=539.8ms p99=620.4ms occ=off occ_tested=0.0 occ_culled=0.0 occ_pct=0% occ_cost=0us vd=6 upscale=0.60 shadow=None gpu='llvmpipe (LLVM 21.1.4, 128 bits)' rss=1372MB temp=25.0C(battery)
+10-03 16:10:42.107 10869 10891 I veloren : VEL-BENCH occ-on-1 fps=2.3 frame=438.7ms tick=31.3ms acquire=2.6ms record=3.1ms sleep=0.0ms maintain=401.3ms hook=0.2ms cb_other=0.2ms winit=0.0ms frames=69 secs=30.3 p50=417.9ms p95=587.7ms p99=640.7ms occ=on occ_tested=11.3 occ_culled=0.8 occ_pct=7% occ_cost=4us vd=6 upscale=0.60 shadow=None gpu='llvmpipe (LLVM 21.1.4, 128 bits)' rss=1373MB temp=25.0C(battery)
+10-03 16:11:15.812 10869 10891 I veloren : VEL-BENCH occ-on-2 fps=2.4 frame=411.7ms tick=39.8ms acquire=3.3ms record=4.0ms sleep=0.0ms maintain=363.7ms hook=0.7ms cb_other=0.1ms winit=0.0ms frames=74 secs=30.5 p50=383.8ms p95=547.2ms p99=596.6ms occ=on occ_tested=26.0 occ_culled=0.6 occ_pct=2% occ_cost=9us vd=6 upscale=0.60 shadow=None gpu='llvmpipe (LLVM 21.1.4, 128 bits)' rss=1391MB temp=25.0C(battery)
+10-03 16:11:48.839 10869 10891 I veloren : VEL-BENCH occ-off-2 fps=2.5 frame=406.2ms tick=32.1ms acquire=1.2ms record=2.8ms sleep=0.0ms maintain=368.8ms hook=1.2ms cb_other=0.0ms winit=0.3ms frames=74 secs=30.1 p50=405.5ms p95=468.9ms p99=501.6ms occ=off occ_tested=0.0 occ_culled=0.0 occ_pct=0% occ_cost=0us vd=6 upscale=0.60 shadow=None gpu='llvmpipe (LLVM 21.1.4, 128 bits)' rss=1531MB temp=25.0C(battery)
+10-03 16:11:49.492 10869 10891 I veloren : VEL-CHECK occlusion_culls PASS fps off=Some(2.7) on=Some(2.3499999999999996) culled_chunks=Some(0.7) culled_pct=Some(4.5) cost_us=Some(6.5)
+10-03 16:11:49.492 10869 10891 I veloren : VEL-CHECK occlusion_not_slower FAIL fps off=Some(2.7) on=Some(2.3499999999999996) culled_chunks=Some(0.7) culled_pct=Some(4.5) cost_us=Some(6.5)
+10-03 16:11:49.840 10869 10891 I veloren : VEL-SCENARIO 6 DONE pass=1 fail=1 failed=["occlusion_not_slower"] haptics=0
+10-03 16:11:52.797 10869 10891 I veloren : VEL-LIFE suspend #1: surface dropped, audio muted, settings saved, persist requested + paused
+10-03 16:11:53.788 11353 11353 I veloren : VEL-LIFE previous exit: EXIT_SELF status=0 
+10-03 16:11:53.801 11353 11353 I veloren : VEL-LIFE crash report collected: 167 bytes
+10-03 16:13:00.431 11353 11378 I veloren : VEL-CHECK haptics PASS self-test pulse sent via JNI (see 'jni:' errors if any)
+10-03 16:13:10.147 11353 11378 I veloren : VEL-CHECK multitouch PASS moved=96.6m cam_yaw_delta=1.29rad attack_seen=true max_fingers=3 states={"ComboMelee2", "Equipping", "Idle", "Wielding"}
+10-03 16:13:16.049 11353 11378 I veloren : VEL-CHECK analog_slow PASS light tilt (0.35) speed=0.51 m/s
+10-03 16:13:21.160 11353 11378 I veloren : VEL-CHECK analog_fast FAIL light=0.51 m/s full=0.64 m/s
+10-03 16:13:26.214 11353 11378 I veloren : VEL-CHECK pinch_zoom PASS camera distance 10.00 -> 7.59
+10-03 16:13:49.682 11353 11378 I veloren : VEL-CHECK buttons PASS no crash; character states seen {"BasicBlock", "ChargedMelee", "Crawl", "Idle", "Roll", "Stunned", "Wallrun", "Wielding"}
+10-03 16:14:02.331 11353 11378 I veloren : VEL-CHECK glide PASS glider_wielded=true gliding=true
+10-03 16:14:06.480 11353 11378 I veloren : VEL-CHECK bag_open PASS bag=true game_input=false
+10-03 16:14:09.284 11353 11378 I veloren : VEL-CHECK bag_closed PASS bag=false game_input=true
+10-03 16:14:11.982 11353 11378 I veloren : VEL-CHECK map_open PASS map=true game_input=false
+10-03 16:14:15.011 11353 11378 I veloren : VEL-CHECK map_closed PASS map=false game_input=true
+10-03 16:14:31.798 11353 11378 I veloren : VEL-CHECK npc_interact PASS dialogue=true trade=false taps=1
+10-03 16:14:34.086 11353 11378 I veloren : VEL-CHECK game_input_back PASS game_input=true
+10-03 16:14:44.930 11353 11378 I veloren : VEL-CHECK layout_saved PASS jump=ButtonLayout { ctl: Jump, x: 0.7, y: 0.22, size: 0.102850005, alpha: 0.85 } on_disk=Some(ButtonLayout { ctl: Jump, x: 0.7, y: 0.22, size: 0.102850005, alpha: 0.85 })
+10-03 16:14:45.160 11353 11378 I veloren : VEL-SCENARIO 1 DONE pass=13 fail=1 failed=["analog_fast"] haptics=14
+10-03 16:14:47.206 11353 11378 I veloren : VEL-LIFE suspend #1: surface dropped, audio muted, settings saved, persist requested + paused
+
+# vm6 (d5build1) — checks
+10-03 15:42:31.219  9963  9986 I veloren : VEL-CHECK crash_report_written PASS Some("/data/user/0/com.ayoub.myveloren/files/userdata/crash/selftest-1791067351.txt")
+10-03 15:42:39.134  9963  9986 I veloren : VEL-CHECK pause_resume PASS cycle=1 suspends=1 resumes=1 bg_surface_gone=true bg_server_paused=true bg_muted=true back_after=1.5s frames_drawn_after_resume=17 resume_fails=0 game_paused_now=false
+10-03 15:42:47.376  9963  9986 I veloren : VEL-CHECK pause_resume PASS cycle=2 suspends=2 resumes=2 bg_surface_gone=true bg_server_paused=true bg_muted=true back_after=2.4s frames_drawn_after_resume=16 resume_fails=0 game_paused_now=false
+10-03 15:42:55.689  9963  9986 I veloren : VEL-CHECK pause_resume PASS cycle=3 suspends=3 resumes=3 bg_surface_gone=true bg_server_paused=true bg_muted=true back_after=2.0s frames_drawn_after_resume=17 resume_fails=0 game_paused_now=false
+10-03 15:43:03.805  9963  9986 I veloren : VEL-CHECK pause_resume PASS cycle=4 suspends=4 resumes=4 bg_surface_gone=true bg_server_paused=true bg_muted=true back_after=2.1s frames_drawn_after_resume=16 resume_fails=0 game_paused_now=false
+10-03 15:43:11.937  9963  9986 I veloren : VEL-CHECK pause_resume PASS cycle=5 suspends=5 resumes=5 bg_surface_gone=true bg_server_paused=true bg_muted=true back_after=2.3s frames_drawn_after_resume=16 resume_fails=0 game_paused_now=false
+10-03 15:43:12.147  9963  9986 I veloren : VEL-CHECK pause_resume_5x PASS 5/5 background->foreground cycles passed, no crash
+10-03 15:43:18.803  9963  9986 I veloren : VEL-CHECK autosave_before_kill PASS inventory slots 2 -> 1 items 2 -> 1; suspended=true server_paused=true; killing the process with SIGKILL while in background
+10-03 15:43:18.903  9963  9986 I veloren : VEL-SCENARIO 4 DONE pass=8 fail=0 failed=[] haptics=0
+10-03 15:44:22.149 10537 10564 I veloren : VEL-CHECK assets_once PASS extracted_this_launch=false installed_version=7a139f53330942ae
+10-03 15:44:22.384 10537 10564 I veloren : VEL-CHECK save_after_kill PASS inventory after kill + relaunch: slots=1 items=1, expected Some([1, 1])
+10-03 15:44:22.384 10537 10564 I veloren : VEL-CHECK crash_report PASS Java collected the previous launch's report: 360 bytes, selftest=true, exit-info lines=1
+10-03 15:44:22.594 10537 10564 I veloren : VEL-CHECK activity_flags PASS keep_screen_on=1 landscape=1 cutout_mode=2 sdk=34 device=Google sdk_gphone64_arm64
+10-03 15:44:25.458 10537 10564 I veloren : VEL-CHECK back_opens_menu FAIL esc_menu=false game_input=true back_presses=0
+10-03 15:44:28.280 10537 10564 I veloren : VEL-CHECK back_closes_menu FAIL esc_menu=false game_input=true back_presses=0
+10-03 15:44:28.508 10537 10564 I veloren : VEL-SCENARIO 5 DONE pass=4 fail=2 failed=["back_opens_menu", "back_closes_menu"] haptics=0
+10-03 15:45:28.657 10888 10908 I veloren : VEL-CHECK haptics PASS self-test pulse sent via JNI (see 'jni:' errors if any)
+10-03 15:45:38.069 10888 10908 I veloren : VEL-CHECK multitouch PASS moved=126.2m cam_yaw_delta=1.29rad attack_seen=true max_fingers=3 states={"ComboMelee2", "Equipping", "Idle", "Wielding"}
+10-03 15:45:43.684 10888 10908 I veloren : VEL-CHECK analog_slow PASS light tilt (0.35) speed=0.52 m/s
+10-03 15:45:48.347 10888 10908 I veloren : VEL-CHECK analog_fast PASS light=0.52 m/s full=1.47 m/s
+10-03 15:45:52.724 10888 10908 I veloren : VEL-CHECK pinch_zoom PASS camera distance 10.00 -> 7.58
+10-03 15:46:13.388 10888 10908 I veloren : VEL-CHECK buttons PASS no crash; character states seen {"BasicBlock", "ChargedMelee", "Equipping", "Idle", "Roll", "Wielding"}
+10-03 15:46:20.106 10888 10908 I veloren : VEL-CHECK glide PASS glider_wielded=true gliding=true
+10-03 15:46:24.250 10888 10908 I veloren : VEL-CHECK bag_open PASS bag=true game_input=false
+10-03 15:46:26.828 10888 10908 I veloren : VEL-CHECK bag_closed PASS bag=false game_input=true
+10-03 15:46:29.434 10888 10908 I veloren : VEL-CHECK map_open PASS map=true game_input=false
+10-03 15:46:31.960 10888 10908 I veloren : VEL-CHECK map_closed PASS map=false game_input=true
+10-03 15:49:02.249 10888 10908 I veloren : VEL-CHECK npc_interact FAIL timeout npc_dist=None npc_count=2 npc_any=Some([-36.82617, -131.1914, -11.0]) can_interact=false taps=0 dead=false respawns=0 detours=0 closes=0
+10-03 15:49:03.396 10888 10908 I veloren : VEL-CHECK game_input_back PASS game_input=true
+10-03 15:49:13.231 10888 10908 I veloren : VEL-CHECK layout_saved PASS jump=ButtonLayout { ctl: Jump, x: 0.7, y: 0.22, size: 0.102850005, alpha: 0.85 } on_disk=Some(ButtonLayout { ctl: Jump, x: 0.7, y: 0.22, size: 0.102850005, alpha: 0.85 })
+10-03 15:49:13.420 10888 10908 I veloren : VEL-SCENARIO 1 DONE pass=13 fail=1 failed=["npc_interact"] haptics=1

@@ -116,6 +116,8 @@ Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
 | Autopilot step fails (glide, NPC) with `dead=true` in `VEL-STAT` | wild animals kill the character during the scripted run | before every step: if dead, tap the contextual Respawn button |
 | "Use" opened a crafting window instead of the NPC dialogue | the nearest interactable was a crafting station | tap Use only when the target is within 3.5 m; close stray windows with Menu (Esc) |
 | Analog speed test 0.00 m/s on a fast device | after a 36 m run the character stood against a wall | measure the walk back along the path just used |
+| Self-test Back press: `SecurityException` from `Instrumentation.sendKeyDownUpSync` | needs `INJECT_EVENTS` (system-only) | send `KEYCODE_BACK` with `new BaseInputConnection(decorView,false).sendKeyEvent(...)` on the UI thread; it goes through the window's own input stages to the NativeActivity InputQueue → winit |
+| `npc_interact` timeout with `npc_count>0` | the only villagers were on another floor (dz −11 m) and the same-floor filter dropped them | prefer \|dz\|<3, fall back to \|dz\|<16 |
 | Shell killed by `pkill -f <pattern>` | the pattern also matched the agent's own command line | kill by PID, never `pkill -f` with a pattern from your own command |
 - **Perf numbers (dev.4):** measure fps as frames ÷ wall clock, never as frames ÷ (sum of timed parts):
   the parts miss work outside them, and that overstated fps about 10× in build8. On the Test Lab VM (llvmpipe),
@@ -124,6 +126,9 @@ Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
 
 ## 9. Known gaps / next
 
-- Touch overlay done in dev.3. Still missing: pause/resume surface recreation (dev.5).
+- Touch overlay done in dev.3. Pause/resume surface recreation done in dev.5 (winit `Suspended`/`Resumed` → drop/recreate the wgpu surface).
+- **Occlusion culling (dev.5):** Veloren terrain chunks are full-height 32×32 columns, so a 2.5-D test is enough:
+  store a coarse ground-height grid per chunk at mesh time, then march a cone from the camera to each chunk top.
+  Ignore trees/houses as occluders, disable underground, keep shadows on the frustum result. Judge the gain on a real GPU only.
 - Mobile graphics tiers done in dev.4 (auto Low/Medium by GPU). Physical fps gate pending (Test Lab quota).
 - VM attempt 5 reached the world (Session) and ran 10 min without crash; physical-device confirmation pending quota.
