@@ -13,9 +13,8 @@
 > - **الإعدادات:** تبويب «التحكم» على أندرويد يعرض إعدادات اللمس فقط: محرر التخطيط، وإعادة الضبط، و7 أشرطة، ومفتاحان.
 >   أُخفيت ربطات الكيبورد ويد التحكم، وأُخفيت تلميحات الكيبورد في الشاشة.
 > - **الأيقونة:** أيقونة جديدة متكيفة (adaptive) من شعار Veloren الرسمي.
-> - **الاختبار:** على الجهاز الافتراضي في Firebase (vm11) نجح سيناريو 1 بنتيجة 15/15، وسيناريو 2 بنتيجة 3/3، وسيناريو 9 الجديد بنتيجة 8/9، ولا يوجد أي PANIC.
->   الفحص الوحيد الفاشل كان خطأ في الاختبار نفسه وليس في اللعبة، وقد أُصلح. أُعيد البناء (d7build4) ولم يتغير فيه إلا كود الاختبار.
->   إعادة الاختبار (vm12) رفضها Firebase لأن حصة اليوم المجانية انتهت. ستُعاد بعد تجدد الحصة.
+> - **الاختبار:** آخر تشغيل على الجهاز الافتراضي في Firebase (vm13، بناء d7build5) نجح بالكامل: سيناريو 9 الجديد 9/9، وسيناريو 1 بنتيجة 15/15، وسيناريو 2 بنتيجة 3/3، ولا يوجد أي PANIC.
+>   في vm11 وvm12 فشل فحصان، وكان الخطأ في الاختبار نفسه وليس في اللعبة، وأُصلح الاثنان. لم يتغير كود اللعبة منذ d7build4 (نسخة rc1 على هاتف المالك).
 >   المرجع النهائي هو تجربة المالك على هاتفه.
 >   الكراشات (7.7): لم تصلنا تقارير بعد.
 
@@ -51,12 +50,19 @@ editor overlap guard, stick follow/stop).
 | Run | APK | Device | Outcome | Sc. 9 (dev.7) | Sc. 1 (regression) | Sc. 2 (layout persist) |
 |---|---|---|---|---|---|---|
 | vm11 | d7build3 | MediumPhone.arm v34 | gcloud exit 0, 0 PANIC | 8/9 (`ability_buttons`, see below) | **15/15** | **3/3** |
-| vm12 | d7build4 (final) | MediumPhone.arm v34 | **NOT RUN**: `TEST_QUOTA_EXCEEDED` (Spark daily virtual-device quota used up by vm1–vm11 today); rerun after the daily reset | — | — | — |
+| vm12 | d7build4 (rc1 assets) | MediumPhone.arm v34 | gcloud exit 0, 0 PANIC (first try hit `TEST_QUOTA_EXCEEDED`, rerun after the daily reset) | **9/9** | 14/15 (`pinch_zoom`, see below) | **3/3** |
+| vm13 | d7build5 (final) | MediumPhone.arm v34 | gcloud exit 0, outcome Passed, 0 PANIC (`matrix-1wm2db1q7lfxr`) | **9/9** | **15/15** (`pinch_zoom` target 10.00 → 7.57) | **3/3** |
 
 vm11 `ability_buttons` FAIL `hotbar mask=00000` was a wrong expectation in the check, not a game bug. A new character
 has no unlocked auxiliary abilities yet, so hotbar slots 1–5 are empty (visible in the video) and correctly no ability buttons show.
 The check now verifies that each ability button is shown exactly when its hotbar slot is filled. d7build4 differs from
 d7build3 only in this check (`android.rs`, test harness); no game code changed.
+
+vm12 `pinch_zoom` FAIL `camera distance 3.56 -> 3.45` was also a harness problem. The pinch fired (touch stats
+zooms=8), but the check read the *drawn* camera distance, which a terrain raycast clamps (`scene/camera.rs`). The player
+stood next to terrain, so the drawn distance stayed clipped at about 3.5 while the zoom target moved. The check now
+judges the zoom target (`Camera::get_tgt_distance()`, probe field `cam_tgt_dist`): pass when the target drops by more than
+0.3. It also prints the drawn distance. d7build5 differs from d7build4 only in this check and the probe getter; no game behaviour changed.
 
 Evidence:
 - [Before (dev.6)](evidence/dev7/before_dev6_buttons.jpg) / [after (dev.7)](evidence/dev7/vm11_new_buttons.jpg) buttons.
@@ -81,9 +87,10 @@ once to the new default (`layout_v7`).
 
 | Item | Value |
 |---|---|
-| Patch | `native/patches/0006-dev7-phone-fixes.patch`, 32 files, +1521/−234, sha256 `8fda214a8eff96a8754a3eb19a3195b0f6baac352c973163ad00c6952ca897ea` |
-| Patch check | applies cleanly on pin `585a91b4` + 0001–0005; result identical to the build tree |
-| APK | `my-veloren-dev7.apk`, 0.1.0-dev.7 (vc70), 466,212,456 bytes, sha256 `423e73c74884119ed56c250e687a70bc07f91838749d4c506e295c7f3f7bf052` |
+| Patch | `native/patches/0006-dev7-phone-fixes.patch`, 33 files, +1539/−236, sha256 `437a8f05c8600ffca3273ac45ee1ac80de6b37c7f46956e1dece9762bd26a076` |
+| Patch check | applies cleanly on pin `585a91b4` + 0001–0005; result identical to the build tree (re-checked for d7build5) |
+| APK (d7build5, final) | `my-veloren-dev7.apk`, 0.1.0-dev.7 (vc70), 466,212,456 bytes, sha256 `89c21e7f426c424b169df28f12a086495bd3e56bb24fcd2238a4d8f1ecda7463` |
+| APK (d7build4, release `v0.1.0-dev.7-rc1`) | same size, sha256 `423e73c74884119ed56c250e687a70bc07f91838749d4c506e295c7f3f7bf052`; differs from d7build5 only in test-harness code |
 | Signing cert SHA-256 | `3620937abf3fc2b00394b5bdf600e59bd48138bdcf3760b22fb12f193c56ef14` (same stable key as dev.6) |
 | Toolchain | Rust nightly-2026-06-13 (edition 2024: `gen` is a reserved word), NDK r27c, build-tools 34, JDK 17 |
 

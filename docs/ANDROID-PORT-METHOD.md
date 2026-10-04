@@ -147,5 +147,7 @@ Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
   and link with `-R`; keep the logo inside the 66/108 safe zone or MIUI's squircle mask crops it.
 - **Check expectations (dev.7):** a fresh Test Lab character has no unlocked auxiliary abilities, so hotbar slots 1–5 are
   empty. Checks must compare the overlay with the game state, not assume content.
+- **Zoom checks (dev.7):** the drawn camera distance is clamped by a terrain raycast, so near a slope a pinch moves the
+  zoom target but not the drawn distance. Judge zoom by `Camera::get_tgt_distance()`, not `get_distance()`.
 - Mobile graphics tiers done in dev.4 (auto Low/Medium by GPU). Physical fps gate pending (Test Lab quota).
 - VM attempt 5 reached the world (Session) and ran 10 min without crash; physical-device confirmation pending quota.

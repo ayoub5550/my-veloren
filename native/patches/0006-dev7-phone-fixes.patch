@@ -246,10 +246,19 @@ index 1134a2586..6bcf25e4d 100644
 +tutorial-touch-OpenGlider = Jump, then tap the glider button (it appears where Jump was) to take to the skies!
 +tutorial-touch-FallDamage = Ouch! Jump, then tap the glider button in the air instead of hurting yourself.
 diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
-index af0f0d822..de8040192 100644
+index af0f0d822..31df1ff95 100644
 --- a/voxygen/src/android.rs
 +++ b/voxygen/src/android.rs
-@@ -1269,6 +1269,50 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
+@@ -609,6 +609,8 @@ pub struct Probe {
+     pub vel: [f32; 3],
+     pub cam_yaw: f32,
+     pub cam_dist: f32,
++    /// Zoom target (the actual distance is clipped by nearby terrain).
++    pub cam_tgt_dist: f32,
+     pub char_state: String,
+     pub gliding: bool,
+     pub glide_wield: bool,
+@@ -1269,6 +1271,50 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
              q.push(Act::Check("map_marker"));
              q.push(Act::EnsureGameInput(3));
          },
@@ -300,7 +309,7 @@ index af0f0d822..de8040192 100644
          8 => {
              // dev.6: the character was created in the creation form with the
              // name from the text dialog (char selection, see menu/char_selection).
-@@ -1382,15 +1426,20 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
+@@ -1382,15 +1428,20 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
              // 3.5 glide: wield glider, jump, glide
              q.push(Act::EnsureAlive(3));
              q.push(Act::Begin("glide"));
@@ -326,8 +335,23 @@ index af0f0d822..de8040192 100644
              // 3.6 menu bar: open + close bag and map
              q.push(Act::EnsureAlive(3));
              tap_at(&mut q, center(Ctl::Bag, gs));
-@@ -1480,6 +1529,95 @@ fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (boo
-             (d < -0.3, format!("camera distance {:.2} -> {:.2}", rec.base.cam_dist, p.cam_dist))
+@@ -1476,10 +1527,108 @@ fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (boo
+             )
+         },
+         "pinch_zoom" => {
+-            let d = p.cam_dist - rec.base.cam_dist;
+-            (d < -0.3, format!("camera distance {:.2} -> {:.2}", rec.base.cam_dist, p.cam_dist))
++            // dev.7: judge the zoom target, not the drawn distance: near a slope or
++            // tree the camera is clipped by terrain (vm12: 3.56 -> 3.45 while the
++            // target moved), which made this check depend on where the player stood.
++            let d = p.cam_tgt_dist - rec.base.cam_tgt_dist;
++            (
++                d < -0.3,
++                format!(
++                    "zoom target {:.2} -> {:.2} (drawn {:.2} -> {:.2})",
++                    rec.base.cam_tgt_dist, p.cam_tgt_dist, rec.base.cam_dist, p.cam_dist
++                ),
++            )
          },
          "buttons" => (true, format!("no crash; character states seen {:?}", rec.states)),
 +        "layout_fits" => {
@@ -422,7 +446,7 @@ index af0f0d822..de8040192 100644
          "glide" => (
              rec.glide_wield || rec.gliding,
              format!("glider_wielded={} gliding={}", rec.glide_wield, rec.gliding),
-@@ -1530,8 +1668,8 @@ fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (boo
+@@ -1530,8 +1679,8 @@ fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (boo
              (ok, format!("loaded jump={j:?} expected={expect:?}"))
          },
          "layout_reset" => {
@@ -1480,8 +1504,23 @@ index 13e55f706..c3e8c3a12 100644
  
  /// First-launch tier for a GPU (4.3), see `mobile_gpu.rs`.
  pub fn tier_for_gpu(name: &str) -> Tier {
+diff --git a/voxygen/src/scene/camera.rs b/voxygen/src/scene/camera.rs
+index 9cd01f33f..a0c686538 100644
+--- a/voxygen/src/scene/camera.rs
++++ b/voxygen/src/scene/camera.rs
+@@ -574,6 +574,10 @@ impl Camera {
+     /// Get the distance of the camera from the focus
+     pub fn get_distance(&self) -> f32 { self.dist }
+ 
++    /// Zoom target distance (before terrain clipping and lerp); used by the
++    /// Android Test Lab pinch check.
++    pub fn get_tgt_distance(&self) -> f32 { self.tgt_dist }
++
+     /// Set the distance of the camera from the focus (i.e., zoom).
+     pub fn set_distance(&mut self, dist: f32) { self.tgt_dist = dist; }
+ 
 diff --git a/voxygen/src/session/mod.rs b/voxygen/src/session/mod.rs
-index e056f959b..06e80ed02 100644
+index e056f959b..16e4951fb 100644
 --- a/voxygen/src/session/mod.rs
 +++ b/voxygen/src/session/mod.rs
 @@ -149,6 +149,17 @@ impl SessionState {
@@ -1502,7 +1541,15 @@ index e056f959b..06e80ed02 100644
          };
          crate::touch::set_context(ctx);
          crate::touch::set_typing(self.hud.touch_typing());
-@@ -1778,6 +1789,20 @@ impl PlayState for SessionState {
+@@ -230,6 +241,7 @@ impl SessionState {
+                 vel: vels.get(me).map(|v| v.0.into_array()).unwrap_or_default(),
+                 cam_yaw: cam.get_orientation().x,
+                 cam_dist: cam.get_distance(),
++                cam_tgt_dist: cam.get_tgt_distance(),
+                 char_state: char_states
+                     .get(me)
+                     .map(|c| c.to_string())
+@@ -1778,6 +1790,20 @@ impl PlayState for SessionState {
                  .process(global_state, self);
              }
  
