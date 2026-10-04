@@ -9,6 +9,9 @@
 # 7 = dev.6 touch UI: UI scale, chat via the Android text dialog (Arabic), bag long-press/double-tap,
 #     two-finger scroll (crafting), map pinch zoom + long-press marker.
 # 8 = dev.6 character creation form with the name from the text dialog (run FIRST on a fresh install: 8,7,1).
+# 9 = dev.7 phone fixes: layout fits without overlap, ability buttons follow the hotbar, AThermal API + cool-down steps,
+#     floating stick (full/follow/stop), Glide shown in Jump's place while airborne. Run 9,1,2.
+# Spark quota: ~10 virtual-device tests/day as well; a rejected matrix ends with TEST_QUOTA_EXCEEDED.
 # Results: grep 'VEL-CHECK\|VEL-SCENARIO' in <OUT>/<device>/logcat.
 # Project ayoub-261d7 (Spark: ~5 physical tests/day). Never enable billing; never cancel a running matrix.
 # Needs a service-account key (FIREBASE_SA_JSON, never committed). Run as a background job (~15 min with upload).
