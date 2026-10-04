@@ -10,6 +10,11 @@
 > (dev.3 touch controls → dev.9 distribution) are in [docs/ROADMAP.md](docs/ROADMAP.md); each needs an
 > owner instruction «نفّذ dev.N». The old Unity roadmap is `docs/ROADMAP-UNITY-ARCHIVED.md`.
 >
+> **2026-10-03:** dev.6 authorized («اجلها وابدأ dev.6», physical runs postponed): branch `feat/dev6-touch-ui`
+> stacked on dev.5, patch 0005 (window gestures, Android text dialog for chat + character name via RegisterNatives,
+> DPI UI scale, Arabic shaping/bidi in `ui/rtl.rs`). APKs are signed with one stable key from `ANDROID_KEYSTORE`
+> (outside the repo). See [docs/DEV6.md](docs/DEV6.md). Not merged without owner approval.
+>
 > **2026-10-03:** dev.5 authorized («ابدأ dev5»): branch `feat/dev5-lifecycle`, patch 0004 (lifecycle, autosave,
 > Back, assets-once, crash reports, + 5.6 terrain occlusion culling approved by the owner). VM: sc. 4 8/8, sc. 5 6/6.
 > Physical runs pending quota. See [docs/DEV5.md](docs/DEV5.md). Not merged without owner approval.

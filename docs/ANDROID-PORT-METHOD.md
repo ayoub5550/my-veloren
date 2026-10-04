@@ -130,5 +130,17 @@ Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
 - **Occlusion culling (dev.5):** Veloren terrain chunks are full-height 32×32 columns, so a 2.5-D test is enough:
   store a coarse ground-height grid per chunk at mesh time, then march a cone from the camera to each chunk top.
   Ignore trees/houses as occluders, disable underground, keep shadows on the frustum result. Judge the gain on a real GPU only.
+- **Text input (dev.6):** a `NativeActivity` app never calls `System.loadLibrary`, so a Java `native` method is not
+  found by name. Register it with `RegisterNatives` from the Rust JNI thread. Use a Java `AlertDialog` + `EditText`
+  (full Android keyboard, any script) instead of the soft keyboard over the GL surface. Upstream chat stays focused
+  after Enter; on touch, release it (Escape) after sending, or the HUD ignores every button.
+- **Gesture tests at low fps (dev.6):** on the VM (~6 fps) a scripted tap can fall inside one frame; give acts that
+  need both touches (double-tap, two-finger) a single frame for all their events.
+- **One signing key (dev.6):** every worktree generated its own debug keystore, so each build had a new signature and
+  could not update the previous one (uninstall = lost saves). Sign with one key kept outside the repo (`ANDROID_KEYSTORE`).
+- **Host harness (dev.6):** a desktop build of the same patched tree under Xvfb + lavapipe gives UI screenshots
+  (fonts, Arabic, scale) without spending Test Lab quota.
+- **RTL text:** conrod/iced do no shaping or bidi. Shape Arabic to presentation forms and reorder per laid-out line;
+  check that the font has the presentation forms (GoNotoCurrent does, OpenSans/haxrcorp do not).
 - Mobile graphics tiers done in dev.4 (auto Low/Medium by GPU). Physical fps gate pending (Test Lab quota).
 - VM attempt 5 reached the world (Session) and ran 10 min without crash; physical-device confirmation pending quota.

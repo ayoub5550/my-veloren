@@ -1,13 +1,13 @@
 #!/bin/bash
 # Build the native Veloren Android APK (dev2+, ADR-002).
-# Usage: native/build_android.sh [VELOREN_SRC=/work/native/veloren] [APK_NAME=my-veloren-dev5.apk]
-# Output: native/out/$APK_NAME. Patches 0001..0004 must already be applied to VELOREN_SRC.
+# Usage: native/build_android.sh [VELOREN_SRC=/work/native/veloren] [APK_NAME=my-veloren-dev6.apk]
+# Output: native/out/$APK_NAME. Patches 0001..0005 must already be applied to VELOREN_SRC.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 SRC=${VELOREN_SRC:-/work/native/veloren}
 source /work/native/env.sh
 SDK=${ANDROID_SDK:-/work/native/android-sdk}
-APK_NAME=${APK_NAME:-my-veloren-dev5.apk}
+APK_NAME=${APK_NAME:-my-veloren-dev6.apk}
 BT=$SDK/build-tools/34.0.0
 JAR=$SDK/platforms/android-34/android.jar
 export JAVA_HOME=${JAVA_HOME:-/work/native/jdk}
@@ -32,7 +32,9 @@ cp "$OUT/dex/classes.dex" "$STAGE/classes.dex"
 "$BT/aapt2" link -o "$OUT/base.apk" --manifest "$HERE/android/AndroidManifest.xml" -I "$JAR" -A "$STAGE/assets" -0 tar
 python3 -c "import zipfile,os,sys;z=zipfile.ZipFile(sys.argv[1],'a',zipfile.ZIP_DEFLATED,compresslevel=6);[z.write(os.path.join(r,f),os.path.relpath(os.path.join(r,f),sys.argv[2])) for r,_,fs in os.walk(os.path.join(sys.argv[2],'lib')) for f in fs];z.write(os.path.join(sys.argv[2],'classes.dex'),'classes.dex');z.close()" "$OUT/base.apk" "$STAGE"
 "$BT/zipalign" -f -p 16 "$OUT/base.apk" "$OUT/aligned.apk"
-KS=$OUT/debug.keystore
+# dev.6: one signing key for every build (ANDROID_KEYSTORE, kept outside the repo), so a new
+# APK installs over the old one and keeps the saves. Without it, a per-checkout debug key is made.
+KS=${ANDROID_KEYSTORE:-$OUT/debug.keystore}
 [ -f "$KS" ] || keytool -genkeypair -keystore "$KS" -storepass android -keypass android -alias androiddebugkey \
    -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US" >/dev/null 2>&1
 "$BT/apksigner" sign --ks "$KS" --ks-pass pass:android --key-pass pass:android --out "$OUT/$APK_NAME" "$OUT/aligned.apk"

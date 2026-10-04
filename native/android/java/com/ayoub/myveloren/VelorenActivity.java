@@ -19,6 +19,13 @@ import android.view.View;
 import android.view.WindowManager;
 import android.view.inputmethod.BaseInputConnection;
 import android.os.SystemClock;
+import android.content.DialogInterface;
+import android.os.Handler;
+import android.os.Looper;
+import android.text.InputType;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
+import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -308,6 +315,115 @@ public class VelorenActivity extends NativeActivity {
                     Log.i(TAG, "sendBack: KEYCODE_BACK queued via window input pipeline");
                 } catch (Exception e) {
                     Log.w(TAG, "sendBack: " + e);
+                }
+            }
+        });
+    }
+
+    // ---------------------------------------------------------- dev.6 text input (6.4) ---
+
+    /** Registered from Rust with RegisterNatives (see android.rs native_text). */
+    private static native void nativeText(String text, boolean ok);
+
+    private AlertDialog textDialog;
+
+    /**
+     * Called from Rust when a game text field gets the focus (chat, search, character
+     * name). Shows a dialog with a real EditText, so the system keyboard works with every
+     * language (Arabic included), autocorrect and voice input. OK sends the whole text to
+     * Rust, which types it into the focused field and presses Enter.
+     * autoText (Test Lab only): type it and press OK after 1.5 s, so the video shows it.
+     */
+    public void showTextInput(final String title, final String initial, final String autoText) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    if (textDialog != null && textDialog.isShowing()) return;
+                    final EditText edit = new EditText(VelorenActivity.this);
+                    edit.setSingleLine(true);
+                    edit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_AUTO_CORRECT);
+                    edit.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_FULLSCREEN);
+                    edit.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
+                    if (initial != null) {
+                        edit.setText(initial);
+                        edit.setSelection(edit.getText().length());
+                    }
+                    final boolean[] sent = new boolean[] { false };
+                    AlertDialog.Builder b = new AlertDialog.Builder(VelorenActivity.this)
+                        .setTitle(title)
+                        .setView(edit)
+                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface d, int w) {
+                                if (!sent[0]) {
+                                    sent[0] = true;
+                                    nativeText(edit.getText().toString(), true);
+                                }
+                            }
+                        })
+                        .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                            @Override
+                            public void onClick(DialogInterface d, int w) {
+                                if (!sent[0]) {
+                                    sent[0] = true;
+                                    nativeText(null, false);
+                                }
+                            }
+                        })
+                        .setOnCancelListener(new DialogInterface.OnCancelListener() {
+                            @Override
+                            public void onCancel(DialogInterface d) {
+                                if (!sent[0]) {
+                                    sent[0] = true;
+                                    nativeText(null, false);
+                                }
+                            }
+                        });
+                    textDialog = b.create();
+                    edit.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+                        @Override
+                        public boolean onEditorAction(TextView v, int actionId, KeyEvent ev) {
+                            if (actionId == EditorInfo.IME_ACTION_DONE && !sent[0]) {
+                                sent[0] = true;
+                                nativeText(edit.getText().toString(), true);
+                                textDialog.dismiss();
+                                return true;
+                            }
+                            return false;
+                        }
+                    });
+                    textDialog.getWindow().setSoftInputMode(
+                        WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
+                    textDialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
+                        @Override
+                        public void onDismiss(DialogInterface d) {
+                            hideSystemBars();
+                        }
+                    });
+                    textDialog.show();
+                    edit.requestFocus();
+                    Log.i(TAG, "VEL-TEXT dialog shown: " + title);
+                    if (autoText != null) {
+                        new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                edit.setText(autoText);
+                                new Handler(Looper.getMainLooper()).postDelayed(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        if (textDialog != null && textDialog.isShowing()) {
+                                            textDialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick();
+                                            Log.i(TAG, "VEL-TEXT auto text submitted");
+                                        }
+                                    }
+                                }, 1200);
+                            }
+                        }, 1500);
+                    }
+                } catch (Exception e) {
+                    Log.w(TAG, "showTextInput: " + e);
+                    nativeText(null, false);
                 }
             }
         });
