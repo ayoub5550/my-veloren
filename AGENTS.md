@@ -15,6 +15,13 @@
 > floating stick, touch-only Controls tab, Singleplayer-only main menu, adaptive launcher icon). See [docs/DEV7.md](docs/DEV7.md).
 > Not merged without owner approval.
 >
+> **2026-10-04 (dev.9):** owner merged dev.7 + dev.8 (PR #8, #9) and started dev.9 (14:59 UTC); 15:10 UTC: add multiplayer on the
+> official Veloren servers if possible (it is). Branch `feat/dev9-input`, patch 0008 + vendored winit 0.30.13 with an Android
+> input hook (`native/tools/vendor_winit.sh`): gamepad, Bluetooth keyboard/mouse, phone login panel, TLS CA fix; scenarios 12/13.
+> The owner's veloren.net test account lives only outside the repo (`FTL_MP_ACCOUNT`). Never drive a real account with
+> `chat_cli` from a closable stdin: at EOF it sends empty chat lines and the server mutes the account. See [docs/DEV9.md](docs/DEV9.md).
+> Not merged without owner approval.
+>
 > **2026-10-04 (dev.8):** owner «ابدأ dev.8» (13:01 UTC) with a Firebase key; VM-only automated testing to save quota.
 > Branch `feat/dev8-content` stacked on the unmerged dev.7 (PR #8), patch 0007 (content audit scenario 10, worlds/chars/saves
 > scenario 11, ready-made worlds in `native/assets-extra`, export/import). Owner: no prerelease for dev.8. New signing key

@@ -342,6 +342,12 @@ public class VelorenActivity extends NativeActivity {
      * autoText (Test Lab only): type it and press OK after 1.5 s, so the video shows it.
      */
     public void showTextInput(final String title, final String initial, final String autoText) {
+        showTextInput(title, initial, autoText, false);
+    }
+
+    /** dev.9: password = true hides the typed text (multiplayer account password). */
+    public void showTextInput(final String title, final String initial, final String autoText,
+                              final boolean password) {
         runOnUiThread(new Runnable() {
             @Override
             public void run() {
@@ -349,7 +355,14 @@ public class VelorenActivity extends NativeActivity {
                     if (textDialog != null && textDialog.isShowing()) return;
                     final EditText edit = new EditText(VelorenActivity.this);
                     edit.setSingleLine(true);
-                    edit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_AUTO_CORRECT);
+                    if (password) {
+                        edit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+                    } else if (title != null && (title.startsWith("Username") || title.startsWith("Server"))) {
+                        edit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                            | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
+                    } else {
+                        edit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_AUTO_CORRECT);
+                    }
                     edit.setImeOptions(EditorInfo.IME_ACTION_DONE | EditorInfo.IME_FLAG_NO_FULLSCREEN);
                     edit.setTextDirection(View.TEXT_DIRECTION_FIRST_STRONG);
                     if (initial != null) {
@@ -434,6 +447,164 @@ public class VelorenActivity extends NativeActivity {
                 }
             }
         });
+    }
+
+    // ------------------------------------------------- dev.9 gamepad / keyboard / mouse ---
+
+    /**
+     * Mouse look: while the game holds the cursor, capture the pointer (hidden, relative
+     * motion, no screen edges). Captured events still go through the NativeActivity input
+     * queue, so Rust sees them as SOURCE_MOUSE_RELATIVE motion events.
+     */
+    public void pointerCapture(final boolean on) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    View v = getWindow().getDecorView();
+                    if (on) {
+                        v.setFocusable(true);
+                        v.setFocusableInTouchMode(true);
+                        v.requestFocus();
+                        v.requestPointerCapture();
+                    } else {
+                        v.releasePointerCapture();
+                    }
+                    Log.i(TAG, "VEL-INPUT pointer capture " + (on ? "requested" : "released")
+                        + " hasCapture=" + v.hasPointerCapture());
+                } catch (Exception e) {
+                    Log.w(TAG, "pointerCapture: " + e);
+                }
+            }
+        });
+    }
+
+    /** Open a web page (account registration for the official servers). */
+    public void openUrl(final String url) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+                } catch (Exception e) {
+                    Log.w(TAG, "openUrl: " + e);
+                    toast(url);
+                }
+            }
+        });
+    }
+
+    private static java.lang.reflect.Method dispatchInput;
+    private static Object dispatchTarget;
+    private static boolean dispatchBlocked;
+
+    /**
+     * Test (scenario 12): feed an input event through this window's own input pipeline
+     * (ViewRootImpl input stages -> the NativeActivity InputQueue -> android-activity ->
+     * winit hook -> Rust), like a real Bluetooth device except for the system
+     * InputDispatcher hop. Instrumentation needs INJECT_EVENTS. The ViewRootImpl entry
+     * points are hidden APIs; when Android blocks all of them, keys still go through the
+     * IME path (BaseInputConnection) and the Rust harness feeds motion values directly
+     * to the hook handlers (it detects that a probe event never arrived).
+     */
+    private void inject(final android.view.InputEvent ev) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                if (dispatchInput == null && !dispatchBlocked) {
+                    Object root = getWindow().getDecorView().getParent();
+                    Object[][] tries = {
+                        { root, "dispatchInputEvent" },
+                        { root, "enqueueInputEvent" },
+                        { getWindow(), "injectInputEvent" },
+                    };
+                    StringBuilder why = new StringBuilder();
+                    for (Object[] t : tries) {
+                        Class<?> c = t[0].getClass();
+                        while (c != null && dispatchInput == null) {
+                            try {
+                                java.lang.reflect.Method m = c.getDeclaredMethod((String) t[1], android.view.InputEvent.class);
+                                m.setAccessible(true);
+                                dispatchInput = m;
+                                dispatchTarget = t[0];
+                                Log.i(TAG, "VEL-INPUT inject via " + c.getName() + "." + t[1]);
+                            } catch (Throwable e) {
+                                c = c.getSuperclass();
+                            }
+                        }
+                        if (dispatchInput != null) break;
+                        why.append(t[0].getClass().getSimpleName()).append('.').append(t[1]).append(" hidden; ");
+                    }
+                    if (dispatchInput == null) {
+                        dispatchBlocked = true;
+                        Log.w(TAG, "VEL-INPUT window injection blocked (" + why + "); keys use the IME path");
+                    }
+                }
+                if (dispatchInput != null) {
+                    try {
+                        dispatchInput.invoke(dispatchTarget, ev);
+                        return;
+                    } catch (Throwable e) {
+                        Log.w(TAG, "VEL-INPUT inject failed: " + e);
+                    }
+                }
+                if (ev instanceof KeyEvent) {
+                    // fallback: the IME path (keeps the source)
+                    new BaseInputConnection(getWindow().getDecorView(), false).sendKeyEvent((KeyEvent) ev);
+                }
+            }
+        });
+    }
+
+    /** flags: KeyEvent.FLAG_* (the harness retries with FLAG_KEEP_TOUCH_MODE, see android.rs). */
+    public void injectKey(int source, int code, boolean down, int flags) {
+        long t = SystemClock.uptimeMillis();
+        if (code >= KeyEvent.KEYCODE_DPAD_UP && code <= KeyEvent.KEYCODE_DPAD_RIGHT && down) {
+            Log.i(TAG, "VEL-INPUT inject nav key " + code + " windowTouchMode="
+                + getWindow().getDecorView().isInTouchMode() + " flags=" + flags);
+        }
+        inject(new KeyEvent(t, t, down ? KeyEvent.ACTION_DOWN : KeyEvent.ACTION_UP, code, 0, 0,
+            -1, 0, flags, source));
+    }
+
+    /** lx, ly, rx, ry (Z / RZ), left / right trigger, hat x / y. */
+    public void injectJoystick(float lx, float ly, float rx, float ry, float lt, float rt, float hx, float hy) {
+        long t = SystemClock.uptimeMillis();
+        android.view.MotionEvent.PointerProperties[] pp = { new android.view.MotionEvent.PointerProperties() };
+        pp[0].id = 0;
+        pp[0].toolType = android.view.MotionEvent.TOOL_TYPE_UNKNOWN;
+        android.view.MotionEvent.PointerCoords[] pc = { new android.view.MotionEvent.PointerCoords() };
+        pc[0].setAxisValue(android.view.MotionEvent.AXIS_X, lx);
+        pc[0].setAxisValue(android.view.MotionEvent.AXIS_Y, ly);
+        pc[0].setAxisValue(android.view.MotionEvent.AXIS_Z, rx);
+        pc[0].setAxisValue(android.view.MotionEvent.AXIS_RZ, ry);
+        pc[0].setAxisValue(android.view.MotionEvent.AXIS_LTRIGGER, lt);
+        pc[0].setAxisValue(android.view.MotionEvent.AXIS_RTRIGGER, rt);
+        pc[0].setAxisValue(android.view.MotionEvent.AXIS_HAT_X, hx);
+        pc[0].setAxisValue(android.view.MotionEvent.AXIS_HAT_Y, hy);
+        inject(android.view.MotionEvent.obtain(t, t, android.view.MotionEvent.ACTION_MOVE, 1, pp, pc,
+            0, 0, 1f, 1f, -1, 0, android.view.InputDevice.SOURCE_JOYSTICK, 0));
+    }
+
+    /** A mouse event at (x, y) px: action = MotionEvent.ACTION_*, buttons = button state. */
+    public void injectMouse(int action, float x, float y, int buttons, float vscroll) {
+        long t = SystemClock.uptimeMillis();
+        android.view.MotionEvent.PointerProperties[] pp = { new android.view.MotionEvent.PointerProperties() };
+        pp[0].id = 0;
+        pp[0].toolType = android.view.MotionEvent.TOOL_TYPE_MOUSE;
+        android.view.MotionEvent.PointerCoords[] pc = { new android.view.MotionEvent.PointerCoords() };
+        pc[0].x = x;
+        pc[0].y = y;
+        pc[0].setAxisValue(android.view.MotionEvent.AXIS_VSCROLL, vscroll);
+        android.view.MotionEvent ev = android.view.MotionEvent.obtain(t, t, action, 1, pp, pc,
+            0, buttons, 1f, 1f, -1, 0, android.view.InputDevice.SOURCE_MOUSE, 0);
+        if (action == android.view.MotionEvent.ACTION_BUTTON_PRESS || action == android.view.MotionEvent.ACTION_BUTTON_RELEASE) {
+            try {
+                android.view.MotionEvent.class.getMethod("setActionButton", int.class).invoke(ev, buttons == 0 ? 1 : buttons);
+            } catch (Throwable ignored) {
+            }
+        }
+        inject(ev);
     }
 
     // ------------------------------------------------------------------- dev.3 calls ---

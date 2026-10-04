@@ -1,0 +1,46 @@
+diff -ruN winit-orig/src/platform/android.rs b/src/platform/android.rs
+--- a/src/platform/android.rs
++++ b/src/platform/android.rs
+@@ -75,6 +75,13 @@
+ 
+ use self::activity::{AndroidApp, ConfigurationRef, Rect};
+ 
++/// my-veloren (dev.9): install a hook that sees every Android input event before
++/// winit maps it. Return `true` to consume the event (winit then emits nothing for
++/// it). Can be set once; later calls are ignored and return `false`.
++pub fn set_input_hook(hook: fn(&activity::input::InputEvent<'_>) -> bool) -> bool {
++    crate::platform_impl::INPUT_HOOK.set(hook).is_ok()
++}
++
+ /// Additional methods on [`EventLoop`] that are specific to Android.
+ pub trait EventLoopExtAndroid {
+     /// Get the [`AndroidApp`] which was used to create this event loop.
+diff -ruN winit-orig/src/platform_impl/android/mod.rs b/src/platform_impl/android/mod.rs
+--- a/src/platform_impl/android/mod.rs
++++ b/src/platform_impl/android/mod.rs
+@@ -131,6 +131,10 @@
+ #[derive(Debug, Clone, Eq, PartialEq, Hash)]
+ pub struct KeyEventExtra {}
+ 
++/// my-veloren (dev.9): see `winit::platform::android::set_input_hook`.
++pub(crate) static INPUT_HOOK: std::sync::OnceLock<fn(&InputEvent<'_>) -> bool> =
++    std::sync::OnceLock::new();
++
+ pub struct EventLoop<T: 'static> {
+     pub(crate) android_app: AndroidApp,
+     window_target: event_loop::ActiveEventLoop,
+@@ -372,6 +376,14 @@
+         F: FnMut(event::Event<T>, &RootAEL),
+     {
+         let mut input_status = InputStatus::Handled;
++        // my-veloren (dev.9): an application hook sees every input event first.
++        // Returning `true` marks the event handled and skips winit's own mapping
++        // (used for gamepads, joysticks and mice, which winit reports as touches).
++        if let Some(hook) = INPUT_HOOK.get() {
++            if hook(event) {
++                return InputStatus::Handled;
++            }
++        }
+         match event {
+             InputEvent::MotionEvent(motion_event) => {
+                 let window_id = window::WindowId(WindowId);
