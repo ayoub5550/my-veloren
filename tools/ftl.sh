@@ -15,6 +15,11 @@
 #      hunting, collar taming, riding, gliding, boat/airship). Uses /buff invulnerability + /site teleports. FTL_TIMEOUT=60m.
 # 11 = dev.8 worlds/characters/saves: add the ready-made 'Small land', export (tar → Download) + import, second character.
 #      Run 11,10,1 on a fresh install.
+# 12 = dev.9 gamepad (sticks, triggers, A/B/Start, d-pad), Bluetooth keyboard (W, Space, I) and mouse (look, click,
+#      wheel) through the window's input pipeline; touch overlay hides / comes back.
+# 13 = dev.9 multiplayer on the official server. FTL_MP_ACCOUNT=<file with username, password[, server] lines>
+#      pushes the test account to the app's external files folder (never commit it). Without it the run logs in with
+#      a non-existent account and passes when the server + auth server answer. Run 12,13,1.
 # Spark quota: ~10 virtual-device tests/day as well; a rejected matrix ends with TEST_QUOTA_EXCEEDED.
 # Results: grep 'VEL-CHECK\|VEL-SCENARIO' in <OUT>/<device>/logcat.
 # Project ayoub-261d7 (Spark: ~5 physical tests/day). Never enable billing; never cancel a running matrix.
@@ -28,6 +33,7 @@ sha256sum "$APK" > "$OUT/apk.sha256"; wc -c < "$APK" > "$OUT/apk.bytes"
 [ -n "${FIREBASE_SA_JSON:-}" ] && "$GCLOUD" auth activate-service-account --key-file="$FIREBASE_SA_JSON" >/dev/null 2>&1
 "$GCLOUD" firebase test android run --project "$PROJECT" --type game-loop --app "$APK" \
   --device "model=$MODEL,version=$VER,locale=en,orientation=landscape" --timeout "${FTL_TIMEOUT:-10m}" ${FTL_SCENARIOS:+--scenario-numbers "$FTL_SCENARIOS"} \
+  ${FTL_MP_ACCOUNT:+--other-files "/sdcard/Android/data/com.ayoub.myveloren/files/mp_account.txt=$FTL_MP_ACCOUNT"} \
   --results-history-name my-veloren --format=json >"$OUT/result.json" 2>"$OUT/run.err"
 echo $? > "$OUT/gcloud.exit"
 cat "$OUT/result.json"

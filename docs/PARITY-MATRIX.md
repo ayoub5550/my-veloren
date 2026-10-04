@@ -3,7 +3,7 @@
 **dev3 status (2026-10-03, native port):** Camera/movement (touch stick/camera/pinch/glide) and
 UI touch (menu bar, context buttons, layout editor) are **IMPLEMENTED for touch** with Test Lab evidence:
 [DEV3.md](DEV3.md). Under the native port (ADR-002), gameplay rows run the upstream code as-is;
-Android-specific gaps are performance (dev4: mobile tiers done, physical 30 fps gate NOT RUN, see [DEV4](DEV4.md)) and lifecycle (dev5: pause/resume, autosave, Back, crash report PASS on VM, see [DEV5](DEV5.md)) and touch UI (dev6: window gestures, Android keyboard for chat/name, DPI UI scale, Arabic display: 7/7 + 1/1 PASS on VM, physical NOT RUN; see [DEV6](DEV6.md)) and the owner's phone fixes (dev7: phone-safe Ultra + thermal guard, icon buttons without overlap, floating stick, touch-only controls settings, new launcher icon: VM 9/9 + 15/15 + 3/3, 0 PANIC (vm13), owner's Poco F3 is the physical gate; see [DEV7](DEV7.md)) and the content audit (dev8: per-feature table below, see [DEV8](DEV8.md)).
+Android-specific gaps are performance (dev4: mobile tiers done, physical 30 fps gate NOT RUN, see [DEV4](DEV4.md)) and lifecycle (dev5: pause/resume, autosave, Back, crash report PASS on VM, see [DEV5](DEV5.md)) and touch UI (dev6: window gestures, Android keyboard for chat/name, DPI UI scale, Arabic display: 7/7 + 1/1 PASS on VM, physical NOT RUN; see [DEV6](DEV6.md)) and the owner's phone fixes (dev7: phone-safe Ultra + thermal guard, icon buttons without overlap, floating stick, touch-only controls settings, new launcher icon: VM 9/9 + 15/15 + 3/3, 0 PANIC (vm13), owner's Poco F3 is the physical gate; see [DEV7](DEV7.md)) and the content audit (dev8: per-feature table below, see [DEV8](DEV8.md)) and accessories + multiplayer (dev9: gamepad, Bluetooth keyboard and mouse VM PASS through the window input pipeline; login, character creation and walking on the Official Veloren Server PASS with the owner's account; real Bluetooth devices NOT RUN; see [DEV9](DEV9.md)).
 
 **dev1 status (2026-10-03, archived Unity slice):** Voxel geometry, Character creation, Equipment visuals, Procedural
 animation, Camera/movement, World generation/rendering and Android robustness are **STARTED**
@@ -61,11 +61,16 @@ receipt, owner's phone check needed. The physical gate for every row is the owne
 | Several worlds + ready-made worlds | PASS | `pregen_world_added`, `world_small` 128×128 |
 | Several characters | PASS | `two_characters`, `second_character` |
 | Save export / import | PASS | tar → `Download/`, import adds a world without overwriting |
+| (dev9) Gamepad: walk, camera, jump, attack, Esc, Back | PASS (VM, injected) | see [DEV9](DEV9.md); a real Bluetooth pad is NOT RUN |
+| (dev9) Bluetooth keyboard: WASD, Space, I, Esc | PASS (VM, injected) | Arabic-layout remap NOT RUN |
+| (dev9) Bluetooth mouse: look, click, wheel | PASS (VM, injected) | real MotionEvents, pointer capture granted |
+| (dev9) Multiplayer, official server | PASS | owner's account: rules, character «Ayoub», in world with 24 players, walked 5 m |
 
 ## Explicit exclusions or separate decisions
 
-- Online multiplayer, public matchmaking, public accounts and remote economy: excluded from
-  the offline product; do not replace local AI/simulation with empty stubs.
+- Online multiplayer: **the owner authorized the official Veloren servers on 2026-10-04 (dev.9)**, optional and
+  next to the offline singleplayer, using free veloren.net accounts. Own matchmaking, LAN hosting and remote economy stay
+  excluded; do not replace local AI/simulation with empty stubs.
 - Original Rust save import: separate optional converter, not implied by new local saves.
 - Original-world/physics/combat bit-for-bit equivalence: unproven; require comparison tests.
 - Selling, rebranding or store submission: not authorized by this roadmap request.

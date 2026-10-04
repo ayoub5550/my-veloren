@@ -1,18 +1,21 @@
 #!/bin/bash
 # Build the native Veloren Android APK (dev2+, ADR-002).
-# Usage: native/build_android.sh [VELOREN_SRC=/work/native/veloren] [APK_NAME=my-veloren-dev8.apk]
-# Output: native/out/$APK_NAME. Patches 0001..0007 must already be applied to VELOREN_SRC.
+# Usage: native/build_android.sh [VELOREN_SRC=/work/native/veloren] [APK_NAME=my-veloren-dev9.apk]
+# Output: native/out/$APK_NAME. Patches 0001..0008 must already be applied to VELOREN_SRC, and
+# native/tools/vendor_winit.sh must have created VELOREN_SRC/third_party/winit-0.30.13 (dev.9).
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 SRC=${VELOREN_SRC:-/work/native/veloren}
 source /work/native/env.sh
 SDK=${ANDROID_SDK:-/work/native/android-sdk}
-APK_NAME=${APK_NAME:-my-veloren-dev8.apk}
+APK_NAME=${APK_NAME:-my-veloren-dev9.apk}
 BT=$SDK/build-tools/34.0.0
 JAR=$SDK/platforms/android-34/android.jar
 export JAVA_HOME=${JAVA_HOME:-/work/native/jdk}
 export PATH=$JAVA_HOME/bin:$PATH
 OUT=$HERE/out; STAGE=$OUT/stage; rm -rf "$STAGE"; mkdir -p "$STAGE/lib/arm64-v8a" "$STAGE/assets"
+# dev.9: winit with the Android input hook (gamepad / joystick / mouse), see tools/vendor_winit.sh
+[ -d "$SRC/third_party/winit-0.30.13" ] || "$HERE/tools/vendor_winit.sh" "$SRC"
 if [ "${SKIP_CARGO:-0}" != 1 ]; then
   (cd "$SRC" && cargo build --profile release-thinlto --target aarch64-linux-android -p veloren-voxygen --lib \
      --no-default-features --features singleplayer,simd,shaderc-from-source)

@@ -1,0 +1,1856 @@
+diff --git a/Cargo.toml b/Cargo.toml
+index 4f67d34..5cd21ab 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -241,6 +241,9 @@ specs = { git = "https://github.com/amethyst/specs.git", rev = "4e2da1df29ee840b
+ 
+ # # Uncomment this to use a local fork of winit (for testing purposes)
+ # winit = { path = "../winit" }
++# my-veloren (dev.9): winit 0.30.13 + an Android input hook (gamepad/joystick/mouse).
++# Created by my-veloren native/tools/vendor_winit.sh (crates.io tarball + checksum + patch).
++winit = { path = "third_party/winit-0.30.13" }
+ 
+ # # Uncomment this to use a local fork of wgpu (for testing purposes)
+ # [patch.'https://github.com/gfx-rs/wgpu']
+diff --git a/assets/voxygen/i18n/ar-SA/main.ftl b/assets/voxygen/i18n/ar-SA/main.ftl
+index 1a7099d..47ed987 100644
+--- a/assets/voxygen/i18n/ar-SA/main.ftl
++++ b/assets/voxygen/i18n/ar-SA/main.ftl
+@@ -2,3 +2,6 @@
+ main-singleplayer-ready_world = + { $name } (جاهز)
+ main-singleplayer-export = تصدير الحفظ
+ main-singleplayer-import = استيراد الحفظ
++# my-veloren dev.9: phone multiplayer panel
++main-phone-multiplayer_title = اللعب الجماعي (خوادم Veloren الرسمية)
++main-phone-create_account = إنشاء حساب مجاني
+diff --git a/assets/voxygen/i18n/en/main.ftl b/assets/voxygen/i18n/en/main.ftl
+index 9e5d59a..a1e4340 100644
+--- a/assets/voxygen/i18n/en/main.ftl
++++ b/assets/voxygen/i18n/en/main.ftl
+@@ -50,6 +50,9 @@ main-singleplayer-generate_and_play = Generate & Play
+ main-singleplayer-ready_world = + { $name } (ready)
+ main-singleplayer-export = Export saves
+ main-singleplayer-import = Import saves
++# my-veloren dev.9: phone multiplayer panel
++main-phone-multiplayer_title = Multiplayer (official Veloren servers)
++main-phone-create_account = Create a free account
+ menu-singleplayer-confirm_delete = Are you sure you want to delete "{ $world_name }"?
+ menu-singleplayer-confirm_regenerate = Are you sure you want to regenerate "{ $world_name }"?
+ main-login-server_not_found = Server not found.
+diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
+index e4decd0..29059a1 100644
+--- a/voxygen/src/android.rs
++++ b/voxygen/src/android.rs
+@@ -114,6 +114,8 @@ pub fn build_event_loop() -> crate::window::EventLoop {
+ }
+ 
+ fn new_event_loop() -> crate::window::EventLoop {
++    // dev.9: gamepads, joysticks and mice go through our hook, not winit's touch path
++    crate::android_input::install();
+     winit::event_loop::EventLoop::builder()
+         .with_android_app(app().clone())
+         .build()
+@@ -313,6 +315,18 @@ fn android_main(app: AndroidApp) {
+         std::env::set_var("XDG_DATA_HOME", data.join(".local/share"));
+         std::env::set_var("XDG_CACHE_HOME", data.join(".cache"));
+         std::env::set_var("VOXYGEN_SCREENSHOT", userdata.join("screenshots"));
++        // dev.9 multiplayer: the auth client (hyper-rustls native roots) finds no
++        // CA store on Android; point it at the system store (Android 14+ keeps
++        // the updatable copy in the Conscrypt APEX).
++        if std::env::var_os("SSL_CERT_DIR").is_none() {
++            let dirs: Vec<&str> = ["/apex/com.android.conscrypt/cacerts", "/system/etc/security/cacerts"]
++                .into_iter()
++                .filter(|d| std::fs::read_dir(d).is_ok())
++                .collect();
++            if !dirs.is_empty() {
++                std::env::set_var("SSL_CERT_DIR", dirs.join(":"));
++            }
++        }
+         if autostart {
+             std::env::set_var("VELOREN_ANDROID_AUTOSTART", "1");
+             std::env::set_var("VELOREN_ANDROID_SCENARIO", scenario.to_string());
+@@ -345,7 +359,18 @@ enum JniCall {
+         title: String,
+         initial: String,
+         auto: Option<String>,
++        /// dev.9: hide the typed text (account password)
++        password: bool,
+     },
++    /// dev.9: Android pointer capture on/off (mouse look without screen edges).
++    PointerCapture(bool),
++    /// dev.9: open a web page in the browser (account registration).
++    OpenUrl(String),
++    /// dev.9 test: inject a gamepad key / joystick / mouse event through this
++    /// window's own input pipeline (scenario 12).
++    InjectKey { source: i32, code: i32, down: bool, flags: i32 },
++    InjectJoy([f32; 8]),
++    InjectMouse { action: i32, x: f32, y: f32, buttons: i32, vscroll: f32 },
+     /// dev.8 (8.4): copy a file to the public Downloads folder (MediaStore).
+     ExportFile { path: String, name: String },
+     /// dev.8 (8.4): open the system file picker for a saves file.
+@@ -372,6 +397,15 @@ pub fn pick_import(dest: &std::path::Path) {
+ 
+ pub fn toast(msg: &str) { jni_send(JniCall::Toast(msg.to_owned())); }
+ 
++/// dev.9: Back through the window's input pipeline (gamepad B / Start in menus).
++pub fn send_back() { jni_send(JniCall::SendBack); }
++
++/// dev.9: Android pointer capture for mouse look.
++pub fn pointer_capture(on: bool) { jni_send(JniCall::PointerCapture(on)); }
++
++/// dev.9: open a web page (account registration for the official servers).
++pub fn open_url(url: &str) { jni_send(JniCall::OpenUrl(url.to_owned())); }
++
+ pub fn take_file_result(op: i32) -> Option<(String, bool)> {
+     let mut r = FILE_RESULTS.lock().unwrap();
+     let i = r.iter().position(|x| x.0 == op)?;
+@@ -407,6 +441,10 @@ pub enum TextTarget {
+     /// dev.8: world name / seed in the singleplayer world list (iced).
+     WorldName,
+     WorldSeed,
++    /// dev.9: multiplayer login (official Veloren servers).
++    Username,
++    Password,
++    Server,
+ }
+ 
+ static TEXT_PENDING: Mutex<Option<TextTarget>> = Mutex::new(None);
+@@ -417,6 +455,11 @@ pub static TEXT_DIALOGS: AtomicU64 = AtomicU64::new(0);
+ 
+ /// Open the system text dialog unless one is already open.
+ pub fn request_text(target: TextTarget, title: &str, initial: &str) {
++    request_text_ex(target, title, initial, false)
++}
++
++/// dev.9: like `request_text`, optionally hiding the typed text (password).
++pub fn request_text_ex(target: TextTarget, title: &str, initial: &str, password: bool) {
+     let mut p = TEXT_PENDING.lock().unwrap();
+     if p.is_some() {
+         return;
+@@ -429,6 +472,7 @@ pub fn request_text(target: TextTarget, title: &str, initial: &str) {
+         title: title.to_owned(),
+         initial: initial.to_owned(),
+         auto,
++        password,
+     });
+ }
+ 
+@@ -549,6 +593,98 @@ pub fn alog_check(name: &str, ok: bool, detail: &str) {
+     ainfo!("VEL-CHECK {name} {} {detail}", if ok { "PASS" } else { "FAIL" });
+ }
+ 
++/// Test Lab scenario number (0 outside a game loop).
++pub fn scenario() -> u32 {
++    std::env::var("VELOREN_ANDROID_SCENARIO").ok().and_then(|s| s.parse().ok()).unwrap_or(0)
++}
++
++static MP_HAS_ACCOUNT: AtomicBool = AtomicBool::new(false);
++
++/// dev.9 scenario 13: the test account comes from `mp_account.txt` (username,
++/// password, optional server; one per line), pushed by the test into the app's
++/// external files folder. Without it a non-existent account is used, which
++/// still proves the server and its auth server answer the phone build.
++pub fn mp_test_account() -> (String, String, String) {
++    let mut paths = Vec::new();
++    if let Some(p) = app().external_data_path() {
++        paths.push(p.join("mp_account.txt"));
++    }
++    paths.push(PathBuf::from("/sdcard/Android/data/com.ayoub.myveloren/files/mp_account.txt"));
++    paths.push(PathBuf::from("/data/local/tmp/mp_account.txt"));
++    for p in paths {
++        if let Ok(t) = std::fs::read_to_string(&p) {
++            let mut l = t.lines().map(str::trim);
++            if let (Some(u), Some(pw)) = (l.next(), l.next())
++                && !u.is_empty()
++                && !pw.is_empty()
++            {
++                let server = l.next().filter(|s| !s.is_empty()).unwrap_or("server.veloren.net");
++                ainfo!("mp: test account from {}", p.display());
++                MP_HAS_ACCOUNT.store(true, Ordering::SeqCst);
++                return (u.to_owned(), pw.to_owned(), server.to_owned());
++            }
++        }
++    }
++    ainfo!("mp: no test account file, using a non-existent account");
++    ("myveloren_no_account".into(), "not-a-password".into(), "server.veloren.net".into())
++}
++
++/// Scenario 12 fallback: a MotionEvent action + values -> the hook's mouse handler.
++fn synthetic_mouse(action: i32, x: f32, y: f32, buttons: i32, vscroll: f32) {
++    use crate::android_input::MouseAct as M;
++    let act = match action {
++        0 => M::Down,
++        1 | 11 | 12 => M::Buttons,
++        2 | 7 | 9 => M::Move,
++        3 => M::Cancel,
++        8 => M::Scroll,
++        _ => M::Other,
++    };
++    crate::android_input::mouse_values(act, x, y, buttons as u32, vscroll, 0.0, false);
++}
++
++/// dev.9 scenario 13: the login failed. Without an account the expected answer
++/// is the auth server rejecting the credentials (server + auth reached).
++pub fn mp_login_failed(err: &str) {
++    if !autostart_enabled() || scenario() != 13 {
++        return;
++    }
++    let has = MP_HAS_ACCOUNT.load(Ordering::SeqCst);
++    // PASS only when auth.veloren.net itself rejected the fake account (TLS and
++    // the auth round trip worked); a local error (e.g. no CA store) is a FAIL.
++    let rejected = !err.contains("CertificateLoad")
++        && (err.contains("AuthErr")
++            || err.contains("incorrect")
++            || err.contains("does not exist")
++            || err.contains("InvalidLogin")
++            || err.contains("ServerError(400")
++            || err.contains("ServerError(401")
++            || err.contains("ServerError(403"));
++    let detail: String = err.chars().take(300).collect();
++    if has {
++        alog_check("mp_login", false, &format!("login failed: {detail}"));
++    } else {
++        alog_check(
++            "mp_server_reachable",
++            rejected,
++            &format!("no test account; server + auth.veloren.net answered: {detail}"),
++        );
++    }
++    let ok = !has && rejected;
++    ainfo!(
++        "VEL-SCENARIO 13 DONE pass={} fail={} failed={:?} haptics=0",
++        ok as u32,
++        (!ok) as u32,
++        if ok { vec![] } else if has { vec!["mp_login"] } else { vec!["mp_server_reachable"] }
++    );
++    jni_send(JniCall::FinishLoop);
++    let _ = std::thread::Builder::new().spawn(|| {
++        std::thread::sleep(Duration::from_secs(3));
++        ainfo!("android: game loop scenario finished, exiting process");
++        unsafe { libc::_exit(0) };
++    });
++}
++
+ /// Monotonic seconds for the touch layer (long-press / double-tap).
+ fn clock() -> f64 {
+     static T0: OnceLock<Instant> = OnceLock::new();
+@@ -619,7 +755,7 @@ fn start_jni_thread() {
+                         )])
+                         .map(|_| ()),
+                     JniCall::SendBack => env.call_method(&activity, "sendBack", "()V", &[]).map(|_| ()),
+-                    JniCall::TextInput { title, initial, auto } => (|| {
++                    JniCall::TextInput { title, initial, auto, password } => (|| {
+                         let t = env.new_string(title)?;
+                         let i = env.new_string(initial)?;
+                         let a = match auto {
+@@ -629,11 +765,52 @@ fn start_jni_thread() {
+                         env.call_method(
+                             &activity,
+                             "showTextInput",
+-                            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+-                            &[(&t).into(), (&i).into(), (&a).into()],
++                            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Z)V",
++                            &[(&t).into(), (&i).into(), (&a).into(), jni::objects::JValue::Bool(
++                                password as u8,
++                            )],
+                         )
+                         .map(|_| ())
+                     })(),
++                    JniCall::PointerCapture(on) => env
++                        .call_method(&activity, "pointerCapture", "(Z)V", &[jni::objects::JValue::Bool(
++                            on as u8,
++                        )])
++                        .map(|_| ()),
++                    JniCall::OpenUrl(url) => (|| {
++                        let u = env.new_string(url)?;
++                        env.call_method(&activity, "openUrl", "(Ljava/lang/String;)V", &[(&u).into()])
++                            .map(|_| ())
++                    })(),
++                    JniCall::InjectKey { source, code, down, flags } => env
++                        .call_method(&activity, "injectKey", "(IIZI)V", &[
++                            jni::objects::JValue::Int(source),
++                            jni::objects::JValue::Int(code),
++                            jni::objects::JValue::Bool(down as u8),
++                            jni::objects::JValue::Int(flags),
++                        ])
++                        .map(|_| ()),
++                    JniCall::InjectJoy(a) => env
++                        .call_method(&activity, "injectJoystick", "(FFFFFFFF)V", &[
++                            jni::objects::JValue::Float(a[0]),
++                            jni::objects::JValue::Float(a[1]),
++                            jni::objects::JValue::Float(a[2]),
++                            jni::objects::JValue::Float(a[3]),
++                            jni::objects::JValue::Float(a[4]),
++                            jni::objects::JValue::Float(a[5]),
++                            jni::objects::JValue::Float(a[6]),
++                            jni::objects::JValue::Float(a[7]),
++                        ])
++                        .map(|_| ()),
++                    JniCall::InjectMouse { action, x, y, buttons, vscroll } => env
++                        .call_method(&activity, "injectMouse", "(IFFIF)V", &[
++                            jni::objects::JValue::Int(action),
++                            jni::objects::JValue::Float(x),
++                            jni::objects::JValue::Float(y),
++                            jni::objects::JValue::Int(buttons),
++                            jni::objects::JValue::Float(vscroll),
++                        ])
++                        .map(|_| ()),
+                     JniCall::ExportFile { path, name } => (|| {
+                         let p = env.new_string(path)?;
+                         let n = env.new_string(name)?;
+@@ -712,6 +889,10 @@ pub struct Probe {
+     pub inv_sig: u64,
+     pub marker: Option<[i32; 2]>,
+     pub map_zoom: f64,
++    /// dev.9: players online, server name, local singleplayer server running
++    pub players_online: usize,
++    pub server_name: String,
++    pub singleplayer: bool,
+     pub ctx: touch::Context,
+ }
+ 
+@@ -811,6 +992,9 @@ fn handle_touch(
+     gs: &mut GlobalState,
+     out_events: &mut Vec<Event<()>>,
+ ) {
++    if phase == Phase::Started {
++        crate::android_input::on_touch();
++    }
+     let size = gs.window.window().inner_size();
+     let (w, h) = (size.width.max(1) as f64, size.height.max(1) as f64);
+     let ctx = current_context(state_name, gs);
+@@ -986,6 +1170,49 @@ pub fn translate_touch(
+                 },
+             });
+         },
++        // dev.9: a physical keyboard. Upstream bindings use the logical key, so
++        // the letters of a non-Latin layout (Arabic) are mapped back to the
++        // US letter of the physical key.
++        Event::WindowEvent {
++            window_id,
++            event:
++                WindowEvent::KeyboardInput {
++                    device_id,
++                    mut event,
++                    is_synthetic,
++                },
++        } => {
++            crate::android_input::on_keyboard();
++            if let PhysicalKey::Code(code) = event.physical_key
++                && let Some(us) = crate::android_input::us_letter(code)
++                && let Key::Character(c) = &event.logical_key
++                && c.as_str() != us
++            {
++                crate::android_input::REMAPPED.fetch_add(1, Ordering::Relaxed);
++                event.logical_key = Key::Character(us.into());
++            }
++            // Android's key map reports Space / Tab / Enter as characters, but
++            // the upstream bindings (Jump = Space, ...) use the named keys.
++            if let Key::Character(c) = &event.logical_key {
++                let named = match c.as_str() {
++                    " " => Some(winit::keyboard::NamedKey::Space),
++                    "\t" => Some(winit::keyboard::NamedKey::Tab),
++                    "\n" | "\r" => Some(winit::keyboard::NamedKey::Enter),
++                    _ => None,
++                };
++                if let Some(n) = named {
++                    event.logical_key = Key::Named(n);
++                }
++            }
++            out.push(Event::WindowEvent {
++                window_id,
++                event: WindowEvent::KeyboardInput {
++                    device_id,
++                    event,
++                    is_synthetic,
++                },
++            });
++        },
+         Event::AboutToWait => {
+             let t_hook = std::time::Instant::now();
+             frame(state_name, gs, &mut out);
+@@ -1014,6 +1241,7 @@ fn frame(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut Vec<E
+         o
+     });
+     apply_outs(outs, gs, out);
++    crate::android_input::frame(gs, out);
+     for ms in touch::take_haptics() {
+         vibrate(ms);
+     }
+@@ -1128,6 +1356,28 @@ enum Act {
+     Equip(&'static str),
+     /// dev.8: tap a button only if a content condition is true / false.
+     TapIf(&'static str, bool, Ctl),
++    /// dev.9: inject a key from a keyboard / gamepad source (source, keycode, down).
++    Key(i32, i32, bool),
++    /// dev.9: inject a joystick state (lx, ly, rx, ry, lt, rt, hat x, hat y).
++    Joy([f32; 8]),
++    /// dev.9: inject a mouse event (MotionEvent action, x, y as screen fractions,
++    /// button state, vertical scroll).
++    Mouse(i32, f32, f32, i32, f32),
++    /// dev.9: hover-move the mouse from (x0, y0) to (x1, y1) in s seconds.
++    MouseSweep(f32, f32, f32, f32, f32),
++    /// dev.9: inject one mouse move; if it never reaches the hook (Android
++    /// blocks in-app motion injection), feed later Joy / Mouse acts directly
++    /// to the hook's handlers (`android_input::SYNTHETIC`).
++    ProbeInject,
++    /// dev.9: press a gamepad key for `hold` s and check that the press reached
++    /// the hook. A window-local injection skips the system InputDispatcher, which
++    /// on a real device leaves touch mode before delivering a D-pad key; here
++    /// ViewRootImpl may eat the first navigation key after a touch to leave touch
++    /// mode itself. If the press never arrives it is logged and re-sent with
++    /// KeyEvent.FLAG_KEEP_TOUCH_MODE.
++    PadKeyChecked(i32, f32),
++    /// dev.9: snapshot the input counters (base for the next checks).
++    MarkInput,
+     Finish,
+     /// dev.5: end the scenario and SIGKILL the process (no clean shutdown).
+     FinishKill,
+@@ -1153,6 +1403,9 @@ struct Rec {
+     inv_before: (u32, u32),
+     /// dev.6: touch gesture counters at `Begin`
+     touch_base: touch::Stats,
++    /// dev.9: highest vertical speed since `Begin` (jump), input counters at `MarkInput`
++    max_vz: f32,
++    input_base: [u64; 4],
+ }
+ 
+ struct Pilot {
+@@ -1671,6 +1924,124 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
+             q.push(Act::Wait(1.0));
+             q.push(Act::Check("layout_reset"));
+         },
++        13 => {
++            // dev.9: multiplayer on the official server (logged in by the main menu)
++            q.push(Act::Check("mp_in_world"));
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::EnsureGameInput(3));
++            q.push(Act::Begin("mp_walk"));
++            q.push(Act::Down(STICK_ID, STICK_BASE.0, STICK_BASE.1));
++            let (sx, sy) = stick_pos(gs, aspect, (0.0, 1.0));
++            q.push(Act::MoveTo(STICK_ID, sx, sy, 0.3));
++            q.push(Act::Wait(3.0));
++            q.push(Act::Up(STICK_ID));
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("mp_walk"));
++        },
++        12 => {
++            // dev.9: gamepad, Bluetooth keyboard and mouse. Real Android input events
++            // are fed through the window's input pipeline (VelorenActivity.inject*),
++            // so they take the same path as a paired device after the system
++            // dispatcher: NativeActivity queue -> winit hook -> game.
++            const KB: i32 = 0x101; // SOURCE_KEYBOARD
++            const PAD: i32 = 0x401; // SOURCE_GAMEPAD
++            let key = |q: &mut Vec<Act>, src: i32, code: i32, hold: f32| {
++                q.push(Act::Key(src, code, true));
++                q.push(Act::Wait(hold));
++                q.push(Act::Key(src, code, false));
++            };
++            let zero = [0.0f32; 8];
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::EnsureGameInput(3));
++            q.push(Act::Wait(2.0));
++            q.push(Act::MarkInput);
++            // ---- keyboard (upstream bindings: W walk, Space jump, I bag)
++            q.push(Act::Begin("kb_walk"));
++            key(&mut q, KB, 51, 2.5); // KEYCODE_W
++            q.push(Act::Wait(0.5));
++            q.push(Act::Check("kb_walk"));
++            q.push(Act::Begin("kb_jump"));
++            key(&mut q, KB, 62, 0.25); // KEYCODE_SPACE
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("kb_jump"));
++            q.push(Act::Begin("kb_bag"));
++            key(&mut q, KB, 37, 0.15); // KEYCODE_I
++            q.push(Act::Wait(1.5));
++            q.push(Act::Check("kb_bag_open"));
++            key(&mut q, KB, 37, 0.15);
++            q.push(Act::Wait(1.5));
++            q.push(Act::Check("kb_bag_closed"));
++            q.push(Act::Check("overlay_hidden"));
++            // ---- a touch brings the on-screen controls back
++            q.push(Act::Down(TAP_ID, 0.55, 0.35));
++            q.push(Act::Wait(0.3));
++            q.push(Act::Up(TAP_ID));
++            q.push(Act::Wait(0.5));
++            q.push(Act::Check("overlay_back"));
++            q.push(Act::EnsureGameInput(3));
++            // ---- mouse: look, attack, wheel zoom
++            q.push(Act::ProbeInject);
++            q.push(Act::Begin("mouse_look"));
++            q.push(Act::Mouse(9, 0.5, 0.5, 0, 0.0)); // ACTION_HOVER_ENTER
++            q.push(Act::MouseSweep(0.5, 0.5, 0.5, 0.5, 0.3));
++            q.push(Act::MouseSweep(0.5, 0.5, 0.85, 0.5, 1.5));
++            q.push(Act::Wait(0.5));
++            q.push(Act::Check("mouse_look"));
++            q.push(Act::Begin("mouse_attack"));
++            q.push(Act::Mouse(0, 0.85, 0.5, 1, 0.0)); // ACTION_DOWN, primary
++            q.push(Act::Mouse(11, 0.85, 0.5, 1, 0.0)); // ACTION_BUTTON_PRESS
++            q.push(Act::Wait(1.5));
++            q.push(Act::Mouse(12, 0.85, 0.5, 0, 0.0)); // ACTION_BUTTON_RELEASE
++            q.push(Act::Mouse(1, 0.85, 0.5, 0, 0.0)); // ACTION_UP
++            q.push(Act::Wait(0.8));
++            q.push(Act::Check("mouse_attack"));
++            q.push(Act::Begin("mouse_wheel"));
++            for _ in 0..4 {
++                q.push(Act::Mouse(8, 0.85, 0.5, 0, -1.0)); // ACTION_SCROLL
++                q.push(Act::Wait(0.3));
++            }
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("mouse_wheel"));
++            // ---- gamepad (upstream controller defaults, Xbox layout)
++            q.push(Act::Begin("pad_walk"));
++            q.push(Act::Joy([0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]));
++            q.push(Act::Wait(2.5));
++            q.push(Act::Joy(zero));
++            q.push(Act::Wait(0.5));
++            q.push(Act::Check("pad_walk"));
++            q.push(Act::Begin("pad_camera"));
++            q.push(Act::Joy([0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]));
++            q.push(Act::Wait(1.5));
++            q.push(Act::Joy(zero));
++            q.push(Act::Wait(0.5));
++            q.push(Act::Check("pad_camera"));
++            q.push(Act::Begin("pad_jump"));
++            key(&mut q, PAD, 96, 0.25); // BUTTON_A
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("pad_jump"));
++            q.push(Act::Begin("pad_attack"));
++            q.push(Act::Joy([0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0])); // right trigger
++            q.push(Act::Wait(1.5));
++            q.push(Act::Joy(zero));
++            q.push(Act::Wait(0.8));
++            q.push(Act::Check("pad_attack"));
++            q.push(Act::Begin("pad_bag"));
++            q.push(Act::PadKeyChecked(22, 0.25)); // DPAD_RIGHT = Inventory
++            q.push(Act::Wait(1.5));
++            q.push(Act::Check("pad_bag_open"));
++            key(&mut q, PAD, 97, 0.15); // BUTTON_B in a window = Back
++            q.push(Act::Wait(1.5));
++            q.push(Act::Check("pad_back_closes"));
++            q.push(Act::Begin("pad_menu"));
++            key(&mut q, PAD, 108, 0.15); // BUTTON_START = Esc menu
++            q.push(Act::Wait(1.5));
++            q.push(Act::Check("pad_esc_open"));
++            key(&mut q, PAD, 108, 0.15); // Start again (menu open) = Back
++            q.push(Act::Wait(1.5));
++            q.push(Act::Check("pad_esc_closed"));
++            q.push(Act::Check("overlay_hidden_pad"));
++            q.push(Act::Check("input_summary"));
++        },
+         _ => {
+             q.push(Act::Check("haptics"));
+             multitouch(&mut q, 8.0);
+@@ -1780,6 +2151,17 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
+     q
+ }
+ 
++/// dev.9: keyboard keys, gamepad buttons, gamepad axis updates, mouse events.
++fn input_counters() -> [u64; 4] {
++    use crate::android_input as ai;
++    [
++        ai::KEYS.load(Ordering::Relaxed),
++        ai::PAD_BUTTONS.load(Ordering::Relaxed),
++        ai::PAD_AXES.load(Ordering::Relaxed),
++        ai::MOUSE_EVENTS.load(Ordering::Relaxed),
++    ]
++}
++
+ fn expect_path() -> Option<PathBuf> { DATA_DIR.get().map(|d| d.join("layout_expect")) }
+ 
+ fn yaw_delta(a: f32, b: f32) -> f32 {
+@@ -1796,6 +2178,102 @@ fn hspeed(p: &Probe) -> f32 { (p.vel[0] * p.vel[0] + p.vel[1] * p.vel[1]).sqrt()
+ 
+ fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (bool, String) {
+     match name {
++        // ---- dev.9 multiplayer (scenario 13)
++        "mp_in_world" => (
++            !p.singleplayer && !p.server_name.is_empty(),
++            format!(
++                "server='{}' players_online={} singleplayer={} pos={:?}",
++                p.server_name, p.players_online, p.singleplayer, p.pos
++            ),
++        ),
++        "mp_walk" => {
++            let moved = ((p.pos[0] - rec.base.pos[0]).powi(2)
++                + (p.pos[1] - rec.base.pos[1]).powi(2))
++            .sqrt();
++            (moved > 1.5, format!("moved {moved:.1} m on the server"))
++        },
++        // ---- dev.9 physical input (scenario 12)
++        "kb_walk" | "pad_walk" => {
++            let moved = ((p.pos[0] - rec.base.pos[0]).powi(2)
++                + (p.pos[1] - rec.base.pos[1]).powi(2))
++            .sqrt();
++            let c = input_counters();
++            (
++                moved > 1.5,
++                format!(
++                    "moved {moved:.1} m; keys={} pad_axes={} speed_avg={:.2} m/s",
++                    c[0] - rec.input_base[0],
++                    c[2] - rec.input_base[2],
++                    avg(&rec.speeds)
++                ),
++            )
++        },
++        "kb_jump" | "pad_jump" => (
++            rec.max_vz > 1.0,
++            format!("max vertical speed {:.2} m/s states={:?}", rec.max_vz, rec.states),
++        ),
++        "kb_bag_open" | "pad_bag_open" => (p.bag_open, format!("bag={}", p.bag_open)),
++        "kb_bag_closed" | "pad_back_closes" => (
++            !p.bag_open && p.ctx.game_input,
++            format!("bag={} game_input={}", p.bag_open, p.ctx.game_input),
++        ),
++        "overlay_hidden" | "overlay_hidden_pad" => (
++            crate::android_input::overlay_hidden(),
++            format!(
++                "touch overlay hidden={} last_device={:?}",
++                crate::android_input::overlay_hidden(),
++                crate::android_input::last_kind()
++            ),
++        ),
++        "overlay_back" => (
++            !crate::android_input::overlay_hidden(),
++            format!("touch overlay hidden={}", crate::android_input::overlay_hidden()),
++        ),
++        "mouse_look" | "pad_camera" => {
++            let dyaw = yaw_delta(rec.base.cam_yaw, p.cam_yaw);
++            let c = input_counters();
++            (
++                dyaw.abs() > 0.15,
++                format!(
++                    "cam_yaw_delta={dyaw:.2}rad mouse_events={} pointer_capture={}",
++                    c[3] - rec.input_base[3],
++                    crate::android_input::pointer_captured()
++                ),
++            )
++        },
++        "mouse_attack" | "pad_attack" => {
++            (rec.attack, format!("attack_seen={} states={:?}", rec.attack, rec.states))
++        },
++        "mouse_wheel" => {
++            let d = p.cam_tgt_dist - rec.base.cam_tgt_dist;
++            (
++                d.abs() > 0.3,
++                format!("zoom target {:.2} -> {:.2}", rec.base.cam_tgt_dist, p.cam_tgt_dist),
++            )
++        },
++        "pad_esc_open" => (p.esc_open, format!("esc_menu={}", p.esc_open)),
++        "pad_esc_closed" => (
++            !p.esc_open && p.ctx.game_input,
++            format!("esc_menu={} game_input={}", p.esc_open, p.ctx.game_input),
++        ),
++        "input_summary" => {
++            let c = input_counters();
++            (
++                c.iter().zip(rec.input_base.iter()).all(|(a, b)| a > b),
++                format!(
++                    "since start: keyboard keys={} gamepad buttons={} gamepad axes={} mouse events={}; motion events: {}",
++                    c[0],
++                    c[1],
++                    c[2],
++                    c[3],
++                    if crate::android_input::SYNTHETIC.load(Ordering::Relaxed) {
++                        "synthetic (Android blocked in-app MotionEvent injection; keys were real Android KeyEvents)"
++                    } else {
++                        "real Android MotionEvents"
++                    }
++                ),
++            )
++        },
+         "haptics" => {
+             vibrate(40);
+             (true, "self-test pulse sent via JNI (see 'jni:' errors if any)".into())
+@@ -2342,6 +2820,7 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+     p.rec.gliding |= pr.gliding;
+     p.rec.speeds.push(hspeed(&pr));
+     p.rec.max_fingers = p.rec.max_fingers.max(touch::with_layer(|l| l.finger_count()));
++    p.rec.max_vz = p.rec.max_vz.max(pr.vel[2]);
+ 
+     p.act_frames += 1;
+     let t = now.duration_since(p.act_start).as_secs_f32();
+@@ -2375,6 +2854,7 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+                 base: pr.clone(),
+                 slow: p.rec.slow,
+                 touch_base: touch::with_layer(|l| l.stats),
++                input_base: p.rec.input_base,
+                 ..Rec::default()
+             };
+             true
+@@ -2749,6 +3229,132 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+             p.inject = vec![Act::Down(TAP_ID, x, y), Act::Wait(secs), Act::Up(TAP_ID), Act::Wait(0.5)];
+             true
+         },
++        Act::Key(source, code, down) => {
++            jni_send(JniCall::InjectKey { source, code, down, flags: 0 });
++            true
++        },
++        Act::PadKeyChecked(code, hold) => {
++            use crate::android_input::PAD_BUTTONS;
++            use std::sync::atomic::{AtomicI32, AtomicU64};
++            const PAD: i32 = 0x401;
++            const KEEP_TOUCH_MODE: i32 = 0x4;
++            static BASE: AtomicU64 = AtomicU64::new(0);
++            // 0 = sent, waiting; 1 = arrived, holding; 2 = retried with flag; 3 = up sent
++            static PHASE: AtomicI32 = AtomicI32::new(0);
++            static T0: std::sync::Mutex<f32> = std::sync::Mutex::new(0.0);
++            if p.act_frames == 1 {
++                BASE.store(PAD_BUTTONS.load(Ordering::Relaxed), Ordering::Relaxed);
++                PHASE.store(0, Ordering::Relaxed);
++                *T0.lock().unwrap() = t;
++                jni_send(JniCall::InjectKey { source: PAD, code, down: true, flags: 0 });
++                false
++            } else {
++            let arrived = PAD_BUTTONS.load(Ordering::Relaxed) > BASE.load(Ordering::Relaxed);
++            let t0 = *T0.lock().unwrap();
++            match PHASE.load(Ordering::Relaxed) {
++                0 if arrived => {
++                    ainfo!("VEL-INPUT pad key {} reached the hook after {:.2}s", code, t - t0);
++                    PHASE.store(1, Ordering::Relaxed);
++                    *T0.lock().unwrap() = t;
++                    false
++                },
++                0 if t - t0 > 1.0 => {
++                    ainfo!(
++                        "VEL-INPUT pad key {} did not reach the hook in 1s (window touch mode ate it: injection skips InputDispatcher) -> re-sent with FLAG_KEEP_TOUCH_MODE",
++                        code
++                    );
++                    jni_send(JniCall::InjectKey { source: PAD, code, down: false, flags: 0 });
++                    jni_send(JniCall::InjectKey { source: PAD, code, down: true, flags: KEEP_TOUCH_MODE });
++                    PHASE.store(2, Ordering::Relaxed);
++                    *T0.lock().unwrap() = t;
++                    false
++                },
++                1 | 2 if t - t0 >= hold => {
++                    let flags = if PHASE.load(Ordering::Relaxed) == 2 { KEEP_TOUCH_MODE } else { 0 };
++                    if PHASE.load(Ordering::Relaxed) == 2 {
++                        ainfo!("VEL-INPUT pad key {} retry reached the hook: {}", code, arrived);
++                    }
++                    jni_send(JniCall::InjectKey { source: PAD, code, down: false, flags });
++                    PHASE.store(3, Ordering::Relaxed);
++                    false
++                },
++                3 => p.act_frames >= MIN_FRAMES,
++                _ => false,
++            }
++            }
++        },
++        Act::Joy(a) if crate::android_input::SYNTHETIC.load(Ordering::Relaxed) => {
++            crate::android_input::joystick_values(a);
++            true
++        },
++        Act::Joy(a) => {
++            jni_send(JniCall::InjectJoy(a));
++            true
++        },
++        Act::Mouse(action, x, y, buttons, vscroll)
++            if crate::android_input::SYNTHETIC.load(Ordering::Relaxed) =>
++        {
++            synthetic_mouse(action, x * w as f32, y * h as f32, buttons, vscroll);
++            true
++        },
++        Act::Mouse(action, x, y, buttons, vscroll) => {
++            jni_send(JniCall::InjectMouse {
++                action,
++                x: x * w as f32,
++                y: y * h as f32,
++                buttons,
++                vscroll,
++            });
++            true
++        },
++        Act::MouseSweep(x0, y0, x1, y1, secs) => {
++            let k = if secs <= 0.0 { 1.0 } else { (t / secs).min(1.0) };
++            let (x, y) = ((x0 + (x1 - x0) * k) * w as f32, (y0 + (y1 - y0) * k) * h as f32);
++            if crate::android_input::SYNTHETIC.load(Ordering::Relaxed) {
++                synthetic_mouse(7, x, y, 0, 0.0);
++            } else {
++                jni_send(JniCall::InjectMouse {
++                    action: 7, // ACTION_HOVER_MOVE
++                    x,
++                    y,
++                    buttons: 0,
++                    vscroll: 0.0,
++                });
++            }
++            k >= 1.0 && p.act_frames >= MIN_FRAMES
++        },
++        Act::ProbeInject => {
++            use crate::android_input::MOUSE_EVENTS;
++            static BASE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++            if p.act_frames == 1 {
++                BASE.store(MOUSE_EVENTS.load(Ordering::Relaxed), Ordering::Relaxed);
++                jni_send(JniCall::InjectMouse {
++                    action: 7,
++                    x: 0.5 * w as f32,
++                    y: 0.5 * h as f32,
++                    buttons: 0,
++                    vscroll: 0.0,
++                });
++            }
++            let reached = MOUSE_EVENTS.load(Ordering::Relaxed) > BASE.load(Ordering::Relaxed);
++            let done = reached || t > 1.5;
++            if done && p.act_frames >= MIN_FRAMES {
++                crate::android_input::SYNTHETIC.store(!reached, Ordering::Relaxed);
++                ainfo!(
++                    "VEL-INPUT motion injection {}",
++                    if reached {
++                        "reaches the hook (real Android MotionEvents)"
++                    } else {
++                        "blocked by Android -> synthetic mode: joystick / mouse values go straight to the hook handlers"
++                    }
++                );
++            }
++            done && p.act_frames >= MIN_FRAMES
++        },
++        Act::MarkInput => {
++            p.rec.input_base = input_counters();
++            true
++        },
+         Act::SendBack => {
+             ainfo!("VEL-STEP inject KEYCODE_BACK");
+             jni_send(JniCall::SendBack);
+diff --git a/voxygen/src/android_input.rs b/voxygen/src/android_input.rs
+new file mode 100644
+index 0000000..8b73eeb
+--- /dev/null
++++ b/voxygen/src/android_input.rs
+@@ -0,0 +1,504 @@
++//! my-veloren dev.9: physical input on Android - gamepads, Bluetooth keyboards
++//! and mice.
++//!
++//! winit 0.30 maps every Android `MotionEvent` to a touch (so a mouse or a
++//! gamepad stick would press on-screen buttons) and has no gamepad support
++//! (gilrs has no Android backend). The vendored winit (`third_party/winit-0.30.13`,
++//! see my-veloren `native/tools/vendor_winit.sh`) calls [`hook`] for every
++//! input event first:
++//!
++//! * gamepad buttons (key events from a gamepad source) and joystick motion
++//!   become [`PadEvent`]s that `Window::fetch_events` feeds through the upstream
++//!   controller mapping (`ControllerSettings`, the same defaults as desktop);
++//! * mouse motion / buttons / wheel become winit cursor, button, wheel and
++//!   `DeviceEvent::MouseMotion` events (camera look while the game holds the
++//!   cursor; Android pointer capture keeps the pointer from hitting the edges);
++//! * keyboard keys are left to winit (upstream keyboard bindings), only the
++//!   letters of non-Latin layouts are mapped back to the physical key.
++//!
++//! While a physical device is in use the touch overlay is hidden; the next
++//! touch shows it again.
++
++use crate::{
++    settings::controller::{Axis, Button},
++    window::PadEvent,
++};
++use gilrs::{Axis as GilAxis, Button as GilButton};
++use std::sync::{
++    Mutex,
++    atomic::{AtomicBool, AtomicU64, Ordering},
++};
++use winit::{
++    event::{DeviceEvent, DeviceId, ElementState, Event, MouseButton, MouseScrollDelta, TouchPhase,
++        WindowEvent},
++    platform::android::activity::input::{Axis as AAxis, InputEvent, KeyAction, MotionAction},
++};
++
++/// Which kind of physical device was used last.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum Kind {
++    Gamepad,
++    Keyboard,
++    Mouse,
++}
++
++#[derive(Clone, Copy, Debug)]
++enum MouseIn {
++    Abs(f32, f32),
++    Rel(f32, f32),
++    Button(MouseButton, bool, f32, f32),
++    Wheel(f32, f32, f32, f32),
++}
++
++#[derive(Default)]
++struct PadState {
++    /// pressed state per gamepad button (keys, hat and trigger axes combined)
++    pressed: Vec<GilButton>,
++    axes: [f32; 4],
++    hat: (i8, i8),
++    triggers: (bool, bool),
++    mouse_buttons: u32,
++}
++
++static PAD_Q: Mutex<Vec<PadEvent>> = Mutex::new(Vec::new());
++static MOUSE_Q: Mutex<Vec<MouseIn>> = Mutex::new(Vec::new());
++static STATE: Mutex<Option<PadState>> = Mutex::new(None);
++static LAST_KIND: Mutex<Option<Kind>> = Mutex::new(None);
++/// The game holds the cursor (no window open), updated every frame.
++static GRABBED: AtomicBool = AtomicBool::new(false);
++/// Back requested by the gamepad (B / Start while a menu or window is open).
++static BACK_REQ: AtomicBool = AtomicBool::new(false);
++static OVERLAY_HIDDEN: AtomicBool = AtomicBool::new(false);
++static CAPTURE: AtomicBool = AtomicBool::new(false);
++/// A mouse was used since the last touch.
++static MOUSE_ACTIVE: AtomicBool = AtomicBool::new(false);
++static MOUSE_LAST: Mutex<Option<(f32, f32)>> = Mutex::new(None);
++
++/// Counters for the Test Lab checks (scenario 12) and the logcat summary.
++pub static PAD_BUTTONS: AtomicU64 = AtomicU64::new(0);
++pub static PAD_AXES: AtomicU64 = AtomicU64::new(0);
++pub static MOUSE_EVENTS: AtomicU64 = AtomicU64::new(0);
++pub static KEYS: AtomicU64 = AtomicU64::new(0);
++pub static REMAPPED: AtomicU64 = AtomicU64::new(0);
++
++/// Install the winit input hook (once, before the event loop runs).
++pub fn install() {
++    if winit::platform::android::set_input_hook(hook) {
++        crate::android::alog(4, "input: gamepad/mouse hook installed");
++    }
++}
++
++/// The touch overlay is hidden because a gamepad, keyboard or mouse is in use.
++pub fn overlay_hidden() -> bool { OVERLAY_HIDDEN.load(Ordering::Relaxed) }
++
++pub fn last_kind() -> Option<Kind> { *LAST_KIND.lock().unwrap() }
++
++pub fn pointer_captured() -> bool { CAPTURE.load(Ordering::Relaxed) }
++
++fn note(kind: Kind) {
++    let mut k = LAST_KIND.lock().unwrap();
++    if *k != Some(kind) {
++        crate::android::alog(4, &format!("input: physical {kind:?} in use, touch overlay hidden"));
++    }
++    *k = Some(kind);
++    OVERLAY_HIDDEN.store(true, Ordering::Relaxed);
++}
++
++/// A finger touched the screen: show the touch overlay again.
++pub fn on_touch() {
++    MOUSE_ACTIVE.store(false, Ordering::Relaxed);
++    if OVERLAY_HIDDEN.swap(false, Ordering::Relaxed) {
++        crate::android::alog(4, "input: touch -> touch overlay shown");
++    }
++}
++
++/// A key event from a physical keyboard reached the game (called from
++/// `android::translate_touch`).
++pub fn on_keyboard() {
++    KEYS.fetch_add(1, Ordering::Relaxed);
++    note(Kind::Keyboard);
++}
++
++pub fn take_pad_events() -> Vec<PadEvent> { std::mem::take(&mut *PAD_Q.lock().unwrap()) }
++
++const SRC_GAMEPAD: u32 = 0x0000_0400;
++const SRC_JOYSTICK: u32 = 0x0100_0010;
++const SRC_MOUSE: u32 = 0x0000_2002;
++const SRC_MOUSE_RELATIVE: u32 = 0x0002_0004;
++const SRC_TOUCHPAD: u32 = 0x0010_0008;
++
++fn has(src: u32, bits: u32) -> bool { src & bits == bits }
++
++/// Android `KEYCODE_*` of a gamepad button -> gilrs button (Xbox layout names:
++/// A = South, B = East, X = West, Y = North).
++fn pad_button(code: u32) -> Option<GilButton> {
++    Some(match code {
++        96 => GilButton::South,
++        97 => GilButton::East,
++        98 => GilButton::C,
++        99 => GilButton::West,
++        100 => GilButton::North,
++        101 => GilButton::Z,
++        102 => GilButton::LeftTrigger,
++        103 => GilButton::RightTrigger,
++        104 => GilButton::LeftTrigger2,
++        105 => GilButton::RightTrigger2,
++        106 => GilButton::LeftThumb,
++        107 => GilButton::RightThumb,
++        108 => GilButton::Start,
++        109 => GilButton::Select,
++        110 => GilButton::Mode,
++        19 => GilButton::DPadUp,
++        20 => GilButton::DPadDown,
++        21 => GilButton::DPadLeft,
++        22 => GilButton::DPadRight,
++        _ => return None,
++    })
++}
++
++fn with_state<R>(f: impl FnOnce(&mut PadState) -> R) -> R {
++    let mut g = STATE.lock().unwrap();
++    f(g.get_or_insert_with(PadState::default))
++}
++
++/// Press / release a gamepad button once (keys, hat and trigger axes can
++/// report the same button).
++fn set_button(st: &mut PadState, b: GilButton, down: bool) {
++    let was = st.pressed.contains(&b);
++    if was == down {
++        return;
++    }
++    if down {
++        st.pressed.push(b);
++    } else {
++        st.pressed.retain(|x| *x != b);
++    }
++    PAD_BUTTONS.fetch_add(1, Ordering::Relaxed);
++    // Outside the game (menus, open windows) B and Start act as Back, like the
++    // phone's Back button (Escape: close the window / menu).
++    if down
++        && matches!(b, GilButton::East | GilButton::Start)
++        && !GRABBED.load(Ordering::Relaxed)
++    {
++        BACK_REQ.store(true, Ordering::SeqCst);
++        return;
++    }
++    PAD_Q.lock().unwrap().push(PadEvent::Button(Button::Simple(b), down));
++}
++
++fn hook(ev: &InputEvent<'_>) -> bool {
++    match ev {
++        InputEvent::KeyEvent(k) => {
++            let src: u32 = k.source().into();
++            let code: u32 = k.key_code().into();
++            let from_pad = has(src, SRC_GAMEPAD) || has(src, SRC_JOYSTICK);
++            let Some(b) = pad_button(code) else { return false };
++            // D-pad keys of a keyboard stay arrow keys.
++            if !from_pad && !(96..=110).contains(&code) {
++                return false;
++            }
++            let down = match k.action() {
++                KeyAction::Down => true,
++                KeyAction::Up => false,
++                _ => return true,
++            };
++            if down && k.repeat_count() > 0 {
++                return true;
++            }
++            note(Kind::Gamepad);
++            with_state(|st| set_button(st, b, down));
++            true
++        },
++        InputEvent::MotionEvent(m) => {
++            let src: u32 = m.source().into();
++            if has(src, SRC_JOYSTICK) {
++                joystick(m);
++                true
++            } else if has(src, SRC_MOUSE_RELATIVE) {
++                mouse(m, true);
++                true
++            } else if has(src, SRC_MOUSE) || has(src, SRC_TOUCHPAD) {
++                mouse(m, false);
++                true
++            } else {
++                false
++            }
++        },
++        _ => false,
++    }
++}
++
++fn joystick(m: &winit::platform::android::activity::input::MotionEvent<'_>) {
++    if m.pointer_count() == 0 {
++        return;
++    }
++    let p = m.pointer_at_index(0);
++    let v = |a: AAxis| p.axis_value(a);
++    let (lx, ly) = (v(AAxis::X), v(AAxis::Y));
++    let (mut rx, mut ry) = (v(AAxis::Z), v(AAxis::Rz));
++    // a few pads report the right stick on RX / RY instead of Z / RZ
++    let (ax, ay) = (v(AAxis::Rx), v(AAxis::Ry));
++    if rx.abs() < 1e-3 && ry.abs() < 1e-3 && (ax.abs() > 1e-3 || ay.abs() > 1e-3) {
++        (rx, ry) = (ax, ay);
++    }
++    let lt = v(AAxis::Ltrigger).max(v(AAxis::Brake));
++    let rt = v(AAxis::Rtrigger).max(v(AAxis::Gas));
++    let (hx, hy) = (v(AAxis::HatX), v(AAxis::HatY));
++    joystick_values([lx, ly, rx, ry, lt, rt, hx, hy]);
++}
++
++/// Test harness (scenario 12) fallback: Android 14 blocks an app from feeding
++/// motion events into its own input queue (hidden API), so the harness hands
++/// the same values to the same code that a real controller's events reach.
++pub static SYNTHETIC: AtomicBool = AtomicBool::new(false);
++
++/// lx, ly, rx, ry (Android axes: +Y down), lt, rt, hat x / y.
++pub fn joystick_values(a: [f32; 8]) {
++    let [lx, ly, rx, ry, lt, rt, hx, hy] = a;
++    note(Kind::Gamepad);
++    with_state(|st| {
++        // Android: +Y is down; gilrs / Veloren: +Y is up.
++        let now = [lx, -ly, rx, -ry];
++        let axes = [
++            GilAxis::LeftStickX,
++            GilAxis::LeftStickY,
++            GilAxis::RightStickX,
++            GilAxis::RightStickY,
++        ];
++        let mut q = PAD_Q.lock().unwrap();
++        for i in 0..4 {
++            if (now[i] - st.axes[i]).abs() > 0.002 || (now[i] == 0.0 && st.axes[i] != 0.0) {
++                st.axes[i] = now[i];
++                q.push(PadEvent::Axis(Axis::Simple(axes[i]), now[i]));
++                PAD_AXES.fetch_add(1, Ordering::Relaxed);
++            }
++        }
++        drop(q);
++        // analog triggers -> L2 / R2 buttons (hysteresis)
++        let l = if st.triggers.0 { lt > 0.3 } else { lt > 0.5 };
++        let r = if st.triggers.1 { rt > 0.3 } else { rt > 0.5 };
++        if l != st.triggers.0 {
++            st.triggers.0 = l;
++            set_button(st, GilButton::LeftTrigger2, l);
++        }
++        if r != st.triggers.1 {
++            st.triggers.1 = r;
++            set_button(st, GilButton::RightTrigger2, r);
++        }
++        // hat -> d-pad buttons
++        let hat = (
++            if hx < -0.5 { -1 } else if hx > 0.5 { 1 } else { 0 },
++            if hy < -0.5 { -1 } else if hy > 0.5 { 1 } else { 0 },
++        );
++        if hat != st.hat {
++            let old = st.hat;
++            st.hat = hat;
++            let pairs = [
++                (old.0 == -1, hat.0 == -1, GilButton::DPadLeft),
++                (old.0 == 1, hat.0 == 1, GilButton::DPadRight),
++                (old.1 == -1, hat.1 == -1, GilButton::DPadUp),
++                (old.1 == 1, hat.1 == 1, GilButton::DPadDown),
++            ];
++            for (was, is, b) in pairs {
++                if was != is {
++                    set_button(st, b, is);
++                }
++            }
++        }
++    });
++}
++
++/// A mouse event reduced to what the game needs (also built by the test harness).
++#[derive(Clone, Copy, Debug)]
++pub enum MouseAct {
++    Move,
++    Scroll,
++    /// MotionEvent ACTION_DOWN (a tap may carry no button state)
++    Down,
++    /// ACTION_UP / BUTTON_PRESS / BUTTON_RELEASE
++    Buttons,
++    Cancel,
++    Other,
++}
++
++fn mouse(m: &winit::platform::android::activity::input::MotionEvent<'_>, relative: bool) {
++    if m.pointer_count() == 0 {
++        return;
++    }
++    let p = m.pointer_at_index(0);
++    let act = match m.action() {
++        MotionAction::HoverMove | MotionAction::Move | MotionAction::HoverEnter => MouseAct::Move,
++        MotionAction::Scroll => MouseAct::Scroll,
++        MotionAction::Down => MouseAct::Down,
++        MotionAction::Up | MotionAction::ButtonPress | MotionAction::ButtonRelease => MouseAct::Buttons,
++        MotionAction::Cancel => MouseAct::Cancel,
++        _ => MouseAct::Other,
++    };
++    // captured pointer: x / y are deltas; add the older samples too
++    let (mut hx, mut hy) = (0.0, 0.0);
++    if relative && matches!(act, MouseAct::Move) {
++        for h in p.history() {
++            hx += h.axis_value(AAxis::X);
++            hy += h.axis_value(AAxis::Y);
++        }
++    }
++    mouse_values(
++        act,
++        p.x() + hx,
++        p.y() + hy,
++        m.button_state().0,
++        p.axis_value(AAxis::Vscroll),
++        p.axis_value(AAxis::Hscroll),
++        relative,
++    );
++}
++
++/// `x`, `y`: px (or deltas when `relative`), `buttons`: MotionEvent button state.
++pub fn mouse_values(act: MouseAct, x: f32, y: f32, buttons: u32, vscroll: f32, hscroll: f32, relative: bool) {
++    MOUSE_EVENTS.fetch_add(1, Ordering::Relaxed);
++    MOUSE_ACTIVE.store(true, Ordering::Relaxed);
++    note(Kind::Mouse);
++    let mut q = MOUSE_Q.lock().unwrap();
++    match act {
++        MouseAct::Move => {
++            if relative {
++                q.push(MouseIn::Rel(x, y));
++            } else {
++                q.push(MouseIn::Abs(x, y));
++            }
++        },
++        MouseAct::Scroll => q.push(MouseIn::Wheel(vscroll, hscroll, x, y)),
++        MouseAct::Down | MouseAct::Buttons | MouseAct::Cancel => {
++            let mut now = buttons & 0b111;
++            // a touchpad tap (or an injected event) may carry no button state
++            if now == 0 && matches!(act, MouseAct::Down) {
++                now = 1;
++            }
++            if matches!(act, MouseAct::Cancel) {
++                now = 0;
++            }
++            let old = with_state(|st| std::mem::replace(&mut st.mouse_buttons, now));
++            let (bx, by) = if relative {
++                MOUSE_LAST.lock().unwrap().unwrap_or((0.0, 0.0))
++            } else {
++                (x, y)
++            };
++            for (bit, b) in [(1, MouseButton::Left), (2, MouseButton::Right), (4, MouseButton::Middle)] {
++                if (old ^ now) & bit != 0 {
++                    q.push(MouseIn::Button(b, now & bit != 0, bx, by));
++                }
++            }
++        },
++        MouseAct::Other => {},
++    }
++}
++
++/// Once per frame (from `android::frame`): mouse events -> winit events,
++/// pointer capture, Back requests from the gamepad.
++pub fn frame(gs: &mut crate::GlobalState, out: &mut Vec<Event<()>>) {
++    let grabbed = gs.window.is_cursor_grabbed();
++    GRABBED.store(grabbed, Ordering::Relaxed);
++    if BACK_REQ.swap(false, Ordering::SeqCst) {
++        crate::android::alog(4, "input: gamepad B/Start -> Back");
++        crate::android::send_back();
++    }
++    let window_id = gs.window.window().id();
++    let device_id = DeviceId::dummy();
++    let moved = |x: f32, y: f32| Event::WindowEvent {
++        window_id,
++        event: WindowEvent::CursorMoved {
++            device_id,
++            position: winit::dpi::PhysicalPosition::new(x as f64, y as f64),
++        },
++    };
++    let events = std::mem::take(&mut *MOUSE_Q.lock().unwrap());
++    let mut last = MOUSE_LAST.lock().unwrap();
++    for e in events {
++        match e {
++            MouseIn::Abs(x, y) => {
++                if grabbed {
++                    if let Some((lx, ly)) = *last {
++                        out.push(Event::DeviceEvent {
++                            device_id,
++                            event: DeviceEvent::MouseMotion {
++                                delta: ((x - lx) as f64, (y - ly) as f64),
++                            },
++                        });
++                    }
++                } else {
++                    out.push(moved(x, y));
++                }
++                *last = Some((x, y));
++            },
++            MouseIn::Rel(dx, dy) => {
++                if grabbed {
++                    out.push(Event::DeviceEvent {
++                        device_id,
++                        event: DeviceEvent::MouseMotion {
++                            delta: (dx as f64, dy as f64),
++                        },
++                    });
++                } else {
++                    let size = gs.window.window().inner_size();
++                    let (lx, ly) = last.unwrap_or((size.width as f32 / 2.0, size.height as f32 / 2.0));
++                    let (x, y) = (
++                        (lx + dx).clamp(0.0, size.width as f32),
++                        (ly + dy).clamp(0.0, size.height as f32),
++                    );
++                    out.push(moved(x, y));
++                    *last = Some((x, y));
++                }
++            },
++            MouseIn::Button(button, down, x, y) => {
++                if !grabbed {
++                    out.push(moved(x, y));
++                }
++                out.push(Event::WindowEvent {
++                    window_id,
++                    event: WindowEvent::MouseInput {
++                        device_id,
++                        state: if down { ElementState::Pressed } else { ElementState::Released },
++                        button,
++                    },
++                });
++            },
++            MouseIn::Wheel(v, h, x, y) => {
++                if !grabbed {
++                    out.push(moved(x, y));
++                }
++                out.push(Event::WindowEvent {
++                    window_id,
++                    event: WindowEvent::MouseWheel {
++                        device_id,
++                        delta: MouseScrollDelta::LineDelta(h, v),
++                        phase: TouchPhase::Moved,
++                    },
++                });
++            },
++        }
++    }
++    drop(last);
++    // Pointer capture while the game holds the cursor and a mouse is in use:
++    // the pointer is hidden and reports relative motion (no screen edges).
++    let want = grabbed && MOUSE_ACTIVE.load(Ordering::Relaxed);
++    if want != CAPTURE.load(Ordering::Relaxed) {
++        CAPTURE.store(want, Ordering::Relaxed);
++        crate::android::pointer_capture(want);
++    }
++}
++
++/// Physical letter key -> US letter, for keyboards with a non-Latin layout
++/// (Arabic): upstream bindings use the logical key ("w"), which an Arabic
++/// layout reports as "ص".
++pub fn us_letter(code: winit::keyboard::KeyCode) -> Option<&'static str> {
++    use winit::keyboard::KeyCode as K;
++    Some(match code {
++        K::KeyA => "a", K::KeyB => "b", K::KeyC => "c", K::KeyD => "d", K::KeyE => "e",
++        K::KeyF => "f", K::KeyG => "g", K::KeyH => "h", K::KeyI => "i", K::KeyJ => "j",
++        K::KeyK => "k", K::KeyL => "l", K::KeyM => "m", K::KeyN => "n", K::KeyO => "o",
++        K::KeyP => "p", K::KeyQ => "q", K::KeyR => "r", K::KeyS => "s", K::KeyT => "t",
++        K::KeyU => "u", K::KeyV => "v", K::KeyW => "w", K::KeyX => "x", K::KeyY => "y",
++        K::KeyZ => "z",
++        _ => return None,
++    })
++}
+diff --git a/voxygen/src/hud/mod.rs b/voxygen/src/hud/mod.rs
+index 0fb22cd..5aa9c7c 100755
+--- a/voxygen/src/hud/mod.rs
++++ b/voxygen/src/hud/mod.rs
+@@ -4758,7 +4758,10 @@ impl Hud {
+         }
+ 
+         // my-veloren dev.3: on-screen touch controls, drawn last (on top).
+-        if crate::touch::active() && global_state.settings.touch.enabled {
++        if crate::touch::active()
++            && global_state.settings.touch.enabled
++            && !crate::touch::overlay_hidden()
++        {
+             touch_overlay::draw(
+                 &mut self.touch_ids,
+                 ui_widgets,
+diff --git a/voxygen/src/lib.rs b/voxygen/src/lib.rs
+index fea283a..5789899 100644
+--- a/voxygen/src/lib.rs
++++ b/voxygen/src/lib.rs
+@@ -12,6 +12,7 @@
+ #[macro_use]
+ pub mod ui;
+ #[cfg(target_os = "android")] pub mod android;
++#[cfg(target_os = "android")] pub mod android_input;
+ #[cfg(target_os = "android")] mod android_main_body;
+ #[cfg(target_os = "android")] pub mod lifecycle;
+ #[cfg(target_os = "android")] pub mod content_audit;
+diff --git a/voxygen/src/menu/main/mod.rs b/voxygen/src/menu/main/mod.rs
+index 033b8a5..82ed394 100644
+--- a/voxygen/src/menu/main/mod.rs
++++ b/voxygen/src/menu/main/mod.rs
+@@ -134,9 +134,29 @@ impl PlayState for MainMenuState {
+             }
+         }
+ 
++        // my-veloren dev.9: Test Lab scenario 13 logs in to the official server
++        // instead (account from a file pushed by the test, never in the APK).
++        #[cfg(target_os = "android")]
++        let mut mp_autologin: Option<MainMenuEvent> = None;
++        #[cfg(target_os = "android")]
++        if crate::android::autostart_enabled() && crate::android::scenario() == 13 {
++            use std::sync::atomic::{AtomicBool, Ordering};
++            static MP_DONE: AtomicBool = AtomicBool::new(false);
++            if !MP_DONE.swap(true, Ordering::Relaxed) {
++                let (username, password, server) = crate::android::mp_test_account();
++                tracing::info!("android-autostart: scenario 13, multiplayer login to {server} as {username}");
++                mp_autologin = Some(MainMenuEvent::LoginAttempt {
++                    username,
++                    password,
++                    server_address: server,
++                });
++            }
++        }
++
+         // Android Test Lab game-loop: start the default singleplayer world automatically.
+         #[cfg(all(target_os = "android", feature = "singleplayer"))]
+         if crate::android::autostart_enabled()
++            && crate::android::scenario() != 13
+             && matches!(global_state.singleplayer, SingleplayerState::None)
+         {
+             use std::sync::atomic::{AtomicBool, Ordering};
+@@ -302,6 +322,8 @@ impl PlayState for MainMenuState {
+             Some(InitMsg::Done(Err(e))) => {
+                 self.init = InitState::None;
+                 error!(?e, "Client Init failed raw error");
++                #[cfg(target_os = "android")]
++                crate::android::mp_login_failed(&format!("{e:?}"));
+                 let e = get_client_init_msg_error(e, &global_state.i18n);
+                 // Log error for possible additional use later or in case that the error
+                 // displayed is cut of.
+@@ -459,10 +481,13 @@ impl PlayState for MainMenuState {
+         }
+ 
+         // Maintain the UI.
+-        for event in self
++        #[allow(unused_mut)]
++        let mut ui_events = self
+             .main_menu_ui
+-            .maintain(global_state, global_state.clock.real_dt())
+-        {
++            .maintain(global_state, global_state.clock.real_dt());
++        #[cfg(target_os = "android")]
++        ui_events.extend(mp_autologin);
++        for event in ui_events {
+             match event {
+                 MainMenuEvent::LoginAttempt {
+                     username,
+diff --git a/voxygen/src/menu/main/ui/login.rs b/voxygen/src/menu/main/ui/login.rs
+index 7be82d3..f6e7943 100644
+--- a/voxygen/src/menu/main/ui/login.rs
++++ b/voxygen/src/menu/main/ui/login.rs
+@@ -336,35 +336,130 @@ pub struct LoginBanner {
+     multiplayer_button: button::State,
+     #[cfg(feature = "singleplayer")]
+     singleplayer_button: button::State,
++    // my-veloren dev.9: phone multiplayer panel
++    phone_user_button: button::State,
++    phone_pass_button: button::State,
++    phone_server_button: button::State,
++    phone_servers_button: button::State,
++    phone_account_button: button::State,
+ 
+     unlock_server_field_button: button::State,
+ }
+ 
+ impl LoginBanner {
+-    fn view(
+-        &mut self,
++    fn view<'a>(
++        &'a mut self,
+         fonts: &Fonts,
+         imgs: &Imgs,
+         server_field_locked: bool,
+         login_info: &LoginInfo,
+         i18n: &Localization,
+         button_style: style::button::Style,
+-    ) -> Element<'_, Message> {
++    ) -> Element<'a, Message> {
+         let input_text_size = fonts.cyri.scale(INPUT_TEXT_SIZE);
+ 
+         // my-veloren dev.7 (7.5): one big "Singleplayer" button on a phone.
++        // dev.9 (owner): plus multiplayer on the official Veloren servers. The
++        // fields are buttons that open the Android text dialog (any keyboard).
+         #[cfg(feature = "singleplayer")]
+         if crate::touch::active() {
+-            let _ = (imgs, server_field_locked, login_info);
+-            return Container::new(
+-                Column::with_children(vec![neat_button(
+-                    &mut self.singleplayer_button,
+-                    i18n.get_msg("common-singleplayer"),
+-                    FILL_FRAC_TWO,
++            let _ = imgs;
++            let small = fonts.cyri.scale(17);
++            let field = |state: &'a mut button::State, label: String, msg: Message| -> Element<'a, Message> {
++                Button::new(
++                    state,
++                    Container::new(Text::new(label).size(small))
++                        .padding(10)
++                        .width(Length::Fill)
++                        .center_y(),
++                )
++                .style(button_style)
++                .width(Length::Fill)
++                .min_height(46)
++                .on_press(msg)
++                .into()
++            };
++            let user = if login_info.username.trim().is_empty() {
++                format!("{}: -", i18n.get_msg("main-username"))
++            } else {
++                format!("{}: {}", i18n.get_msg("main-username"), login_info.username.trim())
++            };
++            let pass = format!(
++                "{}: {}",
++                i18n.get_msg("main-password"),
++                if login_info.password.is_empty() {
++                    "-".to_owned()
++                } else {
++                    "\u{2022}".repeat(login_info.password.chars().count().min(12))
++                }
++            );
++            let server = format!("{}: {}", i18n.get_msg("main-server"), login_info.server);
++            let mut fields = vec![
++                field(&mut self.phone_user_button, user, Message::PhoneField(0)),
++                field(&mut self.phone_pass_button, pass, Message::PhoneField(1)),
++            ];
++            if !server_field_locked {
++                fields.push(field(&mut self.phone_server_button, server, Message::PhoneField(2)));
++            }
++            let can_login = !login_info.username.trim().is_empty() && !login_info.password.is_empty();
++            let multiplayer = Row::with_children(vec![
++                neat_button(
++                    &mut self.multiplayer_button,
++                    i18n.get_msg("common-multiplayer"),
++                    FILL_FRAC_ONE,
+                     button_style,
+-                    Some(Message::Singleplayer),
+-                )])
+-                .max_width(340)
++                    can_login.then_some(Message::Multiplayer),
++                ),
++                neat_button(
++                    &mut self.phone_servers_button,
++                    i18n.get_msg("common-servers"),
++                    FILL_FRAC_ONE,
++                    button_style,
++                    Some(Message::ShowServers),
++                ),
++            ])
++            .spacing(8)
++            .height(Length::Units(52));
++            let account = neat_button(
++                &mut self.phone_account_button,
++                i18n.get_msg("main-phone-create_account"),
++                FILL_FRAC_ONE,
++                button_style,
++                Some(Message::OpenAccountPage),
++            );
++            let mp_panel = Column::with_children(vec![
++                Text::new(i18n.get_msg("main-phone-multiplayer_title"))
++                    .size(fonts.cyri.scale(18))
++                    .into(),
++                Column::with_children(fields).spacing(6).into(),
++                multiplayer.into(),
++                Container::new(account).height(Length::Units(44)).into(),
++            ])
++            .spacing(8);
++            return Container::new(
++                Column::with_children(vec![
++                    Container::new(neat_button(
++                        &mut self.singleplayer_button,
++                        i18n.get_msg("common-singleplayer"),
++                        FILL_FRAC_TWO,
++                        button_style,
++                        Some(Message::Singleplayer),
++                    ))
++                    .height(Length::Units(70))
++                    .into(),
++                    Space::new(Length::Fill, Length::Units(10)).into(),
++                    BackgroundContainer::new(
++                        CompoundGraphic::from_graphics(vec![Graphic::rect(
++                            Rgba::new(0, 0, 0, 170),
++                            [400, 300],
++                            [0, 0],
++                        )]),
++                        mp_panel,
++                    )
++                    .padding(Padding::new().horizontal(12).vertical(12))
++                    .into(),
++                ])
++                .max_width(400)
+                 .width(Length::Fill),
+             )
+             .width(Length::Fill)
+diff --git a/voxygen/src/menu/main/ui/mod.rs b/voxygen/src/menu/main/ui/mod.rs
+index 4256029..c752283 100644
+--- a/voxygen/src/menu/main/ui/mod.rs
++++ b/voxygen/src/menu/main/ui/mod.rs
+@@ -298,6 +298,10 @@ enum Message {
+     TrustPromptCancel,
+     CloseError,
+     DeleteServer,
++    /// my-veloren dev.9: phone login field tapped (0 username, 1 password, 2 server).
++    PhoneField(u8),
++    /// my-veloren dev.9: open the account page of the official servers.
++    OpenAccountPage,
+     /* Note: Keeping in case we re-add the disclaimer
+      *AcceptDisclaimer, */
+ }
+@@ -559,6 +563,32 @@ impl Controls {
+                 });
+             },
+             Message::UnlockServerField => self.server_field_locked = false,
++            #[allow(unused_variables)]
++            Message::PhoneField(f) => {
++                #[cfg(target_os = "android")]
++                {
++                    use crate::android::{TextTarget, request_text_ex};
++                    match f {
++                        0 => request_text_ex(
++                            TextTarget::Username,
++                            "Username (veloren.net account)",
++                            &self.login_info.username,
++                            false,
++                        ),
++                        1 => request_text_ex(TextTarget::Password, "Password", "", true),
++                        _ => request_text_ex(
++                            TextTarget::Server,
++                            "Server address",
++                            &self.login_info.server,
++                            false,
++                        ),
++                    }
++                }
++            },
++            Message::OpenAccountPage => {
++                #[cfg(target_os = "android")]
++                crate::android::open_url("https://veloren.net/account/");
++            },
+             Message::Username(new_value) => self.login_info.username = new_value,
+             Message::LanguageChanged(new_value) => {
+                 events.push(Event::ChangeLanguage(language_metadatas.remove(new_value)));
+@@ -825,6 +855,23 @@ impl MainMenuUi {
+             &mut global_state.clipboard,
+         );
+ 
++        // my-veloren dev.9: multiplayer login fields typed in the Android text dialog.
++        #[cfg(target_os = "android")]
++        {
++            use crate::android::{TextTarget, take_text};
++            if let Some(Some(t)) = take_text(TextTarget::Username) {
++                messages.push(Message::Username(t.trim().to_owned()));
++            }
++            if let Some(Some(t)) = take_text(TextTarget::Password) {
++                messages.push(Message::Password(t));
++            }
++            if let Some(Some(t)) = take_text(TextTarget::Server)
++                && !t.trim().is_empty()
++            {
++                messages.push(Message::Server(t.trim().to_owned()));
++            }
++        }
++
+         // my-veloren dev.8 (8.2): world name and seed are typed in the Android
+         // text dialog (dev.6 pattern), like the character name.
+         #[cfg(all(target_os = "android", feature = "singleplayer"))]
+diff --git a/voxygen/src/menu/server_info.rs b/voxygen/src/menu/server_info.rs
+index b269a2e..78b4e04 100644
+--- a/voxygen/src/menu/server_info.rs
++++ b/voxygen/src/menu/server_info.rs
+@@ -199,6 +199,24 @@ impl PlayState for ServerInfoState {
+             &mut global_state.clipboard,
+         );
+ 
++        // my-veloren dev.9: Test Lab scenario 13 accepts the server rules itself.
++        #[allow(unused_mut)]
++        let mut messages = messages;
++        #[cfg(target_os = "android")]
++        if crate::android::autostart_enabled() && messages.is_empty() {
++            use std::sync::Mutex;
++            static SINCE: Mutex<Option<std::time::Instant>> = Mutex::new(None);
++            let mut since = SINCE.lock().unwrap();
++            if since.get_or_insert_with(std::time::Instant::now).elapsed().as_secs() >= 4 {
++                *since = None;
++                crate::android::alog_check(
++                    "mp_server_rules",
++                    true,
++                    &format!("rules screen of '{}' shown, accepted", self.controls.server_info.name),
++                );
++                messages.push(Message::Accept);
++            }
++        }
+         #[expect(clippy::never_loop)] // TODO: Remove when more message types are added
+         for message in messages {
+             match message {
+diff --git a/voxygen/src/session/mod.rs b/voxygen/src/session/mod.rs
+index 082453e..eee2695 100644
+--- a/voxygen/src/session/mod.rs
++++ b/voxygen/src/session/mod.rs
+@@ -263,6 +263,10 @@ impl SessionState {
+                 inv_sig,
+                 marker: self.hud.touch_marker(),
+                 map_zoom: global_state.settings.interface.map_zoom,
++                // dev.9: multiplayer receipt (scenario 13)
++                players_online: client.player_list().values().filter(|p| p.is_online).count(),
++                server_name: client.server_info().name.clone(),
++                singleplayer: global_state.singleplayer.is_running(),
+                 ctx,
+             });
+         }
+diff --git a/voxygen/src/touch.rs b/voxygen/src/touch.rs
+index 740a600..10e3d96 100644
+--- a/voxygen/src/touch.rs
++++ b/voxygen/src/touch.rs
+@@ -1498,6 +1498,19 @@ pub fn set_typing(t: bool) { TYPING.store(t, std::sync::atomic::Ordering::Relaxe
+ 
+ pub fn typing() -> bool { TYPING.load(std::sync::atomic::Ordering::Relaxed) }
+ 
++/// my-veloren dev.9: the on-screen controls are hidden while a gamepad,
++/// keyboard or mouse is in use (the next touch shows them again).
++pub fn overlay_hidden() -> bool {
++    #[cfg(target_os = "android")]
++    {
++        crate::android_input::overlay_hidden()
++    }
++    #[cfg(not(target_os = "android"))]
++    {
++        false
++    }
++}
++
+ /// Whether the touch overlay is active on this platform.
+ pub fn active() -> bool {
+     // my-veloren dev.8: the desktop harness (Xvfb) can show the phone layout of
+diff --git a/voxygen/src/window.rs b/voxygen/src/window.rs
+index 60e1d77..3c7f616 100644
+--- a/voxygen/src/window.rs
++++ b/voxygen/src/window.rs
+@@ -78,6 +78,14 @@ pub enum AnalogGameInput {
+     CameraY(f32),
+ }
+ 
++/// my-veloren dev.9: one gamepad event, from gilrs or from the Android input hook.
++#[derive(Clone, Copy, Debug)]
++pub enum PadEvent {
++    Button(Button, bool),
++    Changed(AnalogButton),
++    Axis(Axis, f32),
++}
++
+ /// Represents an incoming event from the window.
+ #[derive(Clone, Debug)]
+ pub enum Event {
+@@ -473,8 +481,35 @@ impl Window {
+             self.events.push(Event::ScreenshotMessage(message))
+         }
+ 
++        // my-veloren dev.9: gamepad events come from gilrs on desktop and from the
++        // Android input hook (`crate::android_input`) on Android; both feed the same
++        // controller mapping below.
++        #[allow(unused_mut)]
++        let mut pad_events: Vec<PadEvent> = Vec::new();
+         if let Some(gilrs) = &mut self.gilrs {
+             while let Some(event) = gilrs.next_event() {
++                match event.event {
++                    EventType::ButtonPressed(button, code)
++                    | EventType::ButtonRepeated(button, code) => {
++                        pad_events.push(PadEvent::Button(Button::from((button, code)), true))
++                    },
++                    EventType::ButtonReleased(button, code) => {
++                        pad_events.push(PadEvent::Button(Button::from((button, code)), false))
++                    },
++                    EventType::ButtonChanged(button, _value, code) => {
++                        pad_events.push(PadEvent::Changed(AnalogButton::from((button, code))))
++                    },
++                    EventType::AxisChanged(axis, value, code) => {
++                        pad_events.push(PadEvent::Axis(Axis::from((axis, code)), value))
++                    },
++                    _ => {},
++                }
++            }
++        }
++        #[cfg(target_os = "android")]
++        pad_events.extend(crate::android_input::take_pad_events());
++        {
++            for event in pad_events {
+                 fn handle_buttons(
+                     settings: &mut ControllerSettings,
+                     remapping: &mut RemappingMode,
+@@ -529,15 +564,14 @@ impl Window {
+                     }
+                 }
+ 
+-                match event.event {
+-                    EventType::ButtonPressed(button, code)
+-                    | EventType::ButtonRepeated(button, code) => {
++                match event {
++                    PadEvent::Button(button, true) => {
+                         handle_buttons(
+                             controller,
+                             &mut self.remapping_mode,
+                             &mut self.controller_modifiers,
+                             &mut self.events,
+-                            &Button::from((button, code)),
++                            &button,
+                             true,
+                             &mut self.last_input,
+                             &mut self.last_input_type_menu,
+@@ -546,13 +580,13 @@ impl Window {
+                             self.menu_open,
+                         );
+                     },
+-                    EventType::ButtonReleased(button, code) => {
++                    PadEvent::Button(button, false) => {
+                         handle_buttons(
+                             controller,
+                             &mut self.remapping_mode,
+                             &mut self.controller_modifiers,
+                             &mut self.events,
+-                            &Button::from((button, code)),
++                            &button,
+                             false,
+                             &mut self.last_input,
+                             &mut self.last_input_type_menu,
+@@ -561,10 +595,10 @@ impl Window {
+                             self.menu_open,
+                         );
+                     },
+-                    EventType::ButtonChanged(button, _value, code) => {
++                    PadEvent::Changed(analog_button) => {
+                         if let Some(actions) = controller
+                             .inverse_game_analog_button_map
+-                            .get(&AnalogButton::from((button, code)))
++                            .get(&analog_button)
+                         {
+                             #[expect(clippy::never_loop)]
+                             for action in actions {
+@@ -573,7 +607,7 @@ impl Window {
+                         }
+                         if let Some(actions) = controller
+                             .inverse_menu_analog_button_map
+-                            .get(&AnalogButton::from((button, code)))
++                            .get(&analog_button)
+                         {
+                             #[expect(clippy::never_loop)]
+                             for action in actions {
+@@ -582,8 +616,8 @@ impl Window {
+                         }
+                     },
+ 
+-                    EventType::AxisChanged(axis, value, code) => {
+-                        let value = if controller.inverted_axes.contains(&Axis::from((axis, code)))
++                    PadEvent::Axis(pad_axis, value) => {
++                        let value = if controller.inverted_axes.contains(&pad_axis)
+                         {
+                             -value
+                         } else {
+@@ -591,7 +625,7 @@ impl Window {
+                         };
+ 
+                         let value =
+-                            controller.apply_axis_deadzone(&Axis::from((axis, code)), value);
++                            controller.apply_axis_deadzone(&pad_axis, value);
+ 
+                         // update last input to be controller if axis was moved
+                         if value.abs() > 0.0001 {
+@@ -601,7 +635,7 @@ impl Window {
+                         if self.cursor_grabbed {
+                             if let Some(actions) = controller
+                                 .inverse_game_axis_map
+-                                .get(&Axis::from((axis, code)))
++                                .get(&pad_axis)
+                             {
+                                 for action in actions {
+                                     match *action {
+@@ -643,7 +677,7 @@ impl Window {
+                             }
+                         } else if let Some(actions) = controller
+                             .inverse_menu_axis_map
+-                            .get(&Axis::from((axis, code)))
++                            .get(&pad_axis)
+                         {
+                             // TODO: possibly add sensitivity settings when this is used
+                             for action in actions {
+@@ -672,7 +706,6 @@ impl Window {
+                             }
+                         }
+                     },
+-                    _ => {},
+                 }
+             }
+         }

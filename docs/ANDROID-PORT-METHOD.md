@@ -126,6 +126,13 @@ Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
 | (dev.8) `Use` on a tool from the inventory equips it in the wrong hand / mining does nothing | inventory Use ≠ equip to `ActiveMainhand`; mining also needs the tool wielded and a block under the crosshair (`mine_target`) | swap the slot into `ActiveMainhand`, tap Wield, then aim the camera until `mine_target` is set |
 | (dev.8) `/goto` +60 m landed on a hill and the glide check failed | terrain under the target was higher than expected | go +150 m above the current position before testing the glider |
 | (dev.8) one dungeon check `hostiles=0` after a 14 km teleport | at ~5 fps on the VM the far chunks + NPCs did not stream in within 90 s | VM timing, not a game bug; judge on a phone |
+| (dev.9) gamepad/joystick events never reach the game | winit's Android backend drops them and gilrs has no Android backend | vendor winit (checksum-checked) with a raw `InputEvent` hook; map to the desktop `PadEvent`s so upstream bindings apply |
+| (dev.9) injected MotionEvents never arrive: `NoSuchMethodException` | `ViewRootImpl.dispatchInputEvent` is a hidden API on API 34 | `Window.injectInputEvent` (PhoneWindow) works; keep a probe + labelled synthetic fallback, never hidden-API exemption hacks |
+| (dev.9) Space does not jump on a hardware keyboard | Android's key map gives `Character(" ")`; upstream binds `Named(Space)` | normalise space/tab/enter characters to named keys |
+| (dev.9) `CertificateLoad("no native root CA certificates found")` on login | rustls-native-certs has no Android CA store | set `SSL_CERT_DIR` to `/apex/com.android.conscrypt/cacerts` + `/system/etc/security/cacerts` |
+| (dev.9) a test "passed" on the wrong error | the multiplayer check accepted any client error | match the expected error (auth `ServerError(400…)`) and exclude local ones (`CertificateLoad`) |
+| (dev.9) first injected D-pad press lost after a touch | window-local injection skips InputDispatcher; with `windowTouchMode=true` ViewRootImpl consumed the first navigation key to leave touch mode, before the NativeActivity queue (confirmed in vm9d) | check that the press reached the hook; retry with `FLAG_KEEP_TOUCH_MODE` and log it |
+| (dev.9) owner's account auto-muted 180 s | `chat_cli` sent empty lines after its stdin pipe closed | never drive a real account with a closable stdin; test logins in the app (scenario 13) |
 - **Perf numbers (dev.4):** measure fps as frames ÷ wall clock, never as frames ÷ (sum of timed parts):
   the parts miss work outside them, and that overstated fps about 10× in build8. On the Test Lab VM (llvmpipe),
   `device.poll()` in `GlobalState::maintain` absorbs GPU work (~140 ms/frame), so VM fps only ranks tiers

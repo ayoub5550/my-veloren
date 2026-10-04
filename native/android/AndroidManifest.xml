@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.ayoub.myveloren"
-    android:versionCode="80"
-    android:versionName="0.1.0-dev.8">
+    android:versionCode="90"
+    android:versionName="0.1.0-dev.9">
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="34" />
     <uses-feature android:glEsVersion="0x00030000" android:required="true" />
     <uses-permission android:name="android.permission.INTERNET" />
@@ -20,8 +20,9 @@
              4 = dev.5 background/foreground x5 + autosave + SIGKILL, 5 = relaunch after kill
              (save kept, assets not re-extracted, crash report, Back button),
              6 = occlusion A/B, 7 = window gestures, 8 = manual character, 9 = dev.7 phone fixes,
-             10 = dev.8 content audit, 11 = dev.8 worlds/characters/export/import -->
-        <meta-data android:name="com.google.test.loops" android:value="11" />
+             10 = dev.8 content audit, 11 = dev.8 worlds/characters/export/import,
+             12 = dev.9 gamepad / keyboard / mouse, 13 = dev.9 multiplayer (official server) -->
+        <meta-data android:name="com.google.test.loops" android:value="13" />
         <activity
             android:name="com.ayoub.myveloren.VelorenActivity"
             android:exported="true"
