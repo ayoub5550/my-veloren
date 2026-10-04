@@ -10,6 +10,11 @@
 > (dev.3 touch controls → dev.10 distribution) are in [docs/ROADMAP.md](docs/ROADMAP.md); each needs an
 > owner instruction «نفّذ dev.N». The old Unity roadmap is `docs/ROADMAP-UNITY-ARCHIVED.md`.
 >
+> **2026-10-04:** dev.7 started («ابدأ dev. 7» + «اصلح كذلك الأيقونة» → item 7.9): branch `feat/dev7-phone-fixes`, patch 0006
+> (phone-safe Ultra + AThermal guard, icon/ring buttons with an aspect-anchored no-overlap layout, contextual Glide/abilities,
+> floating stick, touch-only Controls tab, Singleplayer-only main menu, adaptive launcher icon). See [docs/DEV7.md](docs/DEV7.md).
+> Not merged without owner approval.
+>
 > **2026-10-04:** dev.5 + dev.6 merged (PR #6, #7). Owner tested dev.6 on his Poco F3 and his fixes became
 > **dev.7** in [docs/ROADMAP.md](docs/ROADMAP.md) (Ultra heat, button redesign/no overlap, smoother joystick,
 > touch-consistent menus, touch-only controls settings, crashes). Owner: the pending Firebase physical runs

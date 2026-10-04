@@ -1,0 +1,2687 @@
+diff --git a/assets/voxygen/element/ui/touch/attack.png b/assets/voxygen/element/ui/touch/attack.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..a652e4988bb5def690441a80a10c5c2fc8c5876b
+GIT binary patch
+literal 223
+zcmeAS@N?(olHy`uVBq!ia0vp^0wB!61|;P_|4#%`%RF5iLn`JZrzkL==-~XT?k*qm
+zd42r;fB%1deZ9YD#)W#dAk+KRpPCwhAn|US?UUPklCEz1uTt4uH!Jl>OMu9PoXtRG
+z|M}f*{vGB~I(_p*+k~g-IeLnbpO;un{(qwFL2&=12`NWf{!OpcFr2gVa~sGcNA(vX
+zho_dN9Z`*)akemwOTy4G<VEsjAD)KlhiB%R^Zb5SlT`8Pm8`NR+kzcUGPMknQ)kyN
+TIdohM=wb#>S3j3^P6<r_q-kQ}
+
+literal 0
+HcmV?d00001
+
+diff --git a/assets/voxygen/element/ui/touch/block.png b/assets/voxygen/element/ui/touch/block.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..91d3e59ce2362a3fd12005e076235150fcbb5016
+GIT binary patch
+literal 258
+zcmeAS@N?(olHy`uVBq!ia0vp^0wB!61|;P_|4#%`Cp}#pLn`JZCoB*!FfuSOIMKoR
+zSKa;d<nZ?rkqL8F$?6-3Y^n4xh>1);wm`U~%Te_;N7tRXnPxm7;B%r$(`w0XrlSp(
+z;T@O1JUXTMhHV1#gTxEZ6dS`8&zyh3AjchkZRW(3&3+d&+tk<JGZgA^i_l46{*Y1g
+z>6Pr_o*5VFV*-yJXplOaD<{O`AGbF-CE<W@#|gz={sX)fKqboS8l2cpY)jtJFhTLf
+zEJL0H=^SQfBX}DmKRpc)Y?JU?{*cKi$>~4m(-4L$i-XTkc@`xJ^b~`qtDnm{r-UW|
+Dgh^y;
+
+literal 0
+HcmV?d00001
+
+diff --git a/assets/voxygen/element/ui/touch/edit.png b/assets/voxygen/element/ui/touch/edit.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..dc61e3cb95997b12134f765c44ac263bd46d96f6
+GIT binary patch
+literal 253
+zcmeAS@N?(olHy`uVBq!ia0vp^0wB!61|;P_|4#%`M?75|Ln`JZrzkL<=-~X@zH$DZ
+zs^cdP0D)82vsf*of_>7=hySauzh`JPaj~SNfQf^f&x`u=Q&f5K%I7KM?ElR2j<so)
+zz0AiS{~vZ7|1Y|F+u!Me!oT`u_;`T8!gnH&Q=d9lvTKIl1x=pW8><>4&PMPmxEi-H
+zzL>RsPDMkwaTlXelGFdwHd6vj+)MT<N!*g)%)Ge9oX4#yzT*;4d1KFv3-#)vb~_X{
+x&N7TCcy>;@t+w1waP7=S##wwDQYS5BW^fZv`8H#gW&qGX44$rjF6*2UngI8JVz>YR
+
+literal 0
+HcmV?d00001
+
+diff --git a/assets/voxygen/element/ui/touch/interact.png b/assets/voxygen/element/ui/touch/interact.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..4eedffa548fcf67f2a9314c65dbdd4f90d691a88
+GIT binary patch
+literal 230
+zcmeAS@N?(olHy`uVBq!ia0vp^0wB!61|;P_|4#%`Ydu{YLn`L1owSknu!4ZAy@qf=
+zfFa{!10LrJw(}1(*A>XRt_unZ45(lXa&eJJEZp|V`@y}v&g>;gTTZ#HzO!5USjN=y
+zS)cukxs~!ucQQ%zewJX|mdeBs@w|S5z~lt!EgN!Y21tAMrRhK2YY_F+>+=HJuF`)N
+zOxri~@fdbq`pM_QbU%Kr;+%-*f=NREqnBulE&a_H;C%1=^~}QR>vvtEIJXF$cH6>!
+er&UY2hN0)VZ^*=VqKAMEXYh3Ob6Mw<&;$U7O;_&#
+
+literal 0
+HcmV?d00001
+
+diff --git a/assets/voxygen/element/ui/touch/jump.png b/assets/voxygen/element/ui/touch/jump.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..51408ff7abf014ce2025e73cad0177431d77e4a0
+GIT binary patch
+literal 211
+zcmeAS@N?(olHy`uVBq!ia0vp^0wB!61|;P_|4#%`vpiiKLn`JZCmdi-Inwg)bO-0(
+z<ICCBKjU||`B!i8sPVdhTFk8VYmA#e1Bv7VsT^&LCuXgmQ*of+=@I5VZ3Yi7%Ut~0
+zrMT#|Xq<Dz1>Y9Uz86(TKRmf=?Zz?t;r}k99Jz#q1ebEgp1&Y53Hh14kCV;$&ThCE
+zvA{`3K-*pLfI(-#JLm1P$~+Q4aOcmX4O#cLW(u}RFkDV*EKBRpECsrf!PC{xWt~$(
+F69BMqRuTXJ
+
+literal 0
+HcmV?d00001
+
+diff --git a/assets/voxygen/element/ui/touch/lantern.png b/assets/voxygen/element/ui/touch/lantern.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..c775160d73a5402f8049f1d20276932b7078f174
+GIT binary patch
+literal 220
+zcmeAS@N?(olHy`uVBq!ia0vp^0wB!61|;P_|4#%`i#=T&Ln`JZCmdi-Inwg)bO-0(
+z<ICCBr{(079B`TT(xX9e{@EJ`CWpTd__84(_{lTz_R!Dke7iYzGtAe%kbC?k6B`>_
+zoA&E75_WGZj~xJk=SoKx2$yh85AwNfFZ1!o|A!sN|HtpI`}_avYw<b#XHzYb8&Bs5
+zhnZbutFeCCKDC!`L)*dSw&x{&#4HIgIdq6wHb90uLRe^DNkbmTQO&{!j0}%`J%wIx
+S{1gFnE`z75pUXO@geCx&9$zg0
+
+literal 0
+HcmV?d00001
+
+diff --git a/assets/voxygen/element/ui/touch/mount.png b/assets/voxygen/element/ui/touch/mount.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..9fa4be0edc23d1bc11f0709cf17aae52bb47b963
+GIT binary patch
+literal 241
+zcmeAS@N?(olHy`uVBq!ia0vp^0wB!61|;P_|4#%`J3L(+Ln`JZCoB*!I3!_|<n(`{
+z>byNw$2-m(S3S=(`OVBtEP9cXgqyFLnV9~c50p63vgW{X&(;N#FJ3iB+AMqb=ZSj`
+z;oRknhTD>Zxy=(!@3VH1Zdg+`VMoICb+HAF^EAB;9?fZFG-gPwngKF+NA_i<J#7h>
+z_W)_ODJ2c31!86;GAQrd_4BBq0TArixpQF!W17X8v^8u8coGv55*j31-Z-(bov~>$
+kJ*p_p!n`9${U`&2qI&KI*O$v#fPP@`boFyt=akR{0Is}W(EtDd
+
+literal 0
+HcmV?d00001
+
+diff --git a/assets/voxygen/element/ui/touch/respawn.png b/assets/voxygen/element/ui/touch/respawn.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..aadb5ef4f24050f706c660f304317c82d053c844
+GIT binary patch
+literal 227
+zcmeAS@N?(olHy`uVBq!ia0vp^0wB!61|;P_|4#%`t2|vCLn`JZCoB*!I3!_|<n(`{
+z>byNw$2-m(S3S=(`OZ?M=A=#1%!lh|DAj!GG4PzqoGt+Z?<{60h}^9_bN~n%)=5Ur
+zV~u2pG`8zK(ZD%9&FR5`&E+fDCUDOH8O8BgTXWm?+TX`MJh^J^rpCtRF-0JoV^bO%
+zn~J_bGRLko5oQj_CST(=#vMEdmrCkS5ETAZf7a{$e-qZ3|6iP(q2hevnvXdH1M}^i
+V1O7Yvnt-lm@O1TaS?83{1OR++RhR$(
+
+literal 0
+HcmV?d00001
+
+diff --git a/assets/voxygen/element/ui/touch/skill.png b/assets/voxygen/element/ui/touch/skill.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..69046199a02df41f824525b64d7fbe87fd8987ce
+GIT binary patch
+literal 257
+zcmV+c0sj7pP)<h;3K|Lk000e1NJLTq000mG000mO1^@s6AM^iV0002UNkl<Zc$}S6
+zF%E<v5FE%=S5i><1Z&=4Wx+!!?hRJdKEcYuSXtO`)p85LJ>w=MIt;V3BLYHo)}+pw
+zByqH~2>^3&kVGy8I&0D#+&}%FfMmCJ!MVCc<lW!yQ@GlvApyX$ZVCXDWSb5jam-ln
+zV?Nw0>T;fEvG!?bj;LyI4z94x>xd(I9}DcYted)<I5ps-<XO0rmW#SO<)Ash!{Nd4
+z=bBf1Mm|dKBaS#0oyA*8=@Wt8TUb-1zKK`lJ3rVn^3(bPD%qK(cxvU)00000NkvXX
+Hu0mjfhw*UO
+
+literal 0
+HcmV?d00001
+
+diff --git a/assets/voxygen/element/ui/touch/sneak.png b/assets/voxygen/element/ui/touch/sneak.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..0b92c433891da28d55b3be151745cb0fad0c25ee
+GIT binary patch
+literal 170
+zcmeAS@N?(olHy`uVBq!ia0vp^0wB!61|;P_|4#%`g`O^sAr*6y6C_x9jFO!GYhFC<
+zvQE*!w&w+#P370Vi4wgATYGM(bTArpM@(SNkFj=~lE$mcZ6SShr$P7wBaUT)H)l)y
+zQ+*=(#USa>GRa6mt7tc$7xtS}eSVlMmR3?$`yxNH_xj5ldzy6IJeij0F)$pOZ=>FQ
+Sd`TYAat2RVKbLh*2~7Yp{W<pl
+
+literal 0
+HcmV?d00001
+
+diff --git a/assets/voxygen/element/ui/touch/swim_down.png b/assets/voxygen/element/ui/touch/swim_down.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..83d57f43807caf53bc870277f03445fa0395e74b
+GIT binary patch
+literal 230
+zcmeAS@N?(olHy`uVBq!ia0vp^0wB!61|;P_|4#%`Ydu{YLn`JZrz9jKOb`_Qb)JFM
+zKW=Yw%f?Q@^eI4o{MN^;J?AexQ#|<L$yMt`M<tif{r$E6>N4wsMgx1%HZy+CwpFtF
+z5*>o+B^f)|%K0`WrMUh$GBYm5vUOnrP#MpWF5|2godX4ov5d-koKIFHB{=lDr5tEE
+z|E1bL&fre<C#LyAf7k?=BPLkBICo67{j_yK>;AgGhq^vSI$RJ~WSVT;l5+M$+k~|<
+bBN!O`zI7coGJK&7bU1^jtDnm{r-UW|64+c2
+
+literal 0
+HcmV?d00001
+
+diff --git a/assets/voxygen/element/ui/touch/swim_up.png b/assets/voxygen/element/ui/touch/swim_up.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..0bb98c818db643416f1356da4f226437f21903e4
+GIT binary patch
+literal 234
+zcmeAS@N?(olHy`uVBq!ia0vp^0wB!61|;P_|4#%`8$DedLn`JZCmdi-Inwg)bO-0(
+z<ICCBKa1aA_xJzT*WxeR6tdNB3gpcCD0!%3o#f2=_b0j8KtNTJQ^eOlZm;u2_Y0~&
+z=A3uApu*I^I$vei<xD0CNr?bve#?dq!SpGD!oT9TK4!gh#EhS_O?~}6LEUo}Z||)C
+zzuN3>BX`Tsl?GcXJq$wLRvdKbu~_VU*tAE3>vOPUV2l5pmq(`tOK^qf?mFzS#$vJC
+g38qg)(pwoAIKq1$^vbB310B!c>FVdQ&MBb@0KnH<N&o-=
+
+literal 0
+HcmV?d00001
+
+diff --git a/assets/voxygen/i18n/ar-SA/hud/misc.ftl b/assets/voxygen/i18n/ar-SA/hud/misc.ftl
+index 8f9712323..01b7ef343 100644
+--- a/assets/voxygen/i18n/ar-SA/hud/misc.ftl
++++ b/assets/voxygen/i18n/ar-SA/hud/misc.ftl
+@@ -1,2 +1,3 @@
+ hud-quests = المهام
+-hud-you_died = أنت ميت
+\ No newline at end of file
++hud-you_died = أنت ميت# my-veloren dev.7 (7.1)
++hud-thermal-lowered = الهاتف يسخن: خُفّضت الرسوميات قليلًا لتبريده.
+diff --git a/assets/voxygen/i18n/ar-SA/hud/settings.ftl b/assets/voxygen/i18n/ar-SA/hud/settings.ftl
+index e69de29bb..d2c7940e5 100644
+--- a/assets/voxygen/i18n/ar-SA/hud/settings.ftl
++++ b/assets/voxygen/i18n/ar-SA/hud/settings.ftl
+@@ -0,0 +1,14 @@
++
++## my-veloren dev.7: أزرار اللمس (تبويب التحكم على الهاتف)
++hud-settings-touch-intro = التحكم باللمس: تحرّك بالجهة اليسرى من الشاشة، وحرّك الكاميرا بالجهة اليمنى، واستعمل الأزرار. إعدادات لوحة المفاتيح ويد التحكم مخفية على الهاتف.
++hud-settings-touch-edit_layout = تحريك وتكبير الأزرار
++hud-settings-touch-reset = استعادة أزرار اللمس الافتراضية
++hud-settings-touch-opacity = شفافية الأزرار
++hud-settings-touch-button_size = حجم الأزرار
++hud-settings-touch-stick_size = حجم عصا التحكم
++hud-settings-touch-stick_deadzone = المنطقة الميتة للعصا
++hud-settings-touch-camera_sensitivity = سرعة الكاميرا (السحب)
++hud-settings-touch-camera_smoothing = نعومة الكاميرا
++hud-settings-touch-zoom_sensitivity = سرعة التقريب (القرص)
++hud-settings-touch-stick_follow = العصا تتبع إصبعك
++hud-settings-touch-vibration = اهتزاز عند الضربات
+diff --git a/assets/voxygen/i18n/en/hud/misc.ftl b/assets/voxygen/i18n/en/hud/misc.ftl
+index 2535d6686..dffe5657b 100644
+--- a/assets/voxygen/i18n/en/hud/misc.ftl
++++ b/assets/voxygen/i18n/en/hud/misc.ftl
+@@ -113,3 +113,5 @@ hud-init-stage-client-starting-client = [{ -client }]: Preparing Client...
+ hud-init-stage-render-pipeline = Creating render pipeline ({ $done }/{ $total })
+ 
+ hud-tutorial-disable = Permanently disable tutorial hints
++# my-veloren dev.7 (7.1)
++hud-thermal-lowered = Your phone is getting hot: graphics were lowered a little to cool it down.
+diff --git a/assets/voxygen/i18n/en/hud/settings.ftl b/assets/voxygen/i18n/en/hud/settings.ftl
+index 2551a1d1c..9f1b50da0 100644
+--- a/assets/voxygen/i18n/en/hud/settings.ftl
++++ b/assets/voxygen/i18n/en/hud/settings.ftl
+@@ -191,3 +191,17 @@ hud-settings-game_layers = Game Layers
+ hud-settings-menu_buttons = Menu Buttons
+ hud-settings-row_background_opacity = Row Background Opacity
+ hud-settings-pause_menu_overlay_opacity = Pause Menu Overlay Opacity
++
++## my-veloren dev.7: touch controls (the Controls tab on a phone)
++hud-settings-touch-intro = Touch controls. Move with the left side of the screen, look around with the right side, and use the buttons. Keyboard and gamepad settings are hidden on a phone.
++hud-settings-touch-edit_layout = Move / resize buttons
++hud-settings-touch-reset = Reset touch controls
++hud-settings-touch-opacity = Button opacity
++hud-settings-touch-button_size = Button size
++hud-settings-touch-stick_size = Joystick size
++hud-settings-touch-stick_deadzone = Joystick dead zone
++hud-settings-touch-camera_sensitivity = Camera speed (drag)
++hud-settings-touch-camera_smoothing = Camera smoothing
++hud-settings-touch-zoom_sensitivity = Zoom speed (pinch)
++hud-settings-touch-stick_follow = Joystick follows your thumb
++hud-settings-touch-vibration = Vibration on hits
+diff --git a/assets/voxygen/i18n/en/tutorial.ftl b/assets/voxygen/i18n/en/tutorial.ftl
+index 1134a2586..6bcf25e4d 100644
+--- a/assets/voxygen/i18n/en/tutorial.ftl
++++ b/assets/voxygen/i18n/en/tutorial.ftl
+@@ -48,3 +48,12 @@ achievement-UsedLantern = Turned on your lantern
+ achievement-Swim = Went swimming
+ achievement-Zoom = Zoomed the camera
+ achievement-OpenMap = Opened the map
++
++# my-veloren dev.7: touch-screen versions of the keyboard hints
++tutorial-touch-Move = Touch and drag on the left side of the screen to move. Drag on the right side to look around.
++tutorial-touch-Zoom = Pinch with two fingers to zoom the camera in and out.
++tutorial-touch-UseItem = Double-tap an item to use or equip it. Hold it to read its details.
++tutorial-touch-Swim = When swimming, use the arrow buttons to dive and to return to the surface.
++tutorial-touch-FirstPerson = If you pinch the camera very close to your character, you can enter first person mode.
++tutorial-touch-OpenGlider = Jump, then tap the glider button (it appears where Jump was) to take to the skies!
++tutorial-touch-FallDamage = Ouch! Jump, then tap the glider button in the air instead of hurting yourself.
+diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
+index af0f0d822..de8040192 100644
+--- a/voxygen/src/android.rs
++++ b/voxygen/src/android.rs
+@@ -1269,6 +1269,50 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
+             q.push(Act::Check("map_marker"));
+             q.push(Act::EnsureGameInput(3));
+         },
++        9 => {
++            // dev.7: fixes from the owner's Poco F3 test.
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::EnsureGameInput(3));
++            q.push(Act::Wait(2.0));
++            q.push(Act::Log("dev7 overlay (new buttons)"));
++            q.push(Act::Check("layout_fits"));
++            q.push(Act::Check("ability_buttons"));
++            q.push(Act::Check("thermal_api"));
++            q.push(Act::Check("thermal_steps"));
++            // 7.4: slide far past the rim, then come back a little: with a
++            // floating base the stick already points the other way.
++            q.push(Act::Begin("stick_follow"));
++            q.push(Act::Down(STICK_ID, STICK_BASE.0, STICK_BASE.1));
++            q.push(Act::MoveTo(STICK_ID, STICK_BASE.0 + 0.22, STICK_BASE.1, 0.8));
++            q.push(Act::Wait(0.8));
++            q.push(Act::Check("stick_full"));
++            q.push(Act::MoveTo(STICK_ID, STICK_BASE.0 + 0.17, STICK_BASE.1, 0.3));
++            q.push(Act::Wait(0.4));
++            q.push(Act::Check("stick_follow"));
++            q.push(Act::Up(STICK_ID));
++            q.push(Act::Wait(0.3));
++            q.push(Act::Check("stick_stopped"));
++            // 7.3: jump, Glide appears in Jump's place, tap it.
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::Begin("glide"));
++            let (jx, jy) = center(Ctl::Jump, gs);
++            q.push(Act::Down(BTN_ID, jx, jy));
++            q.push(Act::Wait(0.15));
++            q.push(Act::Up(BTN_ID));
++            q.push(Act::Wait(0.3));
++            q.push(Act::Check("glide_button_shown"));
++            q.push(Act::Down(TAP_ID, jx, jy));
++            q.push(Act::Wait(0.2));
++            q.push(Act::Up(TAP_ID));
++            q.push(Act::Wait(2.5));
++            q.push(Act::Check("glide"));
++            q.push(Act::Log("dev7 hold attack (pressed look)"));
++            let (ax, ay) = center(Ctl::Primary, gs);
++            q.push(Act::Down(BTN_ID, ax, ay));
++            q.push(Act::Wait(1.5));
++            q.push(Act::Up(BTN_ID));
++            q.push(Act::Wait(2.0));
++        },
+         8 => {
+             // dev.6: the character was created in the creation form with the
+             // name from the text dialog (char selection, see menu/char_selection).
+@@ -1382,15 +1426,20 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
+             // 3.5 glide: wield glider, jump, glide
+             q.push(Act::EnsureAlive(3));
+             q.push(Act::Begin("glide"));
+-            tap_at(&mut q, center(Ctl::Glide, gs));
+-            q.push(Act::Wait(1.0));
++            // dev.7: Glide appears in Jump's place once airborne: jump, then
++            // tap the same spot again.
+             let (jx, jy) = center(Ctl::Jump, gs);
+             q.push(Act::Down(BTN_ID, jx, jy));
+-            q.push(Act::Wait(0.6));
++            q.push(Act::Wait(0.15));
+             q.push(Act::Up(BTN_ID));
+-            q.push(Act::Wait(3.0));
++            q.push(Act::Wait(0.3));
++            q.push(Act::Check("glide_button_shown"));
++            q.push(Act::Down(TAP_ID, jx, jy));
++            q.push(Act::Wait(0.2));
++            q.push(Act::Up(TAP_ID));
++            q.push(Act::Wait(2.5));
+             q.push(Act::Check("glide"));
+-            tap_at(&mut q, center(Ctl::Glide, gs));
++            q.push(Act::Wait(1.0));
+             // 3.6 menu bar: open + close bag and map
+             q.push(Act::EnsureAlive(3));
+             tap_at(&mut q, center(Ctl::Bag, gs));
+@@ -1480,6 +1529,95 @@ fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (boo
+             (d < -0.3, format!("camera distance {:.2} -> {:.2}", rec.base.cam_dist, p.cam_dist))
+         },
+         "buttons" => (true, format!("no crash; character states seen {:?}", rec.states)),
++        "layout_fits" => {
++            let s = &gs.settings.touch;
++            let size = gs.window.window().inner_size();
++            let aspect = size.width.max(1) as f32 / size.height.max(1) as f32;
++            let mut bad = Vec::new();
++            for (i, a) in Ctl::ALL.iter().enumerate() {
++                let la = s.layout(*a);
++                if la.x - la.size / aspect < -1e-3
++                    || la.x + la.size / aspect > 1.0 + 1e-3
++                    || la.y - la.size < -1e-3
++                    || la.y + la.size > 1.0 + 1e-3
++                {
++                    bad.push(format!("{a:?} off-screen"));
++                }
++                for b in &Ctl::ALL[i + 1..] {
++                    if a.exclusive_with(*b) {
++                        continue;
++                    }
++                    let lb = s.layout(*b);
++                    let d = (((la.x - lb.x) * aspect).powi(2) + (la.y - lb.y).powi(2)).sqrt();
++                    if d < la.size + lb.size {
++                        bad.push(format!("{a:?}/{b:?}"));
++                    }
++                }
++            }
++            let c = touch::context();
++            let shown = Ctl::ALL.iter().filter(|x| c.visible(**x)).count();
++            (bad.is_empty(), format!("aspect={aspect:.3} visible={shown} overlaps={bad:?}"))
++        },
++        "ability_buttons" => {
++            // A fresh character has no unlocked auxiliary abilities, so hotbar
++            // slots 1..5 are empty and the mask is 0. The check is that every
++            // ability button is shown exactly when its hotbar slot is filled.
++            let m = touch::ability_mask();
++            let c = touch::context();
++            let ab = [Ctl::Ability1, Ctl::Ability2, Ctl::Ability3, Ctl::Ability4, Ctl::Ability5];
++            let wrong: Vec<_> = ab
++                .iter()
++                .enumerate()
++                .filter(|(i, a)| c.visible(**a) != (m & (1 << i) != 0))
++                .map(|(_, a)| format!("{a:?}"))
++                .collect();
++            let shown = ab.iter().filter(|a| c.visible(**a)).count();
++            (
++                wrong.is_empty(),
++                format!("hotbar mask={m:05b} ability buttons shown={shown} mismatched={wrong:?}"),
++            )
++        },
++        "thermal_api" => match crate::mobile::thermal::read() {
++            Some((st, hr)) => (true, format!("status={st} headroom={hr:?}")),
++            None => (false, "AThermal API not available".to_owned()),
++        },
++        "thermal_steps" => {
++            let mut g = crate::mobile::Tier::Ultra.apply(gs.settings.graphics.clone());
++            let ultra_fps = g.max_fps;
++            let mut steps = Vec::new();
++            while let Some((n, why)) = crate::mobile::cool_down(&g) {
++                steps.push(why);
++                g = n;
++                if steps.len() > 20 {
++                    break;
++                }
++            }
++            let ok = ultra_fps == crate::settings::Fps::Max(30)
++                && steps.first() == Some(&"shadows off")
++                && g.terrain_view_distance <= 6
++                && g.render_mode.upscale_mode.factor <= 0.65 + 1e-3
++                && steps.len() < 20;
++            (ok, format!("ultra_fps={ultra_fps:?} steps={steps:?} final_vd={}", g.terrain_view_distance))
++        },
++        "stick_full" => {
++            let st = touch::with_layer(|l| l.stick());
++            (st.0 > 0.95, format!("stick={st:?}"))
++        },
++        "stick_follow" => {
++            let st = touch::with_layer(|l| l.stick());
++            (st.0 < 0.6, format!("stick={st:?} (base followed the finger)"))
++        },
++        "stick_stopped" => {
++            let st = touch::with_layer(|l| l.stick());
++            (st == (0.0, 0.0), format!("stick={st:?}"))
++        },
++        "glide_button_shown" => {
++            let c = touch::context();
++            (
++                c.visible(Ctl::Glide) && !c.visible(Ctl::Jump),
++                format!("airborne={} gliding={}", c.airborne, c.gliding),
++            )
++        },
+         "glide" => (
+             rec.glide_wield || rec.gliding,
+             format!("glider_wielded={} gliding={}", rec.glide_wield, rec.gliding),
+@@ -1530,8 +1668,8 @@ fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (boo
+             (ok, format!("loaded jump={j:?} expected={expect:?}"))
+         },
+         "layout_reset" => {
+-            let ok = gs.settings.touch.buttons == touch::default_layout()
+-                && read_settings_touch(gs).is_some_and(|t| t.buttons == touch::default_layout());
++            let ok = gs.settings.touch.buttons.is_empty()
++                && read_settings_touch(gs).is_some_and(|t| t.buttons.is_empty());
+             (ok, format!("jump={:?}", gs.settings.touch.layout(Ctl::Jump)))
+         },
+         "pause_resume" => {
+diff --git a/voxygen/src/hud/img_ids.rs b/voxygen/src/hud/img_ids.rs
+index 39d46cb3f..1ee772971 100644
+--- a/voxygen/src/hud/img_ids.rs
++++ b/voxygen/src/hud/img_ids.rs
+@@ -974,6 +974,31 @@ image_ids! {
+         buff_6: "voxygen.element.animation.buff_frame.7",
+         buff_7: "voxygen.element.animation.buff_frame.8",
+ 
++        // my-veloren dev.7: touch control icons (own pixel art in ui/touch,
++        // the rest reuses Veloren's HUD icons so the controls match the game)
++        touch_attack: "voxygen.element.ui.touch.attack",
++        touch_skill: "voxygen.element.ui.touch.skill",
++        touch_block: "voxygen.element.ui.touch.block",
++        touch_jump: "voxygen.element.ui.touch.jump",
++        touch_roll: "voxygen.element.skills.skilltree.skill_dodge",
++        touch_glide: "voxygen.element.ui.crafting.icons.gliders",
++        touch_sneak: "voxygen.element.ui.touch.sneak",
++        touch_wield: "voxygen.element.ui.chat.icons.group",
++        touch_lantern: "voxygen.element.ui.touch.lantern",
++        touch_interact: "voxygen.element.ui.touch.interact",
++        touch_mount: "voxygen.element.ui.touch.mount",
++        touch_swim_up: "voxygen.element.ui.touch.swim_up",
++        touch_swim_down: "voxygen.element.ui.touch.swim_down",
++        touch_respawn: "voxygen.element.ui.touch.respawn",
++        touch_edit: "voxygen.element.ui.touch.edit",
++        touch_menu: "voxygen.element.ui.generic.buttons.settings",
++        touch_bag: "voxygen.element.ui.generic.buttons.bag",
++        touch_map: "voxygen.element.ui.generic.buttons.map",
++        touch_skills: "voxygen.element.ui.diary.buttons.spellbook",
++        touch_crafting: "voxygen.element.ui.generic.buttons.anvil",
++        touch_social: "voxygen.element.ui.generic.buttons.group",
++        touch_chat: "voxygen.element.ui.generic.buttons.social",
++
+         <BlankGraphic>
+         nothing: (),
+     }
+diff --git a/voxygen/src/hud/mod.rs b/voxygen/src/hud/mod.rs
+index 413be76c6..0fb22cd04 100755
+--- a/voxygen/src/hud/mod.rs
++++ b/voxygen/src/hud/mod.rs
+@@ -3143,7 +3143,9 @@ impl Hud {
+         let msm = ecs.read_resource::<MaterialStatManifest>();
+         let time = ecs.read_resource::<Time>();
+ 
+-        if global_state.settings.interface.toggle_hotkey_hints {
++        // my-veloren dev.7 (7.6): the bottom-right key hints list keyboard
++        // keys; on a phone the buttons themselves show what is possible.
++        if global_state.settings.interface.toggle_hotkey_hints && !crate::touch::active() {
+             // Action text in bottom right corner
+             DynamicTutorial::new(global_state, client, &self.fonts, &self.imgs, i18n)
+                 .set(self.ids.buttons, ui_widgets);
+@@ -3784,6 +3786,14 @@ impl Hud {
+                         // Disables gamepad mapping mode to avoid issues
+                         global_state.window.reset_mapping_mode();
+                     },
++                    settings_window::Event::TouchEditLayout => {
++                        #[cfg(feature = "singleplayer")]
++                        global_state.unpause();
++                        self.show.want_grab = true;
++                        self.force_ungrab = false;
++                        self.show.settings(false);
++                        crate::touch::with_layer(|l| l.begin_edit());
++                    },
+                 }
+             }
+         }
+@@ -4600,6 +4610,9 @@ impl Hud {
+             .controls
+             .get_binding(GameInput::ToggleCursor)
+             .filter(|_| !show_intro)
++            // my-veloren dev.7: the keyboard tutorial ("press [,] to free your
++            // cursor") makes no sense on a phone and sat under the controls.
++            .filter(|_| !crate::touch::active())
+         {
+             prof_span!("temporary example quest");
+             match global_state.settings.interface.intro_show {
+@@ -4750,6 +4763,7 @@ impl Hud {
+                 &mut self.touch_ids,
+                 ui_widgets,
+                 &self.fonts,
++                &self.imgs,
+                 &global_state.settings.touch,
+             );
+         }
+diff --git a/voxygen/src/hud/settings_window/mod.rs b/voxygen/src/hud/settings_window/mod.rs
+index a25607b2f..95b73ffbd 100644
+--- a/voxygen/src/hud/settings_window/mod.rs
++++ b/voxygen/src/hud/settings_window/mod.rs
+@@ -6,6 +6,7 @@ mod interface;
+ mod language;
+ mod networking;
+ mod sound;
++mod touch_controls;
+ mod video;
+ 
+ use crate::{
+@@ -43,6 +44,7 @@ widget_ids! {
+         chat,
+         networking,
+         accessibility,
++        touch_controls,
+     }
+ }
+ 
+@@ -137,6 +139,8 @@ pub enum Event {
+     SettingsChange(SettingsChange),
+     ChangeChatSettingsTab(Option<usize>),
+     ResetBindingMode,
++    /// my-veloren dev.7: close settings and open the touch layout editor.
++    TouchEditLayout,
+ }
+ 
+ #[derive(Clone)]
+@@ -299,6 +303,23 @@ impl Widget for SettingsWindow<'_> {
+                     events.push(Event::SettingsChange(change.into()));
+                 }
+             },
++            // my-veloren dev.7 (7.6): on a phone the Controls tab is the touch
++            // controls only (no keyboard / mouse / gamepad bindings).
++            SettingsTab::Controls if crate::touch::active() => {
++                for change in
++                    touch_controls::TouchControls::new(global_state, imgs, fonts, localized_strings)
++                        .top_left_with_margins_on(state.ids.settings_content_align, 0.0, 0.0)
++                        .wh_of(state.ids.settings_content_align)
++                        .set(state.ids.touch_controls, ui)
++                {
++                    match change {
++                        crate::session::settings_change::Touch::EditLayout => {
++                            events.push(Event::TouchEditLayout)
++                        },
++                        other => events.push(Event::SettingsChange(other.into())),
++                    }
++                }
++            },
+             SettingsTab::Controls => {
+                 for change in controls::Controls::new(global_state, imgs, fonts, localized_strings)
+                     .top_left_with_margins_on(state.ids.settings_content_align, 0.0, 0.0)
+diff --git a/voxygen/src/hud/settings_window/touch_controls.rs b/voxygen/src/hud/settings_window/touch_controls.rs
+new file mode 100644
+index 000000000..6ff12bef1
+--- /dev/null
++++ b/voxygen/src/hud/settings_window/touch_controls.rs
+@@ -0,0 +1,242 @@
++//! my-veloren dev.7 (7.6): the "Controls" tab on a phone. Only what the
++//! player actually touches: the on-screen buttons and the stick. Keyboard,
++//! mouse and gamepad bindings are not shown on Android.
++use super::{RESET_BUTTONS_HEIGHT, RESET_BUTTONS_WIDTH};
++
++use crate::{
++    GlobalState,
++    hud::{TEXT_COLOR, img_ids::Imgs},
++    session::settings_change::Touch as TouchChange,
++    ui::{ImageSlider, ToggleButton, fonts::Fonts},
++};
++use conrod_core::{
++    Colorable, Labelable, Positionable, Sizeable, Widget, WidgetCommon, color,
++    position::Relative,
++    widget::{self, Button, Rectangle, Scrollbar, Text},
++    widget_ids,
++};
++use i18n::Localization;
++
++widget_ids! {
++    struct Ids {
++        window,
++        window_scrollbar,
++        intro,
++        sliders[],
++        slider_labels[],
++        slider_values[],
++        toggles[],
++        toggle_labels[],
++        edit_button,
++        reset_button,
++    }
++}
++
++#[derive(WidgetCommon)]
++pub struct TouchControls<'a> {
++    global_state: &'a GlobalState,
++    imgs: &'a Imgs,
++    fonts: &'a Fonts,
++    localized_strings: &'a Localization,
++    #[conrod(common_builder)]
++    common: widget::CommonBuilder,
++}
++
++impl<'a> TouchControls<'a> {
++    pub fn new(
++        global_state: &'a GlobalState,
++        imgs: &'a Imgs,
++        fonts: &'a Fonts,
++        localized_strings: &'a Localization,
++    ) -> Self {
++        Self {
++            global_state,
++            imgs,
++            fonts,
++            localized_strings,
++            common: widget::CommonBuilder::default(),
++        }
++    }
++}
++
++pub struct State {
++    ids: Ids,
++}
++
++/// (i18n key, value, min, max, shown as percent, change)
++type SliderRow = (&'static str, f32, f32, f32, bool, fn(f32) -> TouchChange);
++
++impl Widget for TouchControls<'_> {
++    type Event = Vec<TouchChange>;
++    type State = State;
++    type Style = ();
++
++    fn init_state(&self, id_gen: widget::id::Generator) -> Self::State {
++        State {
++            ids: Ids::new(id_gen),
++        }
++    }
++
++    fn style(&self) -> Self::Style {}
++
++    fn update(self, args: widget::UpdateArgs<Self>) -> Self::Event {
++        let widget::UpdateArgs { state, ui, .. } = args;
++        let mut events = Vec::new();
++        let t = &self.global_state.settings.touch;
++        let i18n = self.localized_strings;
++
++        Rectangle::fill_with(args.rect.dim(), color::TRANSPARENT)
++            .xy(args.rect.xy())
++            .graphics_for(args.id)
++            .scroll_kids()
++            .scroll_kids_vertically()
++            .set(state.ids.window, ui);
++        Scrollbar::y_axis(state.ids.window)
++            .thickness(5.0)
++            .rgba(0.33, 0.33, 0.33, 1.0)
++            .set(state.ids.window_scrollbar, ui);
++
++        Text::new(&i18n.get_msg("hud-settings-touch-intro"))
++            .top_left_with_margins_on(state.ids.window, 10.0, 10.0)
++            .w(560.0)
++            .font_size(self.fonts.cyri.scale(14))
++            .font_id(self.fonts.cyri.conrod_id)
++            .color(TEXT_COLOR)
++            .set(state.ids.intro, ui);
++
++        // Big, finger-friendly buttons first: what people come here for.
++        fn big<'b>(
++            b: Button<'b, widget::button::Image>,
++            imgs: &Imgs,
++            fonts: &Fonts,
++        ) -> Button<'b, widget::button::Image> {
++            b.w_h(RESET_BUTTONS_WIDTH * 1.6, RESET_BUTTONS_HEIGHT * 1.5)
++                .hover_image(imgs.button_hover)
++                .press_image(imgs.button_press)
++                .label_font_size(fonts.cyri.scale(16))
++                .label_color(TEXT_COLOR)
++                .label_font_id(fonts.cyri.conrod_id)
++                .label_y(Relative::Scalar(2.0))
++        }
++        let edit_label = i18n.get_msg("hud-settings-touch-edit_layout");
++        let reset_label = i18n.get_msg("hud-settings-touch-reset");
++        if big(Button::image(self.imgs.button), self.imgs, self.fonts)
++            .down_from(state.ids.intro, 16.0)
++            .label(&edit_label)
++            .set(state.ids.edit_button, ui)
++            .was_clicked()
++        {
++            events.push(TouchChange::EditLayout);
++        }
++        if big(Button::image(self.imgs.button), self.imgs, self.fonts)
++            .right_from(state.ids.edit_button, 16.0)
++            .label(&reset_label)
++            .set(state.ids.reset_button, ui)
++            .was_clicked()
++        {
++            events.push(TouchChange::Reset);
++        }
++
++        let rows: [SliderRow; 7] = [
++            ("hud-settings-touch-opacity", t.opacity, 0.2, 1.0, true, TouchChange::Opacity),
++            ("hud-settings-touch-button_size", t.button_scale, 0.7, 1.4, true, TouchChange::ButtonScale),
++            ("hud-settings-touch-stick_size", t.stick_radius, 0.10, 0.22, false, TouchChange::StickRadius),
++            ("hud-settings-touch-stick_deadzone", t.stick_deadzone, 0.0, 0.3, true, TouchChange::StickDeadzone),
++            ("hud-settings-touch-camera_sensitivity", t.camera_sensitivity, 0.3, 3.0, true, TouchChange::CameraSensitivity),
++            ("hud-settings-touch-camera_smoothing", t.camera_smoothing, 0.0, 0.8, true, TouchChange::CameraSmoothing),
++            ("hud-settings-touch-zoom_sensitivity", t.zoom_sensitivity, 0.3, 3.0, true, TouchChange::ZoomSensitivity),
++        ];
++        let n = rows.len();
++        if state.ids.sliders.len() < n {
++            state.update(|s| {
++                let g = &mut ui.widget_id_generator();
++                s.ids.sliders.resize(n, g);
++                s.ids.slider_labels.resize(n, g);
++                s.ids.slider_values.resize(n, g);
++            });
++        }
++        for (i, (key, value, min, max, pct, change)) in rows.into_iter().enumerate() {
++            let text = i18n.get_msg(key);
++            let label = Text::new(&text)
++                .font_size(self.fonts.cyri.scale(15))
++                .font_id(self.fonts.cyri.conrod_id)
++                .color(TEXT_COLOR);
++            if i == 0 {
++                label
++                    .down_from(state.ids.edit_button, 22.0)
++                    .x_align_to(state.ids.intro, conrod_core::position::Align::Start)
++            } else {
++                label.down_from(state.ids.sliders[i - 1], 14.0)
++            }
++            .set(state.ids.slider_labels[i], ui);
++            // Thick track + wide handle: easy to grab with a thumb.
++            if let Some(v) = ImageSlider::continuous(
++                value.clamp(min, max),
++                min,
++                max,
++                self.imgs.slider_indicator,
++                self.imgs.slider,
++            )
++            .w_h(560.0, 34.0)
++            .down_from(state.ids.slider_labels[i], 8.0)
++            .track_breadth(40.0)
++            .slider_length(22.0)
++            .pad_track((8.0, 8.0))
++            .set(state.ids.sliders[i], ui)
++            {
++                events.push(change(v));
++            }
++            let shown = if pct {
++                let rel = if key.ends_with("opacity") || key.ends_with("button_size") {
++                    value
++                } else {
++                    value / max
++                };
++                format!("{:.0}%", rel * 100.0)
++            } else {
++                format!("{:.0}%", value / 0.15 * 100.0)
++            };
++            Text::new(&shown)
++                .right_from(state.ids.sliders[i], 10.0)
++                .font_size(self.fonts.cyri.scale(15))
++                .font_id(self.fonts.cyri.conrod_id)
++                .color(TEXT_COLOR)
++                .set(state.ids.slider_values[i], ui);
++        }
++
++        let toggles: [(&str, bool, fn(bool) -> TouchChange); 2] = [
++            ("hud-settings-touch-stick_follow", t.stick_follow, TouchChange::StickFollow),
++            ("hud-settings-touch-vibration", t.haptics, TouchChange::Haptics),
++        ];
++        if state.ids.toggles.len() < toggles.len() {
++            state.update(|s| {
++                let g = &mut ui.widget_id_generator();
++                s.ids.toggles.resize(2, g);
++                s.ids.toggle_labels.resize(2, g);
++            });
++        }
++        for (i, (key, on, change)) in toggles.into_iter().enumerate() {
++            let b = ToggleButton::new(on, self.imgs.checkbox, self.imgs.checkbox_checked)
++                .w_h(30.0, 30.0)
++                .hover_images(self.imgs.checkbox_mo, self.imgs.checkbox_checked_mo)
++                .press_images(self.imgs.checkbox_press, self.imgs.checkbox_checked);
++            let b = if i == 0 {
++                b.down_from(state.ids.sliders[n - 1], 22.0)
++            } else {
++                b.down_from(state.ids.toggles[i - 1], 16.0)
++            };
++            if b.set(state.ids.toggles[i], ui) != on {
++                events.push(change(!on));
++            }
++            Text::new(&i18n.get_msg(key))
++                .right_from(state.ids.toggles[i], 12.0)
++                .font_size(self.fonts.cyri.scale(15))
++                .font_id(self.fonts.cyri.conrod_id)
++                .graphics_for(state.ids.toggles[i])
++                .color(TEXT_COLOR)
++                .set(state.ids.toggle_labels[i], ui);
++        }
++
++        events
++    }
++}
+diff --git a/voxygen/src/hud/settings_window/video.rs b/voxygen/src/hud/settings_window/video.rs
+index d76f470b7..7636be308 100644
+--- a/voxygen/src/hud/settings_window/video.rs
++++ b/voxygen/src/hud/settings_window/video.rs
+@@ -350,6 +350,10 @@ impl Widget for Video<'_> {
+             (
+                 "hud-settings-ultra_graphics",
+                 state.ids.ultra_graphics_button,
++                // my-veloren dev.7 (7.1): phone-safe Ultra (30 fps cap) on Android
++                #[cfg(target_os = "android")]
++                crate::mobile::into_mobile_ultra,
++                #[cfg(not(target_os = "android"))]
+                 GraphicsSettings::into_ultra,
+             ),
+         ];
+diff --git a/voxygen/src/hud/skillbar.rs b/voxygen/src/hud/skillbar.rs
+index 7c15c5e83..3f034f399 100644
+--- a/voxygen/src/hud/skillbar.rs
++++ b/voxygen/src/hud/skillbar.rs
+@@ -1018,6 +1018,35 @@ impl<'a> Skillbar<'a> {
+         );
+ 
+         let image_source = (self.item_imgs, self.imgs);
++
++        // my-veloren dev.7 (7.2/7.3): the touch ability buttons show the same
++        // icons as hotbar slots 1..5, dim when not usable, and hide when empty.
++        if crate::touch::active() {
++            use crate::ui::slot::SlotKey;
++            let mut mask = 0u8;
++            let mut icons = [None; 5];
++            for (i, slot) in [
++                hotbar::Slot::One,
++                hotbar::Slot::Two,
++                hotbar::Slot::Three,
++                hotbar::Slot::Four,
++                hotbar::Slot::Five,
++            ]
++            .iter()
++            .enumerate()
++            {
++                if let Some((key, color)) = slot.image_key(&content_source) {
++                    mask |= 1 << i;
++                    let usable = !matches!(color, Some(Color::Rgba(r, ..)) if r < 0.5);
++                    icons[i] = <hotbar::Slot as SlotKey<_, _>>::image_ids(&key, &image_source)
++                        .first()
++                        .map(|id| (*id, usable));
++                }
++            }
++            crate::touch::set_ability_mask(mask);
++            super::touch_overlay::set_slot_icons(icons);
++        }
++
+         let mut slot_maker = SlotMaker {
+             // TODO: is a separate image needed for the frame?
+             empty_slot: self.imgs.skillbar_slot,
+@@ -1273,6 +1302,13 @@ impl<'a> Skillbar<'a> {
+             )
+         });
+ 
++        if crate::touch::active() {
++            super::touch_overlay::set_main_icon(
++                0,
++                primary_ability_id.map(|id| util::ability_image(self.imgs, id)),
++            );
++        }
++
+         let (primary_ability_title, primary_ability_desc) =
+             util::ability_description(primary_ability_id.unwrap_or(""), self.localized_strings);
+ 
+@@ -1306,6 +1342,13 @@ impl<'a> Skillbar<'a> {
+             )
+         });
+ 
++        if crate::touch::active() {
++            super::touch_overlay::set_main_icon(
++                1,
++                secondary_ability_id.map(|id| util::ability_image(self.imgs, id)),
++            );
++        }
++
+         let (secondary_ability_title, secondary_ability_desc) =
+             util::ability_description(secondary_ability_id.unwrap_or(""), self.localized_strings);
+ 
+diff --git a/voxygen/src/hud/touch_overlay.rs b/voxygen/src/hud/touch_overlay.rs
+index 643c53750..90c2b865d 100644
+--- a/voxygen/src/hud/touch_overlay.rs
++++ b/voxygen/src/hud/touch_overlay.rs
+@@ -1,20 +1,89 @@
+-//! Draws the on-screen touch controls (my-veloren dev.3, 3.1) on top of the HUD.
+-//! Layout and state come from `crate::touch`; this module only renders.
+-use crate::ui::fonts::Fonts;
++//! Draws the on-screen touch controls (my-veloren dev.3, 3.1; dev.7 look)
++//! on top of the HUD. Layout and state come from `crate::touch`; this module
++//! only renders. dev.7: dark-glass buttons with a coloured ring and an icon
++//! (Veloren's own HUD icons, the equipped abilities, or pixel art in the
++//! same style) instead of flat discs with English words.
++use super::img_ids::Imgs;
++use crate::{touch::Ctl, ui::fonts::Fonts};
+ use conrod_core::{
+-    Color, Colorable, Positionable, UiCell, Widget,
++    Color, Colorable, Positionable, Sizeable, UiCell, Widget, image,
+     widget::{self, Text},
+     widget_ids,
+ };
++use std::sync::Mutex;
+ 
+ widget_ids! {
+     pub struct Ids {
+         circles[],
++        rings[],
++        icons[],
+         labels[],
+     }
+ }
+ 
+-pub fn draw(ids: &mut Ids, ui: &mut UiCell, fonts: &Fonts, settings: &crate::touch::TouchSettings) {
++/// Ability icons published by the skillbar: M1, M2, then hotbar slots 1..5
++/// with "usable now" (enough energy, requirements met).
++struct AbilityIcons {
++    main: [Option<image::Id>; 2],
++    slots: [Option<(image::Id, bool)>; 5],
++}
++
++static ICONS: Mutex<AbilityIcons> = Mutex::new(AbilityIcons {
++    main: [None; 2],
++    slots: [None; 5],
++});
++
++pub fn set_main_icon(i: usize, id: Option<image::Id>) {
++    if let Some(m) = ICONS.lock().unwrap_or_else(|e| e.into_inner()).main.get_mut(i) {
++        *m = id;
++    }
++}
++
++pub fn set_slot_icons(slots: [Option<(image::Id, bool)>; 5]) {
++    ICONS.lock().unwrap_or_else(|e| e.into_inner()).slots = slots;
++}
++
++/// Icon for a control: (image, width / height, usable).
++fn icon(ctl: Ctl, imgs: &Imgs) -> Option<(image::Id, f64, bool)> {
++    let icons = ICONS.lock().unwrap_or_else(|e| e.into_inner());
++    let sq = |id| Some((id, 1.0, true));
++    match ctl {
++        Ctl::Primary => sq(icons.main[0].unwrap_or(imgs.touch_attack)),
++        Ctl::Secondary => sq(icons.main[1].unwrap_or(imgs.touch_skill)),
++        Ctl::Ability1 | Ctl::Ability2 | Ctl::Ability3 | Ctl::Ability4 | Ctl::Ability5 => {
++            let i = ctl as usize - Ctl::Ability1 as usize;
++            icons.slots[i].map(|(id, usable)| (id, 1.0, usable))
++        },
++        Ctl::Block => sq(imgs.touch_block),
++        Ctl::Jump => sq(imgs.touch_jump),
++        Ctl::Roll => sq(imgs.touch_roll),
++        Ctl::Glide => sq(imgs.touch_glide),
++        Ctl::Sneak => sq(imgs.touch_sneak),
++        Ctl::Wield => sq(imgs.touch_wield),
++        Ctl::Lantern => sq(imgs.touch_lantern),
++        Ctl::Interact => sq(imgs.touch_interact),
++        Ctl::Mount => sq(imgs.touch_mount),
++        Ctl::SwimUp => sq(imgs.touch_swim_up),
++        Ctl::SwimDown => sq(imgs.touch_swim_down),
++        Ctl::Respawn => sq(imgs.touch_respawn),
++        Ctl::Edit => sq(imgs.touch_edit),
++        Ctl::Menu => Some((imgs.touch_menu, 32.0 / 28.0, true)),
++        Ctl::Bag => sq(imgs.touch_bag),
++        Ctl::Map => sq(imgs.touch_map),
++        Ctl::Skills => sq(imgs.touch_skills),
++        Ctl::Crafting => sq(imgs.touch_crafting),
++        Ctl::Social => Some((imgs.touch_social, 49.0 / 26.0, true)),
++        Ctl::Chat => sq(imgs.touch_chat),
++    }
++}
++
++pub fn draw(
++    ids: &mut Ids,
++    ui: &mut UiCell,
++    fonts: &Fonts,
++    imgs: &Imgs,
++    settings: &crate::touch::TouchSettings,
++) {
+     let (win_w, win_h) = (ui.win_w, ui.win_h);
+     if win_w <= 1.0 || win_h <= 1.0 {
+         return;
+@@ -22,48 +91,89 @@ pub fn draw(ids: &mut Ids, ui: &mut UiCell, fonts: &Fonts, settings: &crate::tou
+     let aspect = (win_w / win_h) as f32;
+     let ctx = crate::touch::context();
+     let prims = crate::touch::with_layer(|l| l.primitives(&ctx, settings, aspect));
+-    let n_circles = prims.iter().filter(|p| p.r > 0.0).count();
++    let n_circles = prims.iter().filter(|p| p.r > 0.0 && p.ring == 0.0 && p.icon.is_none()).count();
++    let n_rings = prims.iter().filter(|p| p.r > 0.0 && p.ring > 0.0).count();
++    let n_icons = prims.iter().filter(|p| p.icon.is_some()).count();
+     let n_labels = prims.iter().filter(|p| p.label.is_some()).count();
++    let idg = &mut ui.widget_id_generator();
+     if ids.circles.len() < n_circles {
+-        ids.circles.resize(n_circles, &mut ui.widget_id_generator());
++        ids.circles.resize(n_circles, idg);
++    }
++    if ids.rings.len() < n_rings {
++        ids.rings.resize(n_rings, idg);
++    }
++    if ids.icons.len() < n_icons {
++        ids.icons.resize(n_icons, idg);
+     }
+     if ids.labels.len() < n_labels {
+-        ids.labels.resize(n_labels, &mut ui.widget_id_generator());
++        ids.labels.resize(n_labels, idg);
+     }
+     let window = ui.window;
+-    let (mut ci, mut li) = (0, 0);
++    let (mut ci, mut ri, mut ii, mut li) = (0, 0, 0, 0);
++    let rgba = |c: [f32; 4]| Color::Rgba(c[0], c[1], c[2], c[3]);
+     for p in prims {
+         let x = (p.x as f64 - 0.5) * win_w;
+         let y = (0.5 - p.y as f64) * win_h;
+         let r = p.r as f64 * win_h;
+-        if p.r > 0.0 {
++        let mut drew_icon = false;
++        if let Some(ctl) = p.icon {
++            if let Some((img, ratio, usable)) = icon(ctl, imgs) {
++                let side = 2.0 * r;
++                let (w, h) = if ratio >= 1.0 { (side, side / ratio) } else { (side * ratio, side) };
++                let mut c = p.rgba;
++                if !usable {
++                    // Not enough energy / requirements not met: greyed like the hotbar.
++                    c = [0.45, 0.45, 0.45, c[3] * 0.8];
++                }
++                widget::Image::new(img)
++                    .w_h(w, h)
++                    .x_y(x, y)
++                    .color(Some(rgba(c)))
++                    .graphics_for(window)
++                    .set(ids.icons[ii], ui);
++                drew_icon = true;
++            }
++            ii += 1;
++        } else if r > 0.0 && p.ring > 0.0 {
++            let t = (p.ring as f64 * win_h).max(1.0);
++            // conrod draws the outline centred on the radius; keep it inside.
++            widget::Circle::outline_styled(
++                (r - t / 2.0).max(1.0),
++                widget::line::Style::solid().thickness(t),
++            )
++            .color(rgba(p.rgba))
++            .x_y(x, y)
++            .graphics_for(window)
++            .set(ids.rings[ri], ui);
++            ri += 1;
++        } else if r > 0.0 {
+             widget::Circle::fill(r)
+-                .color(Color::Rgba(p.rgba[0], p.rgba[1], p.rgba[2], p.rgba[3]))
++                .color(rgba(p.rgba))
+                 .x_y(x, y)
+                 .graphics_for(window)
+                 .set(ids.circles[ci], ui);
+             ci += 1;
+         }
+         if let Some(label) = p.label {
+-            let len = label.chars().count().max(1) as f64;
+-            let size = if r > 0.0 {
+-                (r * 2.0 * 0.85 / (0.6 * len)).min(r * 0.62)
+-            } else {
+-                win_h * 0.035
++            // Icon buttons carry their label only as a fallback.
++            if !drew_icon {
++                let len = label.chars().count().max(1) as f64;
++                let size = if p.text_size > 0.0 {
++                    p.text_size as f64 * win_h
++                } else if r > 0.0 {
++                    (r * 2.0 * 0.85 / (0.6 * len)).min(r * 0.62)
++                } else {
++                    win_h * 0.035
++                }
++                .clamp(7.0, 64.0) as u32;
++                Text::new(label)
++                    .font_id(fonts.cyri.conrod_id)
++                    .font_size(size)
++                    .color(rgba(p.text_rgba))
++                    .x_y(x, y)
++                    .graphics_for(window)
++                    .set(ids.labels[li], ui);
+             }
+-            .clamp(7.0, 64.0) as u32;
+-            Text::new(label)
+-                .font_id(fonts.cyri.conrod_id)
+-                .font_size(size)
+-                .color(Color::Rgba(
+-                    p.text_rgba[0],
+-                    p.text_rgba[1],
+-                    p.text_rgba[2],
+-                    p.text_rgba[3],
+-                ))
+-                .x_y(x, y)
+-                .graphics_for(window)
+-                .set(ids.labels[li], ui);
+             li += 1;
+         }
+     }
+diff --git a/voxygen/src/hud/tutorial.rs b/voxygen/src/hud/tutorial.rs
+index ac7a9250d..b8b30c570 100644
+--- a/voxygen/src/hud/tutorial.rs
++++ b/voxygen/src/hud/tutorial.rs
+@@ -107,6 +107,21 @@ impl Hint {
+                 .unwrap_or_else(|| icon_utils::UNBOUND_KEY.to_string()),
+         };
+         let key = &format!("tutorial-{self:?}");
++        // my-veloren dev.7 (7.6): no keyboard on a phone; say what to touch.
++        if crate::touch::active()
++            && matches!(
++                self,
++                Self::Move
++                    | Self::Zoom
++                    | Self::UseItem
++                    | Self::Swim
++                    | Self::FirstPerson
++                    | Self::OpenGlider
++                    | Self::FallDamage
++            )
++        {
++            return i18n.get_msg(&format!("tutorial-touch-{self:?}"));
++        }
+         match self {
+             Self::Move => i18n.get_msg_ctx(key, &i18n::fluent_args! {
+                 "w" => get_key(GameInput::MoveForward),
+diff --git a/voxygen/src/menu/char_selection/ui.rs b/voxygen/src/menu/char_selection/ui.rs
+index 7be87b69f..0ce18a153 100644
+--- a/voxygen/src/menu/char_selection/ui.rs
++++ b/voxygen/src/menu/char_selection/ui.rs
+@@ -57,6 +57,13 @@ const BANNER_ALPHA: u8 = 210;
+ // Buttons in the bottom corners
+ const SMALL_BUTTON_HEIGHT: u16 = 31;
+ 
++/// my-veloren dev.7 (7.5): finger-sized buttons on a phone.
++fn small_button_height() -> u16 {
++    if crate::touch::active() { 46 } else { SMALL_BUTTON_HEIGHT }
++}
++
++fn big_button_height() -> u16 { if crate::touch::active() { 66 } else { 52 } }
++
+ const STARTER_HAMMER: &str = "common.items.weapons.hammer.starter_hammer";
+ const STARTER_BOW: &str = "common.items.weapons.bow.starter";
+ const STARTER_AXE: &str = "common.items.weapons.axe.starter_axe";
+@@ -819,11 +826,16 @@ impl Controls {
+                         Some(Message::Logout),
+                     ))
+                     .width(Length::Fill)
+-                    .height(Length::Units(SMALL_BUTTON_HEIGHT))
++                    .height(Length::Units(small_button_height()))
+                     .into(),
+                 ];
+ 
+-                if client.is_moderator() && client.client_type().can_spectate() {
++                // my-veloren dev.7: no spectator mode on the phone (single
++                // player is always "moderator", which showed a confusing button).
++                if client.is_moderator()
++                    && client.client_type().can_spectate()
++                    && !crate::touch::active()
++                {
+                     bottom_content.push(
+                         Container::new(neat_button(
+                             spectate_button,
+@@ -849,7 +861,7 @@ impl Controls {
+                             selected.map(|_| Message::EnterWorld),
+                         ))
+                         .width(Length::Fill)
+-                        .height(Length::Units(52))
++                        .height(Length::Units(big_button_height()))
+                         .center_x()
+                         .into(),
+                     );
+@@ -1723,7 +1735,7 @@ impl Controls {
+                 let bottom = Row::with_children(vec![
+                     Container::new(back)
+                         .width(Length::Fill)
+-                        .height(Length::Units(SMALL_BUTTON_HEIGHT))
++                        .height(Length::Units(small_button_height()))
+                         .into(),
+                     Container::new(bottom_center)
+                         .width(Length::Fill)
+@@ -1731,7 +1743,7 @@ impl Controls {
+                         .into(),
+                     Container::new(create)
+                         .width(Length::Fill)
+-                        .height(Length::Units(SMALL_BUTTON_HEIGHT))
++                        .height(Length::Units(small_button_height()))
+                         .align_x(Align::End)
+                         .into(),
+                 ])
+diff --git a/voxygen/src/menu/main/ui/login.rs b/voxygen/src/menu/main/ui/login.rs
+index 0c813c1d6..7be82d374 100644
+--- a/voxygen/src/menu/main/ui/login.rs
++++ b/voxygen/src/menu/main/ui/login.rs
+@@ -52,9 +52,13 @@ impl Screen {
+         button_style: style::button::Style,
+     ) -> Element<'_, Message> {
+         let mut buttons = Vec::new();
++        // my-veloren dev.7 (7.5): the phone build is offline single player, so
++        // the multiplayer parts (server list, login, account note) are hidden
++        // and the rest is sized for fingers.
++        let touch = crate::touch::active();
+         // If the server field is locked, we don't want to show the server selection
+         // list!
+-        if !server_field_locked {
++        if !server_field_locked && !touch {
+             buttons.push(neat_button(
+                 &mut self.servers_button,
+                 i18n.get_msg("common-servers"),
+@@ -97,8 +101,8 @@ impl Screen {
+         let buttons = Container::new(
+             Column::with_children(buttons)
+                 .width(Length::Fill)
+-                .max_width(100)
+-                .spacing(5),
++                .max_width(if touch { 190 } else { 100 })
++                .spacing(if touch { 12 } else { 5 }),
+         )
+         .width(Length::Fill)
+         .height(Length::Fill)
+@@ -121,7 +125,11 @@ impl Screen {
+         .max_width(360)
+         .padding(Padding::new().horizontal(20).top(10).bottom(60));
+ 
+-        let left_column = Column::with_children(vec![info_window.into(), buttons.into()])
++        let left_column = if touch {
++            Column::with_children(vec![buttons.into()])
++        } else {
++            Column::with_children(vec![info_window.into(), buttons.into()])
++        }
+             .width(Length::Fill)
+             .height(Length::Fill)
+             .padding(27)
+@@ -344,6 +352,28 @@ impl LoginBanner {
+     ) -> Element<'_, Message> {
+         let input_text_size = fonts.cyri.scale(INPUT_TEXT_SIZE);
+ 
++        // my-veloren dev.7 (7.5): one big "Singleplayer" button on a phone.
++        #[cfg(feature = "singleplayer")]
++        if crate::touch::active() {
++            let _ = (imgs, server_field_locked, login_info);
++            return Container::new(
++                Column::with_children(vec![neat_button(
++                    &mut self.singleplayer_button,
++                    i18n.get_msg("common-singleplayer"),
++                    FILL_FRAC_TWO,
++                    button_style,
++                    Some(Message::Singleplayer),
++                )])
++                .max_width(340)
++                .width(Length::Fill),
++            )
++            .width(Length::Fill)
++            .height(Length::Fill)
++            .center_x()
++            .center_y()
++            .into();
++        }
++
+         let server_field: Element<Message> = if server_field_locked {
+             let unlock_style = style::button::Style::new(imgs.unlock)
+                 .hover_image(imgs.unlock_hover)
+diff --git a/voxygen/src/mobile.rs b/voxygen/src/mobile.rs
+index 13e55f706..c3e8c3a12 100644
+--- a/voxygen/src/mobile.rs
++++ b/voxygen/src/mobile.rs
+@@ -20,6 +20,10 @@ pub enum Tier {
+     Low,
+     Medium,
+     High,
++    /// dev.7 (7.1): "Ultra" on a phone: High plus more distance and detail,
++    /// capped at 30 fps so it stays cool (the desktop Ultra overheated the
++    /// owner's Poco F3 and was barely playable).
++    Ultra,
+ }
+ 
+ impl Tier {
+@@ -29,6 +33,7 @@ impl Tier {
+             Tier::Low => "mobile-low",
+             Tier::Medium => "mobile-medium",
+             Tier::High => "mobile-high",
++            Tier::Ultra => "mobile-ultra",
+         }
+     }
+ 
+@@ -38,6 +43,7 @@ impl Tier {
+             "mobile-low" | "low" => Tier::Low,
+             "mobile-medium" | "medium" => Tier::Medium,
+             "mobile-high" | "high" => Tier::High,
++            "mobile-ultra" | "ultra" => Tier::Ultra,
+             _ => return None,
+         })
+     }
+@@ -126,6 +132,30 @@ impl Tier {
+                     ..base
+                 }
+             },
++            Tier::Ultra => {
++                let high = Tier::High.apply(g);
++                GraphicsSettings {
++                    terrain_view_distance: 12,
++                    entity_view_distance: 12,
++                    lod_distance: 150,
++                    lod_detail: 250,
++                    sprite_render_distance: 200,
++                    // Half the frames of High: the main heat saver.
++                    max_fps: Fps::Max(30),
++                    max_background_fps: Fps::Max(10),
++                    render_mode: RenderMode {
++                        cloud: CloudMode::Medium,
++                        reflection: ReflectionMode::Medium,
++                        fluid: FluidMode::Medium,
++                        lighting: LightingMode::BlinnPhong,
++                        shadow: ShadowMode::Map(ShadowMapMode { resolution: 0.75 }),
++                        upscale_mode: UpscaleMode { factor: 1.0 },
++                        present_mode: PresentMode::Fifo,
++                        ..high.render_mode
++                    },
++                    ..high
++                }
++            },
+         }
+     }
+ }
+@@ -134,6 +164,141 @@ impl Tier {
+ pub fn into_mobile_low(g: GraphicsSettings) -> GraphicsSettings { Tier::Low.apply(g) }
+ pub fn into_mobile_medium(g: GraphicsSettings) -> GraphicsSettings { Tier::Medium.apply(g) }
+ pub fn into_mobile_high(g: GraphicsSettings) -> GraphicsSettings { Tier::High.apply(g) }
++pub fn into_mobile_ultra(g: GraphicsSettings) -> GraphicsSettings { Tier::Ultra.apply(g) }
++
++// -------------------------------------------------------------- thermal ---
++//
++// dev.7 (7.1): when Android reports the phone is heating up, lower the
++// graphics one notch at a time (fps cap 30 → shadows off → render scale →
++// view distance), at most once every 45 s, and tell the player.
++
++/// One notch cooler than `g`, with a short reason; `None` = already light.
++pub fn cool_down(g: &GraphicsSettings) -> Option<(GraphicsSettings, &'static str)> {
++    use crate::render::*;
++    let mut n = g.clone();
++    let fps_over_30 = match g.max_fps {
++        Fps::Unlimited => true,
++        Fps::Max(f) => f > 30,
++    };
++    if fps_over_30 {
++        n.max_fps = Fps::Max(30);
++        return Some((n, "fps 30"));
++    }
++    if !matches!(g.render_mode.shadow, ShadowMode::None) {
++        n.render_mode.shadow = ShadowMode::None;
++        return Some((n, "shadows off"));
++    }
++    if g.render_mode.upscale_mode.factor > 0.65 {
++        n.render_mode.upscale_mode = UpscaleMode {
++            factor: (g.render_mode.upscale_mode.factor - 0.1).max(0.6),
++        };
++        return Some((n, "render scale"));
++    }
++    if g.terrain_view_distance > 5 {
++        n.terrain_view_distance = g.terrain_view_distance.saturating_sub(2).max(5);
++        n.entity_view_distance = n.entity_view_distance.min(n.terrain_view_distance);
++        n.sprite_render_distance = (g.sprite_render_distance * 3 / 4).max(50);
++        return Some((n, "view distance"));
++    }
++    None
++}
++
++/// Android thermal status via the NDK (`AThermal_*`, API 30+), looked up at
++/// run time so the APK still starts on Android 8–10 (no thermal API there).
++#[cfg(target_os = "android")]
++#[allow(unsafe_code)]
++pub mod thermal {
++    use std::sync::OnceLock;
++    type Acquire = unsafe extern "C" fn() -> *mut core::ffi::c_void;
++    type Status = unsafe extern "C" fn(*mut core::ffi::c_void) -> i32;
++    type Headroom = unsafe extern "C" fn(*mut core::ffi::c_void, i32) -> f32;
++    struct Api {
++        mgr: usize,
++        status: Status,
++        headroom: Option<Headroom>,
++    }
++    static API: OnceLock<Option<Api>> = OnceLock::new();
++
++    fn api() -> Option<&'static Api> {
++        API.get_or_init(|| unsafe {
++            // SAFETY: plain dlopen/dlsym of documented NDK symbols; the
++            // function types match <android/thermal.h>.
++            let lib = libc::dlopen(c"libandroid.so".as_ptr(), libc::RTLD_NOW);
++            if lib.is_null() {
++                return None;
++            }
++            let acq = libc::dlsym(lib, c"AThermal_acquireManager".as_ptr());
++            let st = libc::dlsym(lib, c"AThermal_getCurrentThermalStatus".as_ptr());
++            if acq.is_null() || st.is_null() {
++                return None;
++            }
++            let acq: Acquire = std::mem::transmute(acq);
++            let mgr = acq();
++            if mgr.is_null() {
++                return None;
++            }
++            let hr = libc::dlsym(lib, c"AThermal_getThermalHeadroom".as_ptr());
++            Some(Api {
++                mgr: mgr as usize,
++                status: std::mem::transmute::<*mut libc::c_void, Status>(st),
++                headroom: (!hr.is_null())
++                    .then(|| std::mem::transmute::<*mut libc::c_void, Headroom>(hr)),
++            })
++        })
++        .as_ref()
++    }
++
++    /// (status 0 none .. 6 shutdown, headroom forecast in 10 s; 1.0 = throttling).
++    pub fn read() -> Option<(i32, Option<f32>)> {
++        let a = api()?;
++        // SAFETY: `mgr` came from AThermal_acquireManager and is never released.
++        unsafe {
++            let p = a.mgr as *mut core::ffi::c_void;
++            let s = (a.status)(p);
++            let h = a.headroom.map(|f| f(p, 10)).filter(|h| h.is_finite());
++            Some((s, h))
++        }
++    }
++}
++
++/// Polled by the session: `Some(cooler settings, reason)` when the phone is
++/// hot and the last step is old enough.
++#[cfg(target_os = "android")]
++pub fn thermal_guard(g: &GraphicsSettings) -> Option<(GraphicsSettings, &'static str)> {
++    use std::time::{Duration, Instant};
++    struct St {
++        last_poll: Option<Instant>,
++        last_step: Option<Instant>,
++        hot_polls: u32,
++    }
++    static ST: Mutex<St> = Mutex::new(St {
++        last_poll: None,
++        last_step: None,
++        hot_polls: 0,
++    });
++    let mut st = ST.lock().unwrap_or_else(|e| e.into_inner());
++    let now = Instant::now();
++    if st.last_poll.is_some_and(|t| now - t < Duration::from_secs(5)) {
++        return None;
++    }
++    st.last_poll = Some(now);
++    let (status, headroom) = thermal::read()?;
++    // MODERATE (2) or worse, or the 10 s forecast says throttling is near.
++    let hot = status >= 2 || headroom.is_some_and(|h| h >= 0.95);
++    st.hot_polls = if hot { st.hot_polls + 1 } else { 0 };
++    if st.hot_polls < 2 || st.last_step.is_some_and(|t| now - t < Duration::from_secs(45)) {
++        return None;
++    }
++    let r = cool_down(g)?;
++    st.last_step = Some(now);
++    st.hot_polls = 0;
++    tracing::warn!(
++        "VEL-THERMAL status={status} headroom={headroom:?} step={} vd={}",
++        r.1,
++        r.0.terrain_view_distance
++    );
++    Some(r)
++}
+ 
+ /// First-launch tier for a GPU (4.3), see `mobile_gpu.rs`.
+ pub fn tier_for_gpu(name: &str) -> Tier {
+diff --git a/voxygen/src/session/mod.rs b/voxygen/src/session/mod.rs
+index e056f959b..06e80ed02 100644
+--- a/voxygen/src/session/mod.rs
++++ b/voxygen/src/session/mod.rs
+@@ -149,6 +149,17 @@ impl SessionState {
+             in_liquid: phys.get(me).is_some_and(|p| p.in_liquid().is_some()),
+             dead: healths.get(me).is_some_and(|h| h.is_dead),
+             map_open: self.hud.touch_windows().3,
++            // dev.7: Glide takes Jump's place in the air.
++            airborne: crate::touch::update_airborne(
++                phys.get(me)
++                    .is_some_and(|p| p.on_ground.is_none() && p.in_liquid().is_none())
++                    && riders.get(me).is_none(),
++            ),
++            gliding: ecs
++                .read_storage::<comp::CharacterState>()
++                .get(me)
++                .is_some_and(|cs| matches!(cs, comp::CharacterState::Glide(_))),
++            abilities: crate::touch::ability_mask(),
+         };
+         crate::touch::set_context(ctx);
+         crate::touch::set_typing(self.hud.touch_typing());
+@@ -1778,6 +1789,20 @@ impl PlayState for SessionState {
+                 .process(global_state, self);
+             }
+ 
++            // my-veloren dev.7 (7.1): the phone is heating up → one notch lighter.
++            #[cfg(target_os = "android")]
++            if let Some((g, why)) = crate::mobile::thermal_guard(&global_state.settings.graphics) {
++                settings_change::SettingsChange::Graphics(
++                    settings_change::Graphics::ChangeGraphicsSettings(std::rc::Rc::new(
++                        move |_| g.clone(),
++                    )),
++                )
++                .process(global_state, self);
++                let msg = global_state.i18n.read().get_msg("hud-thermal-lowered").into_owned();
++                tracing::info!("thermal guard: {why}");
++                self.hud.new_message(common::comp::ChatType::CommandInfo.into_plain_msg(msg));
++            }
++
+             let mut outcomes = Vec::new();
+ 
+             // Runs if either in a multiplayer server or the singleplayer server is unpaused
+diff --git a/voxygen/src/session/settings_change.rs b/voxygen/src/session/settings_change.rs
+index 61cc4597a..a6629ee67 100644
+--- a/voxygen/src/session/settings_change.rs
++++ b/voxygen/src/session/settings_change.rs
+@@ -232,8 +232,26 @@ pub enum Accessibility {
+     SetSubtitles(bool),
+ }
+ 
++/// my-veloren dev.7 (7.6): touch controls settings (phone "Controls" tab).
++#[derive(Clone)]
++pub enum Touch {
++    Opacity(f32),
++    ButtonScale(f32),
++    StickRadius(f32),
++    StickDeadzone(f32),
++    CameraSensitivity(f32),
++    CameraSmoothing(f32),
++    ZoomSensitivity(f32),
++    StickFollow(bool),
++    Haptics(bool),
++    Reset,
++    /// Handled by the HUD (closes the settings, opens the layout editor).
++    EditLayout,
++}
++
+ #[derive(Clone)]
+ pub enum SettingsChange {
++    Touch(Touch),
+     Audio(Audio),
+     Chat(Chat),
+     Control(Control),
+@@ -264,12 +282,33 @@ settings_change_from!(Interface);
+ settings_change_from!(Language);
+ settings_change_from!(Networking);
+ settings_change_from!(Accessibility);
++settings_change_from!(Touch);
+ 
+ impl SettingsChange {
+     pub fn process(self, global_state: &mut GlobalState, session_state: &mut SessionState) {
+         let settings = &mut global_state.settings;
+ 
+         match self {
++            SettingsChange::Touch(t) => {
++                let s = &mut settings.touch;
++                match t {
++                    Touch::Opacity(v) => s.opacity = v.clamp(0.1, 1.0),
++                    Touch::ButtonScale(v) => s.button_scale = v.clamp(0.7, 1.4),
++                    Touch::StickRadius(v) => s.stick_radius = v.clamp(0.08, 0.25),
++                    Touch::StickDeadzone(v) => s.stick_deadzone = v.clamp(0.0, 0.5),
++                    Touch::CameraSensitivity(v) => s.camera_sensitivity = v.clamp(0.1, 5.0),
++                    Touch::CameraSmoothing(v) => s.camera_smoothing = v.clamp(0.0, 0.9),
++                    Touch::ZoomSensitivity(v) => s.zoom_sensitivity = v.clamp(0.1, 5.0),
++                    Touch::StickFollow(b) => s.stick_follow = b,
++                    Touch::Haptics(b) => s.haptics = b,
++                    Touch::Reset => {
++                        let keep = s.enabled;
++                        *s = crate::touch::TouchSettings::default();
++                        s.enabled = keep;
++                    },
++                    Touch::EditLayout => {},
++                }
++            },
+             SettingsChange::Audio(audio_change) => {
+                 fn update_volume(audio: &mut AudioVolume, volume: f32) -> f32 {
+                     audio.volume = volume;
+diff --git a/voxygen/src/touch.rs b/voxygen/src/touch.rs
+index 28af05b91..f5b8fc299 100644
+--- a/voxygen/src/touch.rs
++++ b/voxygen/src/touch.rs
+@@ -1,4 +1,4 @@
+-//! On-screen touch controls (my-veloren dev.3).
++//! On-screen touch controls (my-veloren dev.3, reworked in dev.7).
+ //!
+ //! Pure logic only (serde + std): no winit / wgpu / ECS types, so the whole
+ //! state machine is unit-tested on the host (`native/touch-tests`).
+@@ -97,7 +97,7 @@ impl Ctl {
+     pub fn group(self) -> Group {
+         use Ctl::*;
+         match self {
+-            Interact | Mount | SwimUp | SwimDown | Respawn => Group::Contextual,
++            Interact | Mount | SwimUp | SwimDown | Respawn | Glide => Group::Contextual,
+             Menu | Bag | Map | Skills | Crafting | Social | Chat | Edit => Group::MenuBar,
+             _ => Group::Game,
+         }
+@@ -143,23 +143,93 @@ impl Ctl {
+         }
+     }
+ 
+-    /// Base color (rgb) of the button face.
+-    fn tint(self) -> [f32; 3] {
++    /// Accent colour (rgb) of the ring and of the pressed glow (dev.7: the
++    /// face is dark glass like Veloren's own HUD frames, the ring carries the
++    /// colour, and the icon is the content).
++    pub fn tint(self) -> [f32; 3] {
+         use Ctl::*;
+         match self {
+-            Primary => [0.80, 0.25, 0.20],
+-            Secondary => [0.75, 0.45, 0.15],
+-            Block => [0.30, 0.45, 0.75],
+-            Jump | Roll => [0.25, 0.60, 0.35],
+-            Ability1 | Ability2 | Ability3 | Ability4 | Ability5 => [0.55, 0.30, 0.70],
+-            Interact | Mount | Respawn => [0.85, 0.70, 0.20],
+-            SwimUp | SwimDown => [0.20, 0.55, 0.80],
+-            Menu | Bag | Map | Skills | Crafting | Social | Chat | Edit => [0.25, 0.25, 0.30],
+-            Glide | Sneak | Wield | Lantern => [0.35, 0.35, 0.40],
++            Primary => [0.93, 0.36, 0.25],
++            Secondary => [0.95, 0.62, 0.22],
++            Block => [0.40, 0.62, 0.95],
++            Jump | Roll | Glide => [0.42, 0.85, 0.52],
++            Ability1 | Ability2 | Ability3 | Ability4 | Ability5 => [0.74, 0.50, 0.95],
++            Interact | Mount | Respawn => [0.98, 0.80, 0.30],
++            SwimUp | SwimDown => [0.35, 0.72, 0.98],
++            Menu | Bag | Map | Skills | Crafting | Social | Chat | Edit => [0.86, 0.76, 0.52],
++            Sneak | Wield | Lantern => [0.80, 0.80, 0.84],
++        }
++    }
++
++    /// Pairs that are never visible together may share a spot (Jump on the
++    /// ground, Glide in the air).
++    pub fn exclusive_with(self, other: Ctl) -> bool {
++        let dead_only = |c: Ctl| c == Ctl::Respawn;
++        let alive_only = |c: Ctl| c.group() != Group::MenuBar && c != Ctl::Respawn;
++        matches!(
++            (self, other),
++            (Ctl::Jump, Ctl::Glide) | (Ctl::Glide, Ctl::Jump)
++        ) || (dead_only(self) && alive_only(other))
++            || (dead_only(other) && alive_only(self))
++    }
++
++    /// dev.7 default place: (anchor, distance from the anchor edge, y, radius),
++    /// all in window-height units except `y` (fraction of the height). Using
++    /// height units keeps the thumb clusters round and the same physical size
++    /// on 16:9 .. 22:9 screens; the anchor keeps them glued to their edge.
++    fn default_place(self) -> (Anchor, f32, f32, f32) {
++        use Ctl::*;
++        // Right thumb: the big Attack button, an inner arc of the main moves
++        // and an outer arc of the five ability slots (shown only when filled).
++        const C: (f32, f32) = (0.20, 0.76);
++        let arc = |r: f32, deg: f32, size: f32| {
++            let a = deg.to_radians();
++            (Anchor::Right, C.0 + r * a.cos(), C.1 - r * a.sin(), size)
++        };
++        match self {
++            Primary => (Anchor::Right, C.0, C.1, 0.115),
++            Secondary => arc(0.265, 0.0, 0.075),
++            Block => arc(0.265, 36.0, 0.065),
++            Roll => arc(0.265, 71.0, 0.068),
++            Jump => arc(0.265, 106.0, 0.075),
++            // Appears in the air, in Jump's place: jump, then tap again to glide.
++            Glide => arc(0.265, 106.0, 0.075),
++            Ability1 => arc(0.45, -6.0, 0.052),
++            Ability2 => arc(0.45, 9.0, 0.052),
++            Ability3 => arc(0.45, 24.0, 0.052),
++            Ability4 => arc(0.45, 39.0, 0.052),
++            Ability5 => arc(0.45, 54.0, 0.052),
++            // Contextual, left of the cluster (only one or two at a time).
++            Interact => (Anchor::Right, 0.80, 0.64, 0.07),
++            Mount => (Anchor::Right, 0.80, 0.82, 0.062),
++            SwimUp => (Anchor::Right, 0.96, 0.55, 0.058),
++            SwimDown => (Anchor::Right, 0.96, 0.76, 0.058),
++            Respawn => (Anchor::Center, 0.0, 0.45, 0.085),
++            // Left edge, above the chat: rarely used toggles.
++            Sneak => (Anchor::Left, 0.075, 0.21, 0.043),
++            Wield => (Anchor::Left, 0.075, 0.315, 0.043),
++            Lantern => (Anchor::Left, 0.075, 0.42, 0.043),
++            // Menu row, top-left (the top centre belongs to game messages and
++            // the top right to the minimap).
++            Menu => (Anchor::Left, 0.075, 0.075, 0.043),
++            Bag => (Anchor::Left, 0.18, 0.075, 0.043),
++            Map => (Anchor::Left, 0.285, 0.075, 0.043),
++            Skills => (Anchor::Left, 0.39, 0.075, 0.043),
++            Crafting => (Anchor::Left, 0.495, 0.075, 0.043),
++            Social => (Anchor::Left, 0.60, 0.075, 0.043),
++            Chat => (Anchor::Left, 0.705, 0.075, 0.043),
++            Edit => (Anchor::Left, 0.81, 0.075, 0.043),
+         }
+     }
+ }
+ 
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++enum Anchor {
++    Left,
++    Right,
++    Center,
++}
++
+ /// Position / size / opacity of one button (persisted).
+ #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+ pub struct ButtonLayout {
+@@ -175,51 +245,48 @@ pub struct ButtonLayout {
+ pub const MIN_SIZE: f32 = 0.035;
+ pub const MAX_SIZE: f32 = 0.25;
+ pub const MIN_ALPHA: f32 = 0.15;
++/// dev.7: smallest gap between two default buttons (fraction of the height,
++/// ~11 px on a 1080 px screen) so fingers never hit two at once.
++pub const MIN_GAP: f32 = 0.01;
++
++/// dev.7: default layout for a window of this aspect ratio (width / height).
++/// Verified non-overlapping (with [`MIN_GAP`]) and on screen by unit tests
++/// for 16:9 .. 22:9.
++pub fn default_layout_for(aspect: f32) -> Vec<ButtonLayout> {
++    let aspect = aspect.clamp(1.2, 3.0);
++    Ctl::ALL
++        .iter()
++        .map(|&ctl| {
++            let (anchor, d, y, size) = ctl.default_place();
++            let x = match anchor {
++                Anchor::Left => d / aspect,
++                Anchor::Right => 1.0 - d / aspect,
++                Anchor::Center => 0.5 + d / aspect,
++            };
++            ButtonLayout {
++                ctl,
++                x,
++                y,
++                size,
++                alpha: 1.0,
++            }
++        })
++        .collect()
++}
++
++/// Default layout for the current window (see [`set_aspect`]).
++pub fn default_layout() -> Vec<ButtonLayout> { default_layout_for(aspect()) }
++
++static ASPECT_BITS: std::sync::atomic::AtomicU32 =
++    std::sync::atomic::AtomicU32::new(0x400E_38E4); // 2400 / 1080 = 2.2222
++
++/// Window aspect (width / height) used for the default layout.
++pub fn aspect() -> f32 { f32::from_bits(ASPECT_BITS.load(std::sync::atomic::Ordering::Relaxed)) }
+ 
+-/// Default landscape layout. Verified non-overlapping by unit tests for
+-/// aspect ratios 16:9 .. 22:9.
+-pub fn default_layout() -> Vec<ButtonLayout> {
+-    use Ctl::*;
+-    let b = |ctl, x, y, size| ButtonLayout {
+-        ctl,
+-        x,
+-        y,
+-        size,
+-        alpha: 1.0,
+-    };
+-    vec![
+-        // right-hand combat cluster
+-        b(Primary, 0.885, 0.76, 0.13),
+-        b(Secondary, 0.75, 0.86, 0.085),
+-        b(Block, 0.715, 0.655, 0.07),
+-        b(Jump, 0.95, 0.53, 0.085),
+-        b(Roll, 0.83, 0.545, 0.075),
+-        b(Ability1, 0.62, 0.37, 0.055),
+-        b(Ability2, 0.69, 0.37, 0.055),
+-        b(Ability3, 0.76, 0.37, 0.055),
+-        b(Ability4, 0.83, 0.37, 0.055),
+-        b(Ability5, 0.90, 0.37, 0.055),
+-        // contextual (appear only when possible)
+-        b(Interact, 0.62, 0.62, 0.075),
+-        b(Mount, 0.62, 0.80, 0.065),
+-        b(SwimUp, 0.53, 0.55, 0.06),
+-        b(SwimDown, 0.53, 0.75, 0.06),
+-        b(Respawn, 0.40, 0.40, 0.08),
+-        // left column (movement modifiers)
+-        b(Glide, 0.05, 0.32, 0.055),
+-        b(Sneak, 0.05, 0.45, 0.045),
+-        b(Wield, 0.05, 0.58, 0.045),
+-        b(Lantern, 0.05, 0.71, 0.045),
+-        // top menu bar
+-        b(Menu, 0.27, 0.065, 0.045),
+-        b(Bag, 0.34, 0.065, 0.045),
+-        b(Map, 0.41, 0.065, 0.045),
+-        b(Skills, 0.48, 0.065, 0.045),
+-        b(Crafting, 0.55, 0.065, 0.045),
+-        b(Social, 0.62, 0.065, 0.045),
+-        b(Chat, 0.69, 0.065, 0.045),
+-        b(Edit, 0.76, 0.065, 0.045),
+-    ]
++pub fn set_aspect(a: f32) {
++    if a.is_finite() && a > 0.5 {
++        ASPECT_BITS.store(a.to_bits(), std::sync::atomic::Ordering::Relaxed);
++    }
+ }
+ 
+ /// `settings.ron` → `touch: (...)` (3.8).
+@@ -242,6 +309,14 @@ pub struct TouchSettings {
+     pub stick_deadzone: f32,
+     /// Vibrate on hits taken / dealt.
+     pub haptics: bool,
++    /// dev.7: size multiplier for every button (settings slider).
++    pub button_scale: f32,
++    /// dev.7: the base follows the finger when it leaves the stick circle.
++    pub stick_follow: bool,
++    /// dev.7: only buttons the player moved/resized in the editor; every
++    /// other button uses [`default_layout`] for the current screen. Stored
++    /// under a new key so the crowded dev.3–dev.6 layout is dropped once.
++    #[serde(rename = "layout_v7")]
+     pub buttons: Vec<ButtonLayout>,
+ }
+ 
+@@ -249,14 +324,16 @@ impl Default for TouchSettings {
+     fn default() -> Self {
+         Self {
+             enabled: true,
+-            opacity: 0.6,
++            opacity: 0.8,
+             camera_sensitivity: 1.0,
+-            camera_smoothing: 0.35,
++            camera_smoothing: 0.2,
+             zoom_sensitivity: 1.0,
+-            stick_radius: 0.13,
+-            stick_deadzone: 0.15,
++            stick_radius: 0.15,
++            stick_deadzone: 0.08,
+             haptics: true,
+-            buttons: default_layout(),
++            button_scale: 1.0,
++            stick_follow: true,
++            buttons: Vec::new(),
+         }
+     }
+ }
+@@ -265,6 +342,26 @@ impl TouchSettings {
+     /// Layout of `ctl`, falling back to the default for buttons missing in an
+     /// older settings file.
+     pub fn layout(&self, ctl: Ctl) -> ButtonLayout {
++        // Glide lives in Jump's place (never visible together).
++        if ctl == Ctl::Glide {
++            return ButtonLayout {
++                ctl,
++                ..self.layout(Ctl::Jump)
++            };
++        }
++        let mut b = self
++            .buttons
++            .iter()
++            .find(|b| b.ctl == ctl)
++            .copied()
++            .or_else(|| default_layout().into_iter().find(|b| b.ctl == ctl))
++            .expect("every Ctl has a default layout");
++        b.size = (b.size * self.button_scale.clamp(0.7, 1.4)).clamp(MIN_SIZE, MAX_SIZE);
++        b
++    }
++
++    /// Stored (unscaled) layout of `ctl`.
++    fn raw_layout(&self, ctl: Ctl) -> ButtonLayout {
+         self.buttons
+             .iter()
+             .find(|b| b.ctl == ctl)
+@@ -275,7 +372,7 @@ impl TouchSettings {
+ 
+     fn layout_mut(&mut self, ctl: Ctl) -> &mut ButtonLayout {
+         if !self.buttons.iter().any(|b| b.ctl == ctl) {
+-            let d = self.layout(ctl);
++            let d = self.raw_layout(ctl);
+             self.buttons.push(d);
+         }
+         self.buttons.iter_mut().find(|b| b.ctl == ctl).unwrap()
+@@ -285,6 +382,18 @@ impl TouchSettings {
+         let fresh = TouchSettings::default();
+         self.buttons = fresh.buttons;
+         self.opacity = fresh.opacity;
++        self.button_scale = fresh.button_scale;
++    }
++
++    /// dev.7: would `ctl` at (x, y, size) overlap another button? Used by the
++    /// layout editor so a dragged button never lands on top of another one.
++    pub fn overlaps(&self, ctl: Ctl, x: f32, y: f32, size: f32, aspect: f32) -> bool {
++        Ctl::ALL.iter().any(|&o| {
++            o != ctl && !ctl.exclusive_with(o) && {
++                let b = self.layout(o);
++                dist_h(x, y, b.x, b.y, aspect) < size + b.size
++            }
++        })
+     }
+ }
+ 
+@@ -301,6 +410,12 @@ pub struct Context {
+     pub dead: bool,
+     /// dev.6: the world map window is open (long-press places a marker there).
+     pub map_open: bool,
++    /// dev.7: in the air for a moment (not a step down): Glide replaces Jump.
++    pub airborne: bool,
++    pub gliding: bool,
++    /// dev.7: bit i = hotbar slot i+1 holds something (ability buttons 1..5
++    /// are shown only for filled slots).
++    pub abilities: u8,
+ }
+ 
+ impl Context {
+@@ -310,8 +425,25 @@ impl Context {
+         }
+         match ctl.group() {
+             Group::MenuBar => ctl != Ctl::Edit || self.game_input,
+-            Group::Game => self.game_input && !self.dead,
++            Group::Game => {
++                let alive = self.game_input && !self.dead;
++                match ctl {
++                    Ctl::Jump => alive && !(self.airborne || self.gliding),
++                    Ctl::Ability1
++                    | Ctl::Ability2
++                    | Ctl::Ability3
++                    | Ctl::Ability4
++                    | Ctl::Ability5 => {
++                        let i = ctl as u8 - Ctl::Ability1 as u8;
++                        alive && self.abilities & (1 << i) != 0
++                    },
++                    _ => alive,
++                }
++            },
+             Group::Contextual => match ctl {
++                Ctl::Glide => {
++                    self.game_input && !self.dead && !self.in_liquid && (self.airborne || self.gliding)
++                },
+                 Ctl::Respawn => self.dead,
+                 Ctl::Interact => self.game_input && !self.dead && self.can_interact,
+                 Ctl::Mount => self.game_input && !self.dead && (self.can_mount || self.riding),
+@@ -425,7 +557,8 @@ enum Finger {
+     Camera { lx: f64, ly: f64 },
+     /// Second finger of a pinch on the camera area.
+     Pinch { lx: f64, ly: f64 },
+-    EditDrag { ctl: Ctl, lx: f64, ly: f64 },
++    /// Layout editor: button position and finger position when the drag began.
++    EditDrag { ctl: Ctl, bx: f32, by: f32, sx: f64, sy: f64 },
+     Ignored,
+ }
+ 
+@@ -436,16 +569,59 @@ pub struct Prim {
+     pub y: f32,
+     /// Radius as a fraction of the window height; 0 = text only.
+     pub r: f32,
++    /// dev.7: 0 = filled disc, > 0 = ring of this thickness (height units).
++    pub ring: f32,
+     pub rgba: [f32; 4],
++    /// dev.7: draw this control's icon in a square of side 2r (tinted by
++    /// `rgba`) instead of a disc; `label` is the fallback without an icon.
++    pub icon: Option<Ctl>,
+     pub label: Option<&'static str>,
+     pub text_rgba: [f32; 4],
++    /// dev.7: text size in height units; 0 = fit the label into `r`.
++    pub text_size: f32,
++}
++
++impl Prim {
++    fn disc(x: f32, y: f32, r: f32, rgba: [f32; 4]) -> Self {
++        Prim {
++            x,
++            y,
++            r,
++            ring: 0.0,
++            rgba,
++            icon: None,
++            label: None,
++            text_rgba: [0.0; 4],
++            text_size: 0.0,
++        }
++    }
++
++    fn ring(x: f32, y: f32, r: f32, thickness: f32, rgba: [f32; 4]) -> Self {
++        Prim {
++            ring: thickness,
++            ..Prim::disc(x, y, r, rgba)
++        }
++    }
++
++    fn text(x: f32, y: f32, label: &'static str, size: f32, rgba: [f32; 4]) -> Self {
++        Prim {
++            label: Some(label),
++            text_rgba: rgba,
++            text_size: size,
++            ..Prim::disc(x, y, 0.0, [0.0; 4])
++        }
++    }
+ }
+ 
+ #[derive(Default)]
+ pub struct TouchLayer {
+     fingers: Vec<(u64, Finger)>,
+-    /// Current stick vector (x right, y forward).
++    /// Last stick vector sent to the game (x right, y forward).
+     stick: (f32, f32),
++    /// dev.7: where the finger points the stick; `stick` follows it smoothly.
++    stick_target: (f32, f32),
++    /// dev.7: time of the previous `on_frame` (stick smoothing).
++    last_frame: f64,
+     /// Camera pan waiting to be released by the smoother.
+     pan_pending: (f32, f32),
+     pinch_dist: Option<f64>,
+@@ -495,6 +671,11 @@ pub const DOUBLE_TAP: f64 = 0.35;
+ const WHEEL_PER_HEIGHT: f64 = 12.0;
+ /// Left part of the screen that starts the virtual stick.
+ const STICK_ZONE: f32 = 0.45;
++/// dev.7: stick smoothing time constant (s): ~70 ms to 90 %, removes the
++/// jitter of raw touch samples without a noticeable delay.
++const STICK_TAU: f64 = 0.03;
++/// dev.7: where the idle stick hint is drawn (fractions).
++pub const STICK_HOME: (f32, f32) = (0.20, 0.72);
+ 
+ fn dist_h(ax: f32, ay: f32, bx: f32, by: f32, aspect: f32) -> f32 {
+     (((ax - bx) * aspect).powi(2) + (ay - by).powi(2)).sqrt()
+@@ -503,6 +684,14 @@ fn dist_h(ax: f32, ay: f32, bx: f32, by: f32, aspect: f32) -> f32 {
+ impl TouchLayer {
+     pub fn finger_count(&self) -> usize { self.fingers.len() }
+ 
++    /// dev.7: open the layout editor (from the touch settings tab).
++    pub fn begin_edit(&mut self) {
++        let mut out = Vec::new();
++        self.release_all(&mut out);
++        self.edit = true;
++        self.selected = None;
++    }
++
+     pub fn stick(&self) -> (f32, f32) { self.stick }
+ 
+     fn finger(&self, id: u64) -> Option<Finger> {
+@@ -538,7 +727,7 @@ impl TouchLayer {
+             .rev()
+             .copied()
+             .filter(|c| all || ctx.visible(*c))
+-            .filter(|c| !(all && *c == Ctl::Edit))
++            .filter(|c| !(all && matches!(*c, Ctl::Edit | Ctl::Glide)))
+             .map(|c| (c, s.layout(c)))
+             .filter(|(_, b)| dist_h(fx, fy, b.x, b.y, aspect) <= b.size * HIT_SLOP)
+             .min_by(|a, b| {
+@@ -563,6 +752,7 @@ impl TouchLayer {
+                 out.push(Out::Release(c));
+             }
+         }
++        self.stick_target = (0.0, 0.0);
+         if self.stick != (0.0, 0.0) {
+             self.stick = (0.0, 0.0);
+             out.push(Out::Move(0.0, 0.0));
+@@ -607,6 +797,7 @@ impl TouchLayer {
+         let (w, h) = (w.max(1.0), h.max(1.0));
+         set_window_height(h);
+         let aspect = (w / h) as f32;
++        set_aspect(aspect);
+         let (fx, fy) = ((x / w) as f32, (y / h) as f32);
+ 
+         out.extend(self.sync_context(ctx));
+@@ -630,17 +821,31 @@ impl TouchLayer {
+                         self.set_finger(id, Finger::Ignored);
+                     } else if let Some(c) = self.hit(fx, fy, aspect, ctx, s, true) {
+                         self.selected = Some(c);
+-                        self.set_finger(id, Finger::EditDrag { ctl: c, lx: x, ly: y });
++                        let b = s.layout(c);
++                        self.set_finger(id, Finger::EditDrag {
++                            ctl: c,
++                            bx: b.x,
++                            by: b.y,
++                            sx: x,
++                            sy: y,
++                        });
+                     } else {
+                         self.set_finger(id, Finger::Ignored);
+                     }
+                 },
+                 Phase::Moved => {
+-                    if let Some(Finger::EditDrag { ctl, lx, ly }) = self.finger(id) {
+-                        let b = s.layout_mut(ctl);
+-                        b.x = (b.x + ((x - lx) / w) as f32).clamp(0.02, 0.98);
+-                        b.y = (b.y + ((y - ly) / h) as f32).clamp(0.03, 0.97);
+-                        self.set_finger(id, Finger::EditDrag { ctl, lx: x, ly: y });
++                    if let Some(Finger::EditDrag { ctl, bx, by, sx, sy }) = self.finger(id) {
++                        // dev.7 (7.3): the button follows the finger but never
++                        // lands on another one; it waits at its last free spot.
++                        let size = s.layout(ctl).size;
++                        let nx = (bx + ((x - sx) / w) as f32)
++                            .clamp(size / aspect, 1.0 - size / aspect);
++                        let ny = (by + ((y - sy) / h) as f32).clamp(size, 1.0 - size);
++                        if !s.overlaps(ctl, nx, ny, size, aspect) {
++                            let b = s.layout_mut(ctl);
++                            b.x = nx;
++                            b.y = ny;
++                        }
+                     }
+                 },
+                 Phase::Ended | Phase::Cancelled => {
+@@ -692,8 +897,17 @@ impl TouchLayer {
+                 }
+             },
+             Phase::Moved => match self.finger(id) {
+-                Some(Finger::Stick { ox, oy }) => {
++                Some(Finger::Stick { mut ox, mut oy }) => {
+                     let r = (s.stick_radius.max(0.02) as f64) * h;
++                    // dev.7 (7.4): a floating base follows a finger that slides
++                    // past the rim, so turning around never needs a re-grab.
++                    let d = ((x - ox).powi(2) + (y - oy).powi(2)).sqrt();
++                    if s.stick_follow && d > r {
++                        let k = (d - r) / d;
++                        ox += (x - ox) * k;
++                        oy += (y - oy) * k;
++                        self.set_finger(id, Finger::Stick { ox, oy });
++                    }
+                     let (mut vx, mut vy) = (((x - ox) / r) as f32, (-(y - oy) / r) as f32);
+                     let m = (vx * vx + vy * vy).sqrt();
+                     if m > 1.0 {
+@@ -708,11 +922,8 @@ impl TouchLayer {
+                         let k = (m - dz) / (1.0 - dz) / m;
+                         (vx * k, vy * k)
+                     };
+-                    if (vx - self.stick.0).abs() > 0.01 || (vy - self.stick.1).abs() > 0.01 {
+-                        self.stick = (vx, vy);
+-                        self.stats.stick_moves += 1;
+-                        out.push(Out::Move(vx, vy));
+-                    }
++                    // Sent smoothly by `on_frame`.
++                    self.stick_target = (vx, vy);
+                 },
+                 Some(Finger::Camera { lx, ly }) => {
+                     self.set_finger(id, Finger::Camera { lx: x, ly: y });
+@@ -734,7 +945,9 @@ impl TouchLayer {
+             Phase::Ended | Phase::Cancelled => match self.remove_finger(id) {
+                 Some(Finger::Button(c)) => out.push(Out::Release(c)),
+                 Some(Finger::Stick { .. }) => {
++                    // Stop at once (no glide-out).
+                     self.stick = (0.0, 0.0);
++                    self.stick_target = (0.0, 0.0);
+                     out.push(Out::Move(0.0, 0.0));
+                 },
+                 Some(Finger::Camera { .. }) => {
+@@ -982,13 +1195,19 @@ impl TouchLayer {
+         match t {
+             Tool::Smaller | Tool::Bigger | Tool::Fainter | Tool::Stronger => {
+                 if let Some(c) = self.selected {
+-                    let b = s.layout_mut(c);
++                    let cur = s.layout_mut(c).to_owned();
++                    let mut b = cur;
+                     match t {
+                         Tool::Smaller => b.size = (b.size * 0.9).clamp(MIN_SIZE, MAX_SIZE),
+                         Tool::Bigger => b.size = (b.size * 1.1).clamp(MIN_SIZE, MAX_SIZE),
+                         Tool::Fainter => b.alpha = (b.alpha - 0.15).clamp(MIN_ALPHA, 1.0),
+                         _ => b.alpha = (b.alpha + 0.15).clamp(MIN_ALPHA, 1.0),
+                     }
++                    // dev.7 (7.3): growing never makes a button cover another.
++                    let scaled = b.size * s.button_scale.clamp(0.7, 1.4);
++                    if t != Tool::Bigger || !s.overlaps(c, b.x, b.y, scaled, aspect()) {
++                        *s.layout_mut(c) = b;
++                    }
+                 } else {
+                     // No button selected: change the global overlay opacity.
+                     match t {
+@@ -1020,26 +1239,51 @@ impl TouchLayer {
+         out
+     }
+ 
+-    /// Per-frame update: releases smoothed camera motion (3.3).
++    /// Per-frame update: releases smoothed camera motion (3.3) and the
++    /// smoothed stick (dev.7, 7.4).
+     pub fn on_frame(&mut self, s: &TouchSettings) -> Vec<Out> {
++        let mut out = Vec::new();
++        // ---- stick
++        let dt = if self.now > self.last_frame && self.last_frame > 0.0 {
++            (self.now - self.last_frame).min(0.1)
++        } else {
++            1.0 / 60.0
++        };
++        self.last_frame = self.now;
++        let (tx, ty) = self.stick_target;
++        let (sx, sy) = self.stick;
++        if (tx, ty) != (sx, sy) {
++            let k = (1.0 - (-dt / STICK_TAU).exp()) as f32;
++            let (mut nx, mut ny) = (sx + (tx - sx) * k, sy + (ty - sy) * k);
++            if (tx - nx).abs() < 0.01 && (ty - ny).abs() < 0.01 {
++                (nx, ny) = (tx, ty);
++            }
++            self.stick = (nx, ny);
++            self.stats.stick_moves += 1;
++            out.push(Out::Move(nx, ny));
++        }
++        // ---- camera
+         let (px, py) = self.pan_pending;
+         if px.abs() < 0.01 && py.abs() < 0.01 {
+             self.pan_pending = (0.0, 0.0);
+-            return Vec::new();
++            return out;
+         }
+         let keep = s.camera_smoothing.clamp(0.0, 0.9);
+         let (ex, ey) = (px * (1.0 - keep), py * (1.0 - keep));
+         self.pan_pending = (px - ex, py - ey);
+         self.stats.pans += 1;
+-        vec![Out::Pan(ex, ey)]
++        out.push(Out::Pan(ex, ey));
++        out
+     }
+ 
+-    /// Everything to draw this frame.
++    /// Everything to draw this frame (dev.7 look: dark glass face, coloured
++    /// ring, icon; pressed = glow + brighter ring + icon pressed in).
+     pub fn primitives(&self, ctx: &Context, s: &TouchSettings, aspect: f32) -> Vec<Prim> {
+         let mut p = Vec::new();
+         if !ctx.in_session || !s.enabled {
+             return p;
+         }
++        set_aspect(aspect);
+         let ga = s.opacity.clamp(0.1, 1.0);
+         let held: Vec<Ctl> = self
+             .fingers
+@@ -1049,8 +1293,9 @@ impl TouchLayer {
+                 _ => None,
+             })
+             .collect();
++        let px_h = 1.0 / self.last_h() as f32; // one pixel in height units
+ 
+-        // Virtual stick (3.2): base + knob where the finger is.
++        // Virtual stick (3.2, 7.4): rim + glass + knob, direction marker.
+         if ctx.game_input && !ctx.dead && !self.edit {
+             let r = s.stick_radius;
+             let stick = self.fingers.iter().find_map(|(_, f)| match f {
+@@ -1061,33 +1306,40 @@ impl TouchLayer {
+             let w = h * aspect as f64;
+             let (bx, by, a) = match stick {
+                 Some((ox, oy)) => ((ox / w) as f32, (oy / h) as f32, 1.0),
+-                None => (0.20, 0.72, 0.45),
++                None => (STICK_HOME.0, STICK_HOME.1, 0.5),
+             };
+-            p.push(Prim {
+-                x: bx,
+-                y: by,
+-                r,
+-                rgba: [0.1, 0.1, 0.12, 0.35 * ga * a],
+-                label: None,
+-                text_rgba: [0.0; 4],
+-            });
+-            let (kx, ky) = (
+-                bx + self.stick.0 * r / aspect,
+-                by - self.stick.1 * r,
+-            );
+-            p.push(Prim {
+-                x: kx,
+-                y: ky,
+-                r: r * 0.42,
+-                rgba: [0.85, 0.85, 0.9, 0.55 * ga * a],
+-                label: None,
+-                text_rgba: [0.0; 4],
+-            });
++            let (vx, vy) = self.stick_target;
++            let m = (vx * vx + vy * vy).sqrt().min(1.0);
++            p.push(Prim::disc(bx, by, r, [0.05, 0.05, 0.06, 0.28 * ga * a]));
++            p.push(Prim::ring(bx, by, r, (3.0 * px_h).max(0.003), [
++                0.95,
++                0.92,
++                0.85,
++                0.45 * ga * a,
++            ]));
++            if m > 0.05 {
++                // Marker on the rim in the walking direction.
++                let (dx, dy) = (vx / m, vy / m);
++                p.push(Prim::disc(
++                    bx + dx * r * 0.86 / aspect,
++                    by - dy * r * 0.86,
++                    r * 0.11,
++                    [0.98, 0.82, 0.35, 0.85 * ga],
++                ));
++            }
++            let (kx, ky) = (bx + vx * r / aspect, by - vy * r);
++            let run = m > 0.9;
++            p.push(Prim::disc(kx, ky, r * 0.44, [0.92, 0.92, 0.95, 0.62 * ga * a]));
++            p.push(Prim::ring(kx, ky, r * 0.44, (3.0 * px_h).max(0.003), if run {
++                [0.42, 0.85, 0.52, 0.95 * ga]
++            } else {
++                [0.98, 0.82, 0.35, 0.8 * ga * a]
++            }));
+         }
+ 
+         for c in Ctl::ALL {
+             let shown = if self.edit {
+-                c != Ctl::Edit
++                !matches!(c, Ctl::Edit | Ctl::Glide)
+             } else {
+                 ctx.visible(c)
+             };
+@@ -1099,80 +1351,76 @@ impl TouchLayer {
+             let selected = self.edit && self.selected == Some(c);
+             let a = (ga * b.alpha).clamp(0.05, 1.0);
+             let t = c.tint();
+-            // Border
+-            p.push(Prim {
+-                x: b.x,
+-                y: b.y,
+-                r: b.size,
+-                rgba: if selected {
+-                    [1.0, 0.85, 0.2, 0.95]
+-                } else {
+-                    [0.05, 0.05, 0.05, 0.55 * a]
+-                },
+-                label: None,
+-                text_rgba: [0.0; 4],
+-            });
+-            // Face
+-            let k = if pressed { 1.35 } else { 1.0 };
+-            let face_a = if self.edit && c.group() == Group::Contextual {
+-                0.5 * a
++            let r = b.size;
++            let ring_w = (r * 0.09).max(2.0 * px_h);
++            if pressed {
++                p.push(Prim::disc(b.x, b.y, r * 1.2, [t[0], t[1], t[2], 0.30 * a.max(0.6)]));
++            }
++            // Face: dark glass; pressed fills with the accent.
++            p.push(Prim::disc(b.x, b.y, r, if pressed {
++                [t[0] * 0.55, t[1] * 0.55, t[2] * 0.55, 0.85 * a.max(0.7)]
++            } else {
++                [0.07, 0.06, 0.05, 0.50 * a]
++            }));
++            p.push(Prim::ring(b.x, b.y, r, ring_w, if selected {
++                [1.0, 0.85, 0.2, 1.0]
+             } else if pressed {
+-                (0.95 * a).max(0.7)
++                [(t[0] + 0.3).min(1.0), (t[1] + 0.3).min(1.0), (t[2] + 0.3).min(1.0), 1.0]
+             } else {
+-                0.7 * a
+-            };
++                [t[0], t[1], t[2], 0.85 * a]
++            }));
++            // Icon (pressed in a little).
++            let k = if pressed { 0.56 } else { 0.62 };
++            let dim = if self.edit && c.group() == Group::Contextual { 0.6 } else { 1.0 };
+             p.push(Prim {
+-                x: b.x,
+-                y: b.y,
+-                r: b.size * 0.88,
+-                rgba: [
+-                    (t[0] * k).min(1.0),
+-                    (t[1] * k).min(1.0),
+-                    (t[2] * k).min(1.0),
+-                    face_a,
+-                ],
++                icon: Some(c),
+                 label: Some(c.label(ctx)),
+-                text_rgba: [1.0, 1.0, 1.0, (a * 1.4).clamp(0.5, 1.0)],
++                text_rgba: [1.0, 1.0, 1.0, (a * 1.3).clamp(0.5, 1.0)],
++                ..Prim::disc(b.x, b.y, r * k, [1.0, 1.0, 1.0, (a * 1.25 * dim).clamp(0.35, 1.0)])
+             });
++            // Contextual actions also say what they do (they come and go).
++            if matches!(c, Ctl::Interact | Ctl::Mount | Ctl::Respawn) && !self.edit {
++                p.push(Prim::text(b.x, b.y + r + 0.028, c.label(ctx), 0.032, [
++                    1.0,
++                    0.92,
++                    0.6,
++                    (a * 1.3).clamp(0.6, 1.0),
++                ]));
++            }
+         }
+ 
+         if self.edit {
+-            p.push(Prim {
+-                x: 0.5,
+-                y: 0.30,
+-                r: 0.0,
+-                rgba: [0.0; 4],
+-                label: Some(if self.selected.is_some() {
++            p.push(Prim::text(
++                0.5,
++                0.30,
++                if self.selected.is_some() {
+                     "Drag to move - Size/Alpha change the selected button"
+                 } else {
+                     "Edit layout: drag a button, or tap one to select it"
+-                }),
+-                text_rgba: [1.0, 0.9, 0.4, 1.0],
+-            });
++                },
++                0.035,
++                [1.0, 0.9, 0.4, 1.0],
++            ));
+             for t in Tool::ALL {
+                 let (x, y, r) = t.place();
++                let accent = if t == Tool::Done {
++                    [0.42, 0.85, 0.52, 1.0]
++                } else if t == Tool::Reset {
++                    [0.93, 0.36, 0.25, 1.0]
++                } else {
++                    [0.86, 0.76, 0.52, 1.0]
++                };
++                p.push(Prim::disc(x, y, r, [0.07, 0.06, 0.05, 0.85]));
++                p.push(Prim::ring(x, y, r, (r * 0.09).max(2.0 * px_h), accent));
+                 p.push(Prim {
+-                    x,
+-                    y,
+-                    r,
+-                    rgba: [0.05, 0.05, 0.05, 0.85],
+-                    label: None,
+-                    text_rgba: [0.0; 4],
+-                });
+-                p.push(Prim {
+-                    x,
+-                    y,
+-                    r: r * 0.88,
+-                    rgba: if t == Tool::Done {
+-                        [0.2, 0.6, 0.3, 0.95]
+-                    } else if t == Tool::Reset {
+-                        [0.7, 0.25, 0.2, 0.95]
+-                    } else {
+-                        [0.3, 0.3, 0.38, 0.95]
+-                    },
+                     label: Some(t.label()),
+                     text_rgba: [1.0, 1.0, 1.0, 1.0],
++                    ..Prim::disc(x, y, 0.0, [0.0; 4])
+                 });
++                // text-only prim sized to the tool
++                if let Some(last) = p.last_mut() {
++                    last.text_size = r * 0.55;
++                }
+             }
+         }
+         p
+@@ -1199,7 +1447,28 @@ static CONTEXT: Mutex<Context> = Mutex::new(Context {
+     in_liquid: false,
+     dead: false,
+     map_open: false,
++    airborne: false,
++    gliding: false,
++    abilities: 0x1f,
+ });
++/// dev.7: filled hotbar slots 1..5 (bit mask), published by the skillbar.
++static ABILITY_MASK: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0x1f);
++static AIR_SINCE: Mutex<Option<std::time::Instant>> = Mutex::new(None);
++
++pub fn set_ability_mask(m: u8) { ABILITY_MASK.store(m & 0x1f, std::sync::atomic::Ordering::Relaxed); }
++
++pub fn ability_mask() -> u8 { ABILITY_MASK.load(std::sync::atomic::Ordering::Relaxed) }
++
++/// dev.7: "airborne" only after 0.2 s off the ground, so stepping down a
++/// block does not flash Glide in place of Jump.
++pub fn update_airborne(in_air: bool) -> bool {
++    let mut g = AIR_SINCE.lock().unwrap_or_else(|e| e.into_inner());
++    if !in_air {
++        *g = None;
++        return false;
++    }
++    g.get_or_insert_with(std::time::Instant::now).elapsed().as_secs_f32() >= 0.2
++}
+ static HAPTICS: Mutex<VecDeque<u32>> = Mutex::new(VecDeque::new());
+ /// dev.6: a HUD text field has the keyboard (set by the session every tick).
+ static TYPING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+@@ -1281,10 +1550,25 @@ mod tests {
+         Context {
+             in_session: true,
+             game_input: true,
++            abilities: 0x1f,
+             ..Default::default()
+         }
+     }
+ 
++    /// Run frames until the smoothed stick settles; returns the last Move.
++    fn settle(t: &mut TouchLayer, s: &TouchSettings) -> Option<(f32, f32)> {
++        let mut last = None;
++        for _ in 0..30 {
++            t.now += 1.0 / 60.0;
++            for o in t.on_frame(s) {
++                if let Out::Move(x, y) = o {
++                    last = Some((x, y));
++                }
++            }
++        }
++        last
++    }
++
+     fn px(b: ButtonLayout) -> (f64, f64) { (b.x as f64 * W, b.y as f64 * H) }
+ 
+     #[test]
+@@ -1299,19 +1583,32 @@ mod tests {
+     #[test]
+     fn default_layout_does_not_overlap_and_fits() {
+         for aspect in [16.0 / 9.0, 2.0, 2400.0 / 1080.0, 22.0 / 9.0] {
+-            let l = default_layout();
++            let l = default_layout_for(aspect);
+             for (i, a) in l.iter().enumerate() {
+                 assert!(a.x - a.size / aspect >= 0.0, "{:?} off left @{aspect}", a.ctl);
+                 assert!(a.x + a.size / aspect <= 1.0, "{:?} off right @{aspect}", a.ctl);
+                 assert!(a.y - a.size >= 0.0 && a.y + a.size <= 1.0, "{:?} off v", a.ctl);
+                 for b in &l[i + 1..] {
++                    if a.ctl.exclusive_with(b.ctl) {
++                        continue;
++                    }
+                     let d = dist_h(a.x, a.y, b.x, b.y, aspect);
+                     assert!(
+-                        d > a.size + b.size,
+-                        "{:?} overlaps {:?} @{aspect}: {d} <= {}",
++                        d >= a.size + b.size + MIN_GAP,
++                        "{:?} too close to {:?} @{aspect}: {d} < {}",
+                         a.ctl,
+                         b.ctl,
+-                        a.size + b.size
++                        a.size + b.size + MIN_GAP
++                    );
++                }
++                // The right cluster stays out of the minimap corner
++                // (top-right ~0.37 x 0.40 height units at the dev.6 UI scale).
++                let from_right = (1.0 - a.x) * aspect;
++                if a.ctl.group() != Group::MenuBar {
++                    assert!(
++                        !(from_right - a.size < 0.37 && a.y - a.size < 0.40),
++                        "{:?} under the minimap @{aspect}",
++                        a.ctl
+                     );
+                 }
+             }
+@@ -1326,6 +1623,32 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn fewer_buttons_at_once() {
++        // On the ground, nothing in reach, no abilities yet: the essentials.
++        let c = Context { abilities: 0, ..ctx() };
++        let n = Ctl::ALL.iter().filter(|x| c.visible(**x)).count();
++        assert_eq!(n, 16, "5 combat + 3 toggles + 8 menu");
++        // In the air Glide takes Jump's place.
++        let air = Context { airborne: true, ..c };
++        assert!(air.visible(Ctl::Glide) && !air.visible(Ctl::Jump));
++        assert!(!c.visible(Ctl::Glide) && c.visible(Ctl::Jump));
++        let s = TouchSettings::default();
++        assert_eq!((s.layout(Ctl::Glide).x, s.layout(Ctl::Glide).y), (s.layout(Ctl::Jump).x, s.layout(Ctl::Jump).y));
++        // Only filled ability slots.
++        let some = Context { abilities: 0b00101, ..ctx() };
++        assert!(some.visible(Ctl::Ability1) && !some.visible(Ctl::Ability2) && some.visible(Ctl::Ability3));
++    }
++
++    #[test]
++    fn old_layout_key_is_dropped() {
++        // A dev.6 settings file stored the crowded layout under `buttons`.
++        let old: TouchSettings =
++            ron::from_str("(opacity: 0.4, buttons: [(ctl: Jump, x: 0.5, y: 0.5, size: 0.1, alpha: 1.0)])")
++                .unwrap_or_default();
++        assert!(old.buttons.is_empty());
++    }
++
+     #[test]
+     fn button_press_and_release() {
+         let mut t = TouchLayer::default();
+@@ -1347,19 +1670,30 @@ mod tests {
+         let (ox, oy) = (0.2 * W, 0.75 * H);
+         assert!(t.on_touch(1, Phase::Started, ox, oy, W, H, &ctx(), &mut s).is_empty());
+         // inside dead-zone
+-        let o = t.on_touch(1, Phase::Moved, ox + 5.0, oy, W, H, &ctx(), &mut s);
+-        assert!(o.is_empty());
++        t.on_touch(1, Phase::Moved, ox + 5.0, oy, W, H, &ctx(), &mut s);
++        assert_eq!(settle(&mut t, &s), None);
+         let r = s.stick_radius as f64 * H;
+-        // light tilt forward → slow
+-        let o = t.on_touch(1, Phase::Moved, ox, oy - 0.4 * r, W, H, &ctx(), &mut s);
+-        let Out::Move(x, y) = o[0] else { panic!() };
+-        assert!(x.abs() < 1e-3 && y > 0.2 && y < 0.4, "{y}");
+-        // full tilt beyond radius → clamped to 1
+-        let o = t.on_touch(1, Phase::Moved, ox + 3.0 * r, oy, W, H, &ctx(), &mut s);
+-        let Out::Move(x, y) = o[0] else { panic!() };
++        // light tilt forward → slow (smoothed, settles on the target)
++        assert!(t.on_touch(1, Phase::Moved, ox, oy - 0.4 * r, W, H, &ctx(), &mut s).is_empty());
++        let (x, y) = settle(&mut t, &s).unwrap();
++        assert!(x.abs() < 1e-3 && y > 0.25 && y < 0.4, "{y}");
++        // the first frame moves only part of the way (no jump)
++        t.on_touch(1, Phase::Moved, ox + 1.0 * r, oy, W, H, &ctx(), &mut s);
++        t.now += 1.0 / 60.0;
++        let Out::Move(x1, _) = t.on_frame(&s)[0] else { panic!() };
++        assert!(x1 > 0.2 && x1 < 0.9, "{x1}");
++        // full tilt beyond radius → clamped to 1, and the base follows
++        t.on_touch(1, Phase::Moved, ox + 3.0 * r, oy, W, H, &ctx(), &mut s);
++        let (x, y) = settle(&mut t, &s).unwrap();
+         assert!((x - 1.0).abs() < 1e-3 && y.abs() < 1e-3);
++        // floating base: coming back a little from the far point already
++        // steers left of it instead of staying at full right
++        t.on_touch(1, Phase::Moved, ox + 2.0 * r, oy, W, H, &ctx(), &mut s);
++        let (x, _) = settle(&mut t, &s).unwrap();
++        assert!(x < 0.1, "base followed the finger: {x}");
+         let o = t.on_touch(1, Phase::Ended, ox, oy, W, H, &ctx(), &mut s);
+-        assert_eq!(o, vec![Out::Move(0.0, 0.0)]);
++        assert_eq!(o, vec![Out::Move(0.0, 0.0)], "stops at once");
++        assert_eq!(settle(&mut t, &s), None);
+     }
+ 
+     #[test]
+@@ -1374,8 +1708,8 @@ mod tests {
+         assert_eq!(t.on_touch(3, Phase::Started, ax, ay, W, H, &c, &mut s), vec![
+             Out::Press(Ctl::Primary)
+         ]);
+-        let m = t.on_touch(1, Phase::Moved, 0.2 * W, 0.75 * H - 200.0, W, H, &c, &mut s);
+-        assert!(matches!(m[0], Out::Move(_, y) if y > 0.9));
++        t.on_touch(1, Phase::Moved, 0.2 * W, 0.75 * H - 200.0, W, H, &c, &mut s);
++        assert!(matches!(settle(&mut t, &s), Some((_, y)) if y > 0.9));
+         t.on_touch(2, Phase::Moved, 0.5 * W + 100.0, 0.22 * H, W, H, &c, &mut s);
+         let p = t.on_frame(&s);
+         assert!(matches!(p[0], Out::Pan(x, y) if x > 50.0 && y.abs() < 1e-3), "{p:?}");
+@@ -1469,16 +1803,27 @@ mod tests {
+         let mut t = TouchLayer::default();
+         let mut s = TouchSettings::default();
+         let c = ctx();
++        set_aspect((W / H) as f32);
+         let (ex, ey) = px(s.layout(Ctl::Edit));
+         t.on_touch(1, Phase::Started, ex, ey, W, H, &c, &mut s);
+         t.on_touch(1, Phase::Ended, ex, ey, W, H, &c, &mut s);
+         assert!(t.edit);
+-        let (jx, jy) = px(s.layout(Ctl::Jump));
++        // Move Jump to a free spot in the middle of the screen.
++        let j0 = s.layout(Ctl::Jump);
++        let (jx, jy) = px(j0);
+         assert!(t.on_touch(2, Phase::Started, jx, jy, W, H, &c, &mut s).is_empty());
+-        t.on_touch(2, Phase::Moved, jx - 240.0, jy - 108.0, W, H, &c, &mut s);
+-        t.on_touch(2, Phase::Ended, jx - 240.0, jy - 108.0, W, H, &c, &mut s);
++        let (tx, ty) = (0.55 * W, 0.30 * H);
++        t.on_touch(2, Phase::Moved, tx, ty, W, H, &c, &mut s);
++        t.on_touch(2, Phase::Ended, tx, ty, W, H, &c, &mut s);
+         let j = s.layout(Ctl::Jump);
+-        assert!((j.x - 0.85).abs() < 1e-3 && (j.y - 0.43).abs() < 1e-3, "{j:?}");
++        assert!((j.x - 0.55).abs() < 1e-3 && (j.y - 0.30).abs() < 1e-3, "{j:?}");
++        // Dropping it onto Attack is refused: it waits at its last free spot.
++        let (ax, ay) = px(s.layout(Ctl::Primary));
++        t.on_touch(3, Phase::Started, tx, ty, W, H, &c, &mut s);
++        t.on_touch(3, Phase::Moved, ax, ay, W, H, &c, &mut s);
++        t.on_touch(3, Phase::Ended, ax, ay, W, H, &c, &mut s);
++        let j2 = s.layout(Ctl::Jump);
++        assert_eq!((j2.x, j2.y), (j.x, j.y));
+         let tap = |t: &mut TouchLayer, s: &mut TouchSettings, tool: Tool| {
+             let (x, y, _) = tool.place();
+             let o = t.on_touch(9, Phase::Started, x as f64 * W, y as f64 * H, W, H, &c, s);
+@@ -1488,20 +1833,31 @@ mod tests {
+         tap(&mut t, &mut s, Tool::Bigger);
+         tap(&mut t, &mut s, Tool::Fainter);
+         let j = s.layout(Ctl::Jump);
+-        assert!((j.size - 0.085 * 1.1).abs() < 1e-4 && (j.alpha - 0.85).abs() < 1e-4);
++        assert!((j.size - 0.075 * 1.1).abs() < 1e-4 && (j.alpha - 0.85).abs() < 1e-4, "{j:?}");
+         // round trip through RON like settings.ron
+         let ron = ron::ser::to_string(&s).unwrap();
++        assert!(ron.contains("layout_v7"));
+         let back: TouchSettings = ron::from_str(&ron).unwrap();
+         assert_eq!(back, s);
+         // missing field / older file → defaults
+         let old: TouchSettings = ron::from_str("(opacity: 0.4)").unwrap();
+-        assert_eq!(old.buttons, default_layout());
++        assert!(old.buttons.is_empty());
++        assert_eq!(old.layout(Ctl::Jump), TouchSettings::default().layout(Ctl::Jump));
+         assert_eq!(tap(&mut t, &mut s, Tool::Done), vec![Out::Save]);
+         assert!(!t.edit);
+         // Reset
+         t.on_touch(1, Phase::Started, ex, ey, W, H, &c, &mut s);
+         tap(&mut t, &mut s, Tool::Reset);
+-        assert_eq!(s.buttons, default_layout());
++        assert!(s.buttons.is_empty());
++        assert_eq!(s.layout(Ctl::Jump), j0);
++    }
++
++    #[test]
++    fn button_scale_grows_every_button() {
++        let mut s = TouchSettings::default();
++        let a = s.layout(Ctl::Primary).size;
++        s.button_scale = 1.2;
++        assert!((s.layout(Ctl::Primary).size - a * 1.2).abs() < 1e-5);
+     }
+ 
+     #[test]
+@@ -1512,6 +1868,14 @@ mod tests {
+         let labels: Vec<_> = p.iter().filter_map(|p| p.label).collect();
+         assert!(labels.contains(&"Attack") && labels.contains(&"Bag"));
+         assert!(!labels.contains(&"Use"), "contextual hidden");
++        let icons: Vec<_> = p.iter().filter_map(|p| p.icon).collect();
++        assert!(icons.contains(&Ctl::Primary) && icons.contains(&Ctl::Map));
++        // pressed buttons get a glow (one more disc)
++        let mut t2 = TouchLayer::default();
++        let mut s2 = TouchSettings::default();
++        let (x, y) = px(s2.layout(Ctl::Jump));
++        t2.on_touch(1, Phase::Started, x, y, W, H, &ctx(), &mut s2);
++        assert_eq!(t2.primitives(&ctx(), &s2, 2.2).len(), p.len() + 1);
+         let none = t.primitives(&Context::default(), &s, 2.2);
+         assert!(none.is_empty());
+     }

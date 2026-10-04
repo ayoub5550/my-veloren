@@ -142,5 +142,10 @@ Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
   (fonts, Arabic, scale) without spending Test Lab quota.
 - **RTL text:** conrod/iced do no shaping or bidi. Shape Arabic to presentation forms and reorder per laid-out line;
   check that the font has the presentation forms (GoNotoCurrent does, OpenSans/haxrcorp do not).
+- **Rust edition 2024 (dev.7):** `gen` is a reserved keyword; a variable named `gen` fails to compile.
+- **Launcher icon (dev.7):** NativeActivity APKs still need `res/` for an adaptive icon: compile with `aapt2 compile --dir res`
+  and link with `-R`; keep the logo inside the 66/108 safe zone or MIUI's squircle mask crops it.
+- **Check expectations (dev.7):** a fresh Test Lab character has no unlocked auxiliary abilities, so hotbar slots 1–5 are
+  empty. Checks must compare the overlay with the game state, not assume content.
 - Mobile graphics tiers done in dev.4 (auto Low/Medium by GPU). Physical fps gate pending (Test Lab quota).
 - VM attempt 5 reached the world (Session) and ran 10 min without crash; physical-device confirmation pending quota.

@@ -1,13 +1,13 @@
 #!/bin/bash
 # Build the native Veloren Android APK (dev2+, ADR-002).
-# Usage: native/build_android.sh [VELOREN_SRC=/work/native/veloren] [APK_NAME=my-veloren-dev6.apk]
-# Output: native/out/$APK_NAME. Patches 0001..0005 must already be applied to VELOREN_SRC.
+# Usage: native/build_android.sh [VELOREN_SRC=/work/native/veloren] [APK_NAME=my-veloren-dev7.apk]
+# Output: native/out/$APK_NAME. Patches 0001..0006 must already be applied to VELOREN_SRC.
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 SRC=${VELOREN_SRC:-/work/native/veloren}
 source /work/native/env.sh
 SDK=${ANDROID_SDK:-/work/native/android-sdk}
-APK_NAME=${APK_NAME:-my-veloren-dev6.apk}
+APK_NAME=${APK_NAME:-my-veloren-dev7.apk}
 BT=$SDK/build-tools/34.0.0
 JAR=$SDK/platforms/android-34/android.jar
 export JAVA_HOME=${JAVA_HOME:-/work/native/jdk}
@@ -29,7 +29,9 @@ rm -rf "$OUT/classes"; mkdir -p "$OUT/classes" "$OUT/dex"
 javac -source 8 -target 8 -nowarn -bootclasspath "$JAR" -d "$OUT/classes" $(find "$HERE/android/java" -name '*.java') 2>/dev/null
 "$BT/d8" --min-api 26 --lib "$JAR" --output "$OUT/dex" $(find "$OUT/classes" -name '*.class')
 cp "$OUT/dex/classes.dex" "$STAGE/classes.dex"
-"$BT/aapt2" link -o "$OUT/base.apk" --manifest "$HERE/android/AndroidManifest.xml" -I "$JAR" -A "$STAGE/assets" -0 tar
+# dev.7 (7.9): launcher icon resources (legacy + adaptive), see android/res_src/make_icon.py
+rm -rf "$OUT/res.zip"; "$BT/aapt2" compile --dir "$HERE/android/res" -o "$OUT/res.zip"
+"$BT/aapt2" link -o "$OUT/base.apk" --manifest "$HERE/android/AndroidManifest.xml" -I "$JAR" -A "$STAGE/assets" -0 tar -R "$OUT/res.zip" --auto-add-overlay
 python3 -c "import zipfile,os,sys;z=zipfile.ZipFile(sys.argv[1],'a',zipfile.ZIP_DEFLATED,compresslevel=6);[z.write(os.path.join(r,f),os.path.relpath(os.path.join(r,f),sys.argv[2])) for r,_,fs in os.walk(os.path.join(sys.argv[2],'lib')) for f in fs];z.write(os.path.join(sys.argv[2],'classes.dex'),'classes.dex');z.close()" "$OUT/base.apk" "$STAGE"
 "$BT/zipalign" -f -p 16 "$OUT/base.apk" "$OUT/aligned.apk"
 # dev.6: one signing key for every build (ANDROID_KEYSTORE, kept outside the repo), so a new
