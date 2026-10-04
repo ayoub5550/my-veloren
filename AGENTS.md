@@ -7,8 +7,13 @@
 > `docs/DEV2-NATIVE.md` (status log, rebuild steps, Android code map).
 >
 > **2026-10-03:** dev2 merged to `main` by owner (PR #3, prerelease v0.1.0-dev.2). Next milestones
-> (dev.3 touch controls → dev.9 distribution) are in [docs/ROADMAP.md](docs/ROADMAP.md); each needs an
+> (dev.3 touch controls → dev.10 distribution) are in [docs/ROADMAP.md](docs/ROADMAP.md); each needs an
 > owner instruction «نفّذ dev.N». The old Unity roadmap is `docs/ROADMAP-UNITY-ARCHIVED.md`.
+>
+> **2026-10-04:** dev.5 + dev.6 merged (PR #6, #7). Owner tested dev.6 on his Poco F3 and his fixes became
+> **dev.7** in [docs/ROADMAP.md](docs/ROADMAP.md) (Ultra heat, button redesign/no overlap, smoother joystick,
+> touch-consistent menus, touch-only controls settings, crashes). Owner: the pending Firebase physical runs
+> (r8q/e3q) are no longer needed; his own phone test is the physical gate. dev.7 starts on «ابدأ dev.7».
 >
 > **2026-10-03:** dev.6 authorized («اجلها وابدأ dev.6», physical runs postponed): branch `feat/dev6-touch-ui`
 > stacked on dev.5, patch 0005 (window gestures, Android text dialog for chat + character name via RegisterNatives,
