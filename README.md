@@ -1,6 +1,6 @@
 # my-veloren — Unity / Android / Offline
 
-> **الحالة: dev.9 (0.1.0-dev.9، فرع مراجعة) — يد تحكم، ولوحة مفاتيح وفأرة بلوتوث، واللعب الجماعي على خوادم Veloren الرسمية بحساب veloren.net مجاني (اللعب الفردي يبقى دون إنترنت). التفاصيل: [docs/DEV9.md](docs/DEV9.md).**
+> **الحالة: dev.10 (0.1.0-dev.10، فرع مراجعة) — سلاسة أكثر: مولّد فريمات (الكاميرا بـ60 إطارًا والعالم بـ30)، ومكبّر Snapdragon GSR، وانتظام الإطارات (ADPF)، وAPK أخف بـ74MB. التفاصيل: [docs/DEV10.md](docs/DEV10.md). dev.9 (مدموجة): يد تحكم، ولوحة مفاتيح وفأرة بلوتوث، ولعب جماعي على خوادم Veloren الرسمية ([docs/DEV9.md](docs/DEV9.md)).**
 >
 > **dev.8 (0.1.0-dev.8، مدموجة) — مراجعة محتوى العالم على الهاتف (مدن، زنزانات وزعماء، طقس، ليل ونهار، طيران شراعي، قوارب ومناطيد، حصاد)، وعوالم جاهزة تُشحن مع اللعبة، وعالم جديد بحجم آمن للهاتف، وعدة شخصيات، وتصدير الحفظ واستيراده. التفاصيل: [docs/DEV8.md](docs/DEV8.md).**
 >
@@ -40,7 +40,7 @@
 
 ## English summary
 
-Status: **dev.9 (native, ADR-002; review branch)** — gamepad, Bluetooth keyboard and mouse, and optional multiplayer on the official Veloren servers ([docs/DEV9.md](docs/DEV9.md)). dev.8 (merged): content audit on the phone, ready-made small worlds shipped in the APK, phone-safe new-world size, several characters, save export/import ([docs/DEV8.md](docs/DEV8.md)). dev.4–dev.7: mobile tiers, lifecycle, touch UI, owner phone fixes ([DEV7](docs/DEV7.md)). Base: the real upstream Veloren client (Voxygen, Rust) cross-compiled for arm64 Android with the complete asset tree (~444 MB) and the official world map, offline singleplayer, plus a full on-screen touch layer (analog stick, camera drag/pinch, combat/movement buttons, menu bar, context buttons, layout editor, haptics) tested with injected touches on Firebase Test Lab. See [docs/DEV3.md](docs/DEV3.md) and [docs/DEV2-NATIVE.md](docs/DEV2-NATIVE.md). dev1 (Unity slice, docs/DEV1.md) is archived.
+Status: **dev.10 (native, ADR-002; review branch)** — smoothness: depth-reprojection frame generation, Snapdragon GSR upscaling, frame pacing (setFrameRate + ADPF), APK 74 MB lighter ([docs/DEV10.md](docs/DEV10.md)). dev.9 (merged): gamepad, Bluetooth keyboard and mouse, and optional multiplayer on the official Veloren servers ([docs/DEV9.md](docs/DEV9.md)). dev.8 (merged): content audit on the phone, ready-made small worlds shipped in the APK, phone-safe new-world size, several characters, save export/import ([docs/DEV8.md](docs/DEV8.md)). dev.4–dev.7: mobile tiers, lifecycle, touch UI, owner phone fixes ([DEV7](docs/DEV7.md)). Base: the real upstream Veloren client (Voxygen, Rust) cross-compiled for arm64 Android with the complete asset tree (~444 MB) and the official world map, offline singleplayer, plus a full on-screen touch layer (analog stick, camera drag/pinch, combat/movement buttons, menu bar, context buttons, layout editor, haptics) tested with injected touches on Firebase Test Lab. See [docs/DEV3.md](docs/DEV3.md) and [docs/DEV2-NATIVE.md](docs/DEV2-NATIVE.md). dev1 (Unity slice, docs/DEV1.md) is archived.
 Each further milestone starts only on an owner instruction (see docs/ROADMAP.md).
 
 Read [AGENTS.md](AGENTS.md) before editing. The requested lowercase

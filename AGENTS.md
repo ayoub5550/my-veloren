@@ -20,6 +20,13 @@
 > input hook (`native/tools/vendor_winit.sh`): gamepad, Bluetooth keyboard/mouse, phone login panel, TLS CA fix; scenarios 12/13.
 > The owner's veloren.net test account lives only outside the repo (`FTL_MP_ACCOUNT`). Never drive a real account with
 > `chat_cli` from a closable stdin: at EOF it sends empty chat lines and the server mutes the account. See [docs/DEV9.md](docs/DEV9.md).
+> Merged as PR #10.
+>
+> **2026-10-04 (dev.10):** owner redefined dev.10 as performance/smoothness (16:11 UTC; distribution moves to dev.12). **dev.11 = lighter game** (size, RAM, CPU; roadmap written 17:35 UTC, see ROADMAP; starts on «ابدأ dev.11»).
+> Branch `feat/dev10-perf`, patch 0009: depth-reprojection frame generation (`voxygen/src/framegen.rs`, default on
+> High/Ultra, settings toggle), Snapdragon GSR upscaler (BSD-3, license kept), `ANativeWindow_setFrameRate` + ADPF pacing,
+> audio re-encode in `native/tools/slim_audio.sh` (−74 MB). Scenario 14 = FG ABBA benchmark. No asset was removed; the two
+> unused world maps need an owner decision. QEMU rejected (an emulator slows the game). See [docs/DEV10.md](docs/DEV10.md).
 > Not merged without owner approval.
 >
 > **2026-10-04 (dev.8):** owner «ابدأ dev.8» (13:01 UTC) with a Firebase key; VM-only automated testing to save quota.

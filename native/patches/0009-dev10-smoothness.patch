@@ -1,0 +1,1402 @@
+diff --git a/assets/voxygen/i18n/ar-SA/hud/misc.ftl b/assets/voxygen/i18n/ar-SA/hud/misc.ftl
+index 01b7ef3..dbd025f 100644
+--- a/assets/voxygen/i18n/ar-SA/hud/misc.ftl
++++ b/assets/voxygen/i18n/ar-SA/hud/misc.ftl
+@@ -1,3 +1,6 @@
+ hud-quests = المهام
+ hud-you_died = أنت ميت# my-veloren dev.7 (7.1)
+ hud-thermal-lowered = الهاتف يسخن: خُفّضت الرسوميات قليلًا لتبريده.
++# my-veloren dev.10: frame generation toggle (graphics settings)
++hud-settings-frame_generation_on = مولّد الفريمات: مفعّل
++hud-settings-frame_generation_off = مولّد الفريمات: متوقف
+diff --git a/assets/voxygen/i18n/en/hud/misc.ftl b/assets/voxygen/i18n/en/hud/misc.ftl
+index dffe565..e11ff21 100644
+--- a/assets/voxygen/i18n/en/hud/misc.ftl
++++ b/assets/voxygen/i18n/en/hud/misc.ftl
+@@ -115,3 +115,6 @@ hud-init-stage-render-pipeline = Creating render pipeline ({ $done }/{ $total })
+ hud-tutorial-disable = Permanently disable tutorial hints
+ # my-veloren dev.7 (7.1)
+ hud-thermal-lowered = Your phone is getting hot: graphics were lowered a little to cool it down.
++# my-veloren dev.10: frame generation toggle (graphics settings)
++hud-settings-frame_generation_on = Frame gen: ON
++hud-settings-frame_generation_off = Frame gen: OFF
+diff --git a/assets/voxygen/shaders/antialias/sgsr.glsl b/assets/voxygen/shaders/antialias/sgsr.glsl
+new file mode 100644
+index 0000000..77c0267
+--- /dev/null
++++ b/assets/voxygen/shaders/antialias/sgsr.glsl
+@@ -0,0 +1,158 @@
++// my-veloren dev.10: Snapdragon Game Super Resolution v1 (SGSR 1) as an
++// upscaling anti-aliasing mode.
++//
++// Adapted from Qualcomm's sgsr1_shader_mobile_edge_direction.frag
++// (https://github.com/SnapdragonStudios/snapdragon-gsr, sgsr/v1):
++//   Copyright (c) 2025, Qualcomm Innovation Center, Inc. All rights reserved.
++//   SPDX-License-Identifier: BSD-3-Clause
++// License of the original (reproduced as required):
++//   Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
++//
++//   Redistribution and use in source and binary forms, with or without
++//   modification, are permitted provided that the following conditions are met:
++//
++//   1. Redistributions of source code must retain the above copyright notice,
++//      this list of conditions and the following disclaimer.
++//
++//   2. Redistributions in binary form must reproduce the above copyright notice,
++//      this list of conditions and the following disclaimer in the documentation
++//      and/or other materials provided with the distribution.
++//
++//   3. Neither the name of the copyright holder nor the names of its contributors
++//      may be used to endorse or promote products derived from this software
++//      without specific prior written permission.
++//
++//   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
++//   AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
++//   IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
++//   ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
++//   LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
++//   CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
++//   SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
++//   INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
++//   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
++//   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
++//   POSSIBILITY OF SUCH DAMAGE.
++//
++//   SPDX-License-Identifier: BSD-3-Clause
++//
++// Changes for Veloren: the source here is linear HDR (before tone mapping),
++// so the edge analysis and the sharpening delta run on a Reinhard-compressed
++// green channel (x / (1 + x)) and the result is expanded back; the edge
++// direction variant is used; the interface is Veloren's `aa_apply`.
++
++#define SGSR_EDGE_THRESHOLD (8.0 / 255.0)
++#define SGSR_EDGE_SHARPNESS 2.0
++
++float sgsr_fast_lanczos2(float x) {
++    float wA = x - 4.0;
++    float wB = x * wA - wA;
++    wA *= wA;
++    return wB * wA;
++}
++
++vec2 sgsr_weight_y(float dx, float dy, float c, vec3 data) {
++    float std_ = data.x;
++    vec2 dir = data.yz;
++    float edge_dis = dx * dir.y + dy * dir.x;
++    float x = (dx * dx + dy * dy) + (edge_dis * edge_dis) * (clamp(c * c * std_, 0.0, 1.0) * 0.7 - 1.0);
++    float w = sgsr_fast_lanczos2(x);
++    return vec2(w, w * c);
++}
++
++vec2 sgsr_edge_direction(vec4 left, vec4 right) {
++    float RxLz = right.x - left.z;
++    float RwLy = right.w - left.y;
++    vec2 delta = vec2(RxLz + RwLy, RxLz - RwLy);
++    float len_inv = inversesqrt(delta.x * delta.x + 3.075740e-05 + delta.y * delta.y);
++    return delta * len_inv;
++}
++
++// textureGather(.., 1) at the texel corner `ij` without textureGather (not
++// available in every shader front end Veloren uses): green channel of the
++// texels (i-1, j), (i, j), (i, j-1), (i-1, j-1), in gather order.
++vec4 sgsr_gather_g(texture2D tex, sampler smplr, ivec2 ij, ivec2 sz) {
++    ivec2 hi = sz - 1;
++    return vec4(
++        texelFetch(sampler2D(tex, smplr), clamp(ij + ivec2(-1, 0), ivec2(0), hi), 0).g,
++        texelFetch(sampler2D(tex, smplr), clamp(ij, ivec2(0), hi), 0).g,
++        texelFetch(sampler2D(tex, smplr), clamp(ij + ivec2(0, -1), ivec2(0), hi), 0).g,
++        texelFetch(sampler2D(tex, smplr), clamp(ij + ivec2(-1, -1), ivec2(0), hi), 0).g
++    );
++}
++
++// HDR <-> [0, 1) for the analysis.
++vec4 sgsr_c(vec4 v) { return v / (1.0 + v); }
++float sgsr_c1(float v) { return v / (1.0 + v); }
++
++vec4 aa_apply(
++    texture2D tex, sampler smplr,
++    texture2D depth_tex, sampler depth_smplr,
++    vec2 fragCoord,
++    vec2 resolution
++) {
++    vec2 uv = fragCoord / resolution;
++    ivec2 in_isize = textureSize(sampler2D(tex, smplr), 0);
++    vec2 in_size = vec2(in_isize);
++    vec4 viewport = vec4(1.0 / in_size, in_size);
++
++    vec4 color = textureLod(sampler2D(tex, smplr), uv, 0.0);
++    float g = sgsr_c1(max(color.g, 0.0));
++
++    vec2 img_coord = uv * viewport.zw + vec2(-0.5, 0.5);
++    vec2 img_coord_pixel = floor(img_coord);
++    ivec2 ij = ivec2(img_coord_pixel);
++    vec2 pl = img_coord - img_coord_pixel;
++    vec4 left = sgsr_c(max(sgsr_gather_g(tex, smplr, ij, in_isize), vec4(0.0)));
++
++    float edge_vote = abs(left.z - left.y) + abs(g - left.y) + abs(g - left.z);
++    if (edge_vote > SGSR_EDGE_THRESHOLD) {
++        ij.x += 1;
++
++        vec4 right = sgsr_c(max(sgsr_gather_g(tex, smplr, ij + ivec2(1, 0), in_isize), vec4(0.0)));
++        vec4 up_down;
++        up_down.xy = sgsr_c(max(sgsr_gather_g(tex, smplr, ij + ivec2(0, -1), in_isize), vec4(0.0))).wz;
++        up_down.zw = sgsr_c(max(sgsr_gather_g(tex, smplr, ij + ivec2(0, 1), in_isize), vec4(0.0))).yx;
++
++        float mean = (left.y + left.z + right.x + right.w) * 0.25;
++        left -= vec4(mean);
++        right -= vec4(mean);
++        up_down -= vec4(mean);
++        float cw = g - mean;
++
++        float sum = abs(left.x) + abs(left.y) + abs(left.z) + abs(left.w)
++            + abs(right.x) + abs(right.y) + abs(right.z) + abs(right.w)
++            + abs(up_down.x) + abs(up_down.y) + abs(up_down.z) + abs(up_down.w);
++        float sum_mean = 1.014185e+01 / max(sum, 1e-6);
++        float std_ = sum_mean * sum_mean;
++
++        vec3 data = vec3(std_, sgsr_edge_direction(left, right));
++        vec2 aWY = sgsr_weight_y(pl.x, pl.y + 1.0, up_down.x, data);
++        aWY += sgsr_weight_y(pl.x - 1.0, pl.y + 1.0, up_down.y, data);
++        aWY += sgsr_weight_y(pl.x - 1.0, pl.y - 2.0, up_down.z, data);
++        aWY += sgsr_weight_y(pl.x, pl.y - 2.0, up_down.w, data);
++        aWY += sgsr_weight_y(pl.x + 1.0, pl.y - 1.0, left.x, data);
++        aWY += sgsr_weight_y(pl.x, pl.y - 1.0, left.y, data);
++        aWY += sgsr_weight_y(pl.x, pl.y, left.z, data);
++        aWY += sgsr_weight_y(pl.x + 1.0, pl.y, left.w, data);
++        aWY += sgsr_weight_y(pl.x - 1.0, pl.y - 1.0, right.x, data);
++        aWY += sgsr_weight_y(pl.x - 2.0, pl.y - 1.0, right.y, data);
++        aWY += sgsr_weight_y(pl.x - 2.0, pl.y, right.z, data);
++        aWY += sgsr_weight_y(pl.x - 1.0, pl.y, right.w, data);
++
++        float final_y = aWY.y / aWY.x;
++        float max_y = max(max(left.y, left.z), max(right.x, right.w));
++        float min_y = min(min(left.y, left.z), min(right.x, right.w));
++        float delta_y = clamp(SGSR_EDGE_SHARPNESS * final_y, min_y, max_y) - cw;
++        // smooth high contrast input
++        delta_y = clamp(delta_y, -23.0 / 255.0, 23.0 / 255.0);
++        if (!isnan(delta_y)) {
++            // Apply the delta in the compressed domain, per channel.
++            vec3 cc = sgsr_c(vec4(max(color.rgb, vec3(0.0)), 0.0)).rgb;
++            cc = clamp(cc + delta_y, 0.0, 0.996);
++            color.rgb = cc / (1.0 - cc);
++        }
++    }
++    color.a = 1.0;
++    return color;
++}
+diff --git a/assets/voxygen/shaders/postprocess-frag.glsl b/assets/voxygen/shaders/postprocess-frag.glsl
+index b9b637c..e2998c7 100644
+--- a/assets/voxygen/shaders/postprocess-frag.glsl
++++ b/assets/voxygen/shaders/postprocess-frag.glsl
+@@ -40,6 +40,10 @@ layout (std140, set = 1, binding = 4)
+ uniform u_locals {
+     mat4 proj_mat_inv;
+     mat4 view_mat_inv;
++    // my-veloren dev.10 frame generation (see voxygen/src/framegen.rs)
++    mat4 reproj_mat;
++    mat4 reproj_inv;
++    vec4 reproj_params;
+ };
+ 
+ #ifdef BLOOM_FACTOR
+@@ -131,6 +135,52 @@ vec3 aa_sample_grad(vec2 uv, vec2 off) {
+ }
+ #endif
+ 
++// dev.10 frame generation: where a pixel of the previous (real) frame lands
++// now (xy = uv, z = its previous depth, reversed z: larger = nearer).
++vec3 fg_forward(vec2 src_uv) {
++    vec2 sz = vec2(textureSize(sampler2D(t_src_depth, s_src_depth), 0));
++    float d = texelFetch(sampler2D(t_src_depth, s_src_depth), clamp(ivec2(src_uv * sz), ivec2(0), ivec2(sz) - 1), 0).x;
++    vec4 c = reproj_mat * vec4((src_uv * 2.0 - 1.0) * vec2(1, -1), d, 1.0);
++    vec2 ndc = c.w > 1e-6 ? c.xy / c.w : vec2(4.0);
++    return vec3((ndc * vec2(1, -1) + 1.0) * 0.5, d);
++}
++
++// Inverse of fg_forward by fixed-point iteration from a start point; returns
++// (previous uv, residual in output pixels, previous depth).
++vec4 fg_search(vec2 uv, vec2 start) {
++    vec2 s = start;
++    vec3 f = fg_forward(s);
++    for (int i = 0; i < 5; i ++) {
++        s = clamp(s + (uv - f.xy), vec2(0.0), vec2(1.0));
++        f = fg_forward(s);
++    }
++    return vec4(s, length((f.xy - uv) * screen_res.xy), f.z);
++}
++
++// The previous-frame uv whose content is seen at `uv` in this frame. Two
++// searches: one from the same uv (finds surfaces that barely moved) and one
++// from where the far background was (finds what a moving foreground uncovers).
++// If both converge the nearer surface wins (it occludes); if neither does, the
++// background is the better guess for a disocclusion.
++vec2 fg_reproject(vec2 uv) {
++    vec4 far_c = reproj_inv * vec4((uv * 2.0 - 1.0) * vec2(1, -1), 0.0, 1.0);
++    vec2 far_uv = far_c.w > 1e-6 ? (far_c.xy / far_c.w * vec2(1, -1) + 1.0) * 0.5 : uv;
++    vec4 a = fg_search(uv, uv);
++    vec4 b = fg_search(uv, clamp(far_uv, vec2(0.0), vec2(1.0)));
++    const float OK_PX = 1.5;
++    bool ca = a.z < OK_PX;
++    bool cb = b.z < OK_PX;
++    if (ca && cb) {
++        return a.w >= b.w ? a.xy : b.xy;
++    } else if (ca) {
++        return a.xy;
++    } else if (cb) {
++        return b.xy;
++    } else {
++        return a.w < b.w ? a.xy : b.xy;
++    }
++}
++
+ float dither(ivec2 p, float level) {
+     // Bayer dithering
+     int dither[8][8] = {
+@@ -156,6 +206,9 @@ void main() {
+     delta = vec2(0.25);
+ 
+     vec2 sample_uv = uv;
++    if (reproj_params.x > 0.5) {
++        sample_uv = fg_reproject(uv);
++    }
+     #ifdef EXPERIMENTAL_UNDERWARPER
+         if (medium.x == MEDIUM_WATER) {
+             float x = tick_loop(2.0 * PI, 3.0, uv.y * 60);
+diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
+index 29059a1..e3107e1 100644
+--- a/voxygen/src/android.rs
++++ b/voxygen/src/android.rs
+@@ -1378,6 +1378,8 @@ enum Act {
+     PadKeyChecked(i32, f32),
+     /// dev.9: snapshot the input counters (base for the next checks).
+     MarkInput,
++    /// dev.10: frame generation on/off (forced: ignores the slow-VM back-off).
++    FrameGen(bool),
+     Finish,
+     /// dev.5: end the scenario and SIGKILL the process (no clean shutdown).
+     FinishKill,
+@@ -1503,6 +1505,56 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
+         q.push(Act::Wait(1.0));
+     };
+     match scenario {
++        14 => {
++            // dev.10: Snapdragon GSR + frame generation. ABBA camera sweeps with
++            // frame generation off / on on the automatic tier, then a walk on
++            // the phone Ultra tier with frame generation for the video.
++            use crate::mobile::Tier;
++            let auto = crate::mobile::Tier::parse(current_tier_name()).unwrap_or(Tier::Low);
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::EnsureGameInput(3));
++            q.push(Act::Tier(auto));
++            q.push(Act::Wait(1.0));
++            q.push(Act::WaitPipelines(120.0));
++            q.push(Act::Wait(8.0));
++            q.push(Act::Check("sgsr_active"));
++            for (on, name, from, to) in [
++                (false, "fg-off-1", 0.30, 0.80),
++                (true, "fg-on-1", 0.80, 0.30),
++                (true, "fg-on-2", 0.30, 0.80),
++                (false, "fg-off-2", 0.80, 0.30),
++            ] {
++                q.push(Act::FrameGen(on));
++                q.push(Act::Wait(2.0));
++                q.push(Act::Down(CAM_ID, from, 0.22));
++                q.push(Act::BenchBegin(name));
++                q.push(Act::MoveTo(CAM_ID, to, 0.22, 25.0));
++                q.push(Act::BenchEnd(name));
++                q.push(Act::Up(CAM_ID));
++            }
++            q.push(Act::Check("fg_generates"));
++            q.push(Act::Check("fg_off_all_real"));
++            q.push(Act::Check("fg_more_fps"));
++            q.push(Act::Check("pacing_api"));
++            // Ultra (SGSR 0.8 + frame generation) while walking and turning.
++            q.push(Act::Tier(Tier::Ultra));
++            q.push(Act::Wait(1.0));
++            q.push(Act::WaitPipelines(150.0));
++            q.push(Act::FrameGen(true));
++            q.push(Act::Wait(5.0));
++            q.push(Act::Check("ultra_dev10"));
++            q.push(Act::Down(STICK_ID, STICK_BASE.0, STICK_BASE.1));
++            let (sx, sy) = stick_pos(gs, aspect, (0.0, 1.0));
++            q.push(Act::MoveTo(STICK_ID, sx, sy, 0.3));
++            q.push(Act::Down(CAM_ID, 0.50, 0.22));
++            q.push(Act::MoveTo(CAM_ID, 0.62, 0.22, 20.0));
++            q.push(Act::Up(CAM_ID));
++            q.push(Act::Up(STICK_ID));
++            q.push(Act::Check("fg_walk"));
++            q.push(Act::Tier(auto));
++            q.push(Act::FrameGen(false));
++            q.push(Act::Wait(3.0));
++        },
+         11 => {
+             // dev.8 (8.2-8.4): the menu part ran before the world started
+             // (ready-made world, export, import, two characters).
+@@ -2570,6 +2622,57 @@ fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (boo
+             let ok = f.contains("keep_screen_on=1") && f.contains("landscape=1");
+             (ok, f.trim().replace('\n', " "))
+         },
++        "sgsr_active" | "ultra_dev10" => {
++            let g = &gs.settings.graphics;
++            let ready = gs.window.renderer().pipeline_creation_status().is_none()
++                && gs.window.renderer().pipeline_recreation_status().is_none();
++            let sgsr = g.render_mode.aa == crate::render::AaMode::Sgsr;
++            let detail = format!(
++                "aa={:?} upscale={:.2} fg={} max_fps={:?} pipelines_ready={ready}",
++                g.render_mode.aa, g.render_mode.upscale_mode.factor, g.frame_generation, g.max_fps
++            );
++            if name == "sgsr_active" {
++                (sgsr && ready, detail)
++            } else {
++                let f = g.render_mode.upscale_mode.factor;
++                (sgsr && ready && g.frame_generation && (f - 0.8).abs() < 0.01, detail)
++            }
++        },
++        "fg_generates" | "fg_off_all_real" | "fg_more_fps" => {
++            let b = OCC_BENCH.lock().unwrap();
++            let sum = |prefix: &str, key: &str| -> Option<f64> {
++                let v: Vec<f64> = b
++                    .iter()
++                    .filter(|e| e.0.starts_with(prefix))
++                    .filter_map(|e| field(&e.2, key).or_else(|| field(&e.1, key)))
++                    .collect();
++                (!v.is_empty()).then(|| v.iter().sum::<f64>())
++            };
++            let n = |prefix: &str| b.iter().filter(|e| e.0.starts_with(prefix)).count().max(1) as f64;
++            let (on_gen, on_real) = (sum("fg-on", "fg_gen="), sum("fg-on", "fg_real="));
++            let (off_gen, off_real) = (sum("fg-off", "fg_gen="), sum("fg-off", "fg_real="));
++            let on_fps = sum("fg-on", "fps=").map(|v| v / n("fg-on"));
++            let off_fps = sum("fg-off", "fps=").map(|v| v / n("fg-off"));
++            let detail = format!(
++                "on: gen={on_gen:?} real={on_real:?} fps={on_fps:?} | off: gen={off_gen:?} real={off_real:?} fps={off_fps:?} | {}",
++                crate::framegen::summary()
++            );
++            let ok = match name {
++                "fg_generates" => matches!((on_gen, on_real), (Some(g), Some(r)) if g >= 20.0 && g >= 0.6 * r),
++                "fg_off_all_real" => off_gen == Some(0.0) && off_real.is_some_and(|r| r > 0.0),
++                _ => matches!((on_fps, off_fps), (Some(a), Some(b)) if a >= b * 1.2),
++            };
++            (ok, detail)
++        },
++        "fg_walk" => {
++            let (g, r) = crate::framegen::counters();
++            let d = format!("total gen={g} real={r} {}", crate::framegen::summary());
++            (g > 0 && r > 0, d)
++        },
++        "pacing_api" => {
++            let s = crate::mobile::pacing_summary();
++            (s.contains("rc=0") && !s.contains("hz=0"), s)
++        },
+         "occlusion_culls" | "occlusion_not_slower" => {
+             let b = OCC_BENCH.lock().unwrap();
+             let avg = |prefix: &str, key: &str, from_occ: bool| {
+@@ -2709,6 +2812,8 @@ static CACHE_SAVED: Mutex<bool> = Mutex::new(false);
+ static TIER_NAME: Mutex<Option<&'static str>> = Mutex::new(None);
+ /// dev.5 (5.6): (bench name, bench summary, occlusion summary) for checks.
+ static OCC_BENCH: Mutex<Vec<(&'static str, String, String)>> = Mutex::new(Vec::new());
++/// dev.10: frame generation counters (generated, real) at `BenchBegin`.
++static FG_BASE: Mutex<(u64, u64)> = Mutex::new((0, 0));
+ 
+ fn field(s: &str, key: &str) -> Option<f64> {
+     let rest = &s[s.find(key)? + key.len()..];
+@@ -2774,7 +2879,7 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+             *HAPTIC_COUNT.lock().unwrap(),
+         );
+         ainfo!(
+-            "VEL-PERF t={:.0}s state={} tier={} {} rss={:.0}MB temp={} {}",
++            "VEL-PERF t={:.0}s state={} tier={} {} rss={:.0}MB temp={} {} {} {}",
+             now.duration_since(p.start).as_secs_f32(),
+             state_name.unwrap_or("-"),
+             current_tier_name(),
+@@ -2782,6 +2887,8 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+             crate::mobile::sys::rss_mb(),
+             crate::mobile::sys::max_temp(),
+             crate::mobile::sys::cpu_by_thread(),
++            crate::framegen::summary(),
++            crate::mobile::pacing_summary(),
+         );
+         // dev.4 (4.5): persist the pipeline cache once all pipelines exist.
+         let busy = gs.window.renderer().pipeline_creation_status().is_some()
+@@ -3076,6 +3183,12 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+             }
+             finished
+         },
++        Act::FrameGen(on) => {
++            ainfo!("VEL-STEP frame generation -> {}", if on { "on" } else { "off" });
++            gs.settings.graphics.frame_generation = on;
++            crate::framegen::set_forced(on);
++            true
++        },
+         Act::Occlusion(on) => {
+             ainfo!("VEL-STEP occlusion culling -> {}", if on { "on" } else { "off" });
+             crate::scene::terrain::OCCLUSION_CULLING.store(on, Ordering::Relaxed);
+@@ -3090,13 +3203,16 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+         Act::BenchBegin(name) => {
+             ainfo!("VEL-STEP bench begin {name}");
+             crate::mobile::bench_begin();
++            *FG_BASE.lock().unwrap() = crate::framegen::counters();
+             *OCC_ACC.lock().unwrap() = (0, 0, 0, 0);
+             true
+         },
+         Act::BenchEnd(name) => {
+             let g = &gs.settings.graphics;
+             let bench = crate::mobile::bench_end();
+-            let occ = occ_summary();
++            let (g0, r0) = *FG_BASE.lock().unwrap();
++            let (g1, r1) = crate::framegen::counters();
++            let occ = format!("{} fg_gen={} fg_real={}", occ_summary(), g1 - g0, r1 - r0);
+             OCC_BENCH.lock().unwrap().push((name, bench.clone(), occ.clone()));
+             ainfo!(
+                 "VEL-BENCH {name} {} {} vd={} upscale={:.2} shadow={:?} gpu='{}' rss={:.0}MB temp={}",
+diff --git a/voxygen/src/android_main_body.rs b/voxygen/src/android_main_body.rs
+index dde7289..f0aa7dd 100644
+--- a/voxygen/src/android_main_body.rs
++++ b/voxygen/src/android_main_body.rs
+@@ -141,6 +141,15 @@ pub fn run() {
+ 
+     // my-veloren dev.4 (4.2/4.3): phone graphics on first launch.
+     let mobile_pending = crate::mobile::first_launch(&mut settings.graphics, &config_dir);
++    if !mobile_pending {
++        // dev.10: persist the one-time settings upgrade right away.
++        settings.save_to_file_warn(&config_dir);
++    }
++    // dev.10 test hook: generate frames even on a slow (CPU-rendered) VM.
++    if config_dir.join("force_framegen").exists() {
++        crate::framegen::set_forced(true);
++        settings.graphics.frame_generation = true;
++    }
+     // my-veloren dev.6 (6.6): UI scale from the screen density, once.
+     {
+         let dpi = crate::android::app().config().density();
+diff --git a/voxygen/src/framegen.rs b/voxygen/src/framegen.rs
+new file mode 100644
+index 0000000..039fb49
+--- /dev/null
++++ b/voxygen/src/framegen.rs
+@@ -0,0 +1,272 @@
++//! my-veloren dev.10: frame generation by depth reprojection.
++//!
++//! When enabled, every second in-game frame is *generated* instead of
++//! rendered: the world passes (shadows, terrain, figures, clouds, bloom) are
++//! skipped and the post-process pass re-projects the previous real frame
++//! (still sitting in the colour/depth targets) to the new camera, using the
++//! depth buffer. The HUD and touch controls are drawn fresh every frame.
++//!
++//! This is the cheap, single-threaded cousin of VR "timewarp"/"spacewarp":
++//! camera motion (turning, orbiting, walking, gliding) is shown at the full
++//! presented rate while the GPU renders the world at half of it. Moving
++//! entities and animated water only change on real frames.
++//!
++//! Pacing: a generated frame is held back so that it is presented about one
++//! present interval after the real frame before it, and frame generation
++//! steps aside (renders every frame for real) while real frames take too
++//! long for that rhythm (`VEL-FG` lines tell which mode is active).
++
++use std::{
++    sync::Mutex,
++    time::{Duration, Instant},
++};
++use vek::*;
++
++#[derive(Clone, Copy)]
++struct Snap {
++    view: Mat4<f64>,
++    proj: Mat4<f64>,
++    focus_off: Vec3<f64>,
++    res: Vec2<u32>,
++}
++
++struct St {
++    /// User setting (graphics.frame_generation).
++    enabled: bool,
++    /// Test override: generate even when real frames are slow (VM).
++    forced: bool,
++    /// Camera of the last real frame.
++    last_real: Option<Snap>,
++    /// Decision for the frame being built (set by `plan`, read by `render`).
++    pending_generated: bool,
++    /// Generated frames presented since the last real one.
++    prev_generated: u32,
++    /// When `plan` last ran (= we are in the world).
++    last_plan: Option<Instant>,
++    /// When the last real frame was presented.
++    last_real_present: Option<Instant>,
++    /// Smoothed CPU time of real / generated frames (s).
++    real_ema: f64,
++    gen_ema: f64,
++    /// Fallback to all-real frames until this time.
++    backoff_until: Option<Instant>,
++    // stats for VEL-FG
++    n_real: u64,
++    n_gen: u64,
++    n_cut: u64,
++    n_backoff: u64,
++    n_plan: u64,
++}
++
++static ST: Mutex<St> = Mutex::new(St {
++    enabled: false,
++    forced: false,
++    last_real: None,
++    pending_generated: false,
++    prev_generated: 0,
++    last_plan: None,
++    last_real_present: None,
++    real_ema: 0.0,
++    gen_ema: 0.003,
++    backoff_until: None,
++    n_real: 0,
++    n_gen: 0,
++    n_cut: 0,
++    n_backoff: 0,
++    n_plan: 0,
++});
++
++fn st() -> std::sync::MutexGuard<'static, St> { ST.lock().unwrap_or_else(|e| e.into_inner()) }
++
++/// Fixed present rate while frame generation runs (real frames = half).
++pub const PRESENT_FPS: u32 = 60;
++
++/// Set from the graphics settings every frame (cheap).
++pub fn set_enabled(enabled: bool) {
++    let mut s = st();
++    if std::env::var_os("MY_VELOREN_FG_HOLD").is_some() {
++        s.forced = true;
++    }
++    if s.enabled != enabled {
++        tracing::info!("VEL-FG enabled={enabled}");
++        s.enabled = enabled;
++        s.last_real = None;
++        s.prev_generated = 0;
++        s.backoff_until = None;
++    }
++}
++
++/// Test hook (`force_framegen` file): ignore the slow-frame back-off.
++pub fn set_forced(forced: bool) { st().forced = forced; }
++
++/// Forget the previous frame (targets were recreated, surface lost, ...).
++pub fn invalidate() {
++    let mut s = st();
++    s.last_real = None;
++    s.prev_generated = 0;
++    s.pending_generated = false;
++}
++
++/// True while the player is in the world with frame generation on and not
++/// backed off: the frame cap becomes `PRESENT_FPS`.
++pub fn active() -> bool {
++    let s = st();
++    s.enabled
++        && s.last_plan
++            .is_some_and(|t| t.elapsed() < Duration::from_millis(500))
++        && !s.backoff_until.is_some_and(|t| Instant::now() < t)
++}
++
++/// Present rate to use for an in-world frame cap of `max_fps`.
++pub fn target_fps(max_fps: u32) -> u32 {
++    if active() { PRESENT_FPS.max(max_fps.min(PRESENT_FPS)) } else { max_fps }
++}
++
++/// `old NDC (x, y, depth, 1)` → `new clip space` for the post-process pass.
++fn reproj(old: &Snap, view: Mat4<f64>, proj: Mat4<f64>, focus_off: Vec3<f64>) -> Mat4<f64> {
++    proj * view * Mat4::translation_3d(old.focus_off - focus_off) * old.view.inverted()
++        * old.proj.inverted()
++}
++
++fn to_uv(m: &Mat4<f64>, x: f64, y: f64, d: f64) -> Option<Vec2<f64>> {
++    let c = *m * Vec4::new(x, y, d, 1.0);
++    (c.w > 1e-6).then(|| Vec2::new(c.x / c.w, c.y / c.w))
++}
++
++/// Called once per in-world frame with the new camera (Scene::maintain).
++/// Returns the re-projection matrix (and its inverse) when this frame is to
++/// be generated.
++pub fn plan(
++    view: Mat4<f32>,
++    proj: Mat4<f32>,
++    focus_off: Vec3<f32>,
++    res: Vec2<u32>,
++    allow: bool,
++) -> Option<(Mat4<f32>, Mat4<f32>)> {
++    let mut s = st();
++    let now = Instant::now();
++    s.last_plan = Some(now);
++    let snap = Snap {
++        view: view.as_(),
++        proj: proj.as_(),
++        focus_off: focus_off.as_(),
++        res,
++    };
++    let backing_off = !s.forced && s.backoff_until.is_some_and(|t| now < t);
++    let mut out = None;
++    if s.enabled && allow && s.prev_generated < debug_hold() && !backing_off {
++        if let Some(old) = s.last_real.filter(|o| o.res == res) {
++            let m = reproj(&old, snap.view, snap.proj, snap.focus_off);
++            // Camera cut / teleport / huge turn: render for real.
++            let ok = [(0.0, 0.0), (-0.8, -0.8), (0.8, 0.8)].iter().all(|&(x, y)| {
++                to_uv(&m, x, y, 0.00625) // ~10 m away (reversed z)
++                    .is_some_and(|p| (p - Vec2::new(x, y)).magnitude() < 0.35 && p.x.is_finite())
++            });
++            if ok {
++                out = Some((m.as_(), m.inverted().as_()));
++            } else {
++                s.n_cut += 1;
++                tracing::debug!("VEL-FG camera cut -> real frame");
++            }
++        }
++    }
++    s.n_plan += 1;
++    if s.n_plan % 240 == 1 {
++        tracing::debug!(
++            "VEL-FG plan #{} enabled={} allow={allow} prev_gen={} backoff={backing_off} last_real={} res={res:?} last_res={:?} out={}",
++            s.n_plan, s.enabled, s.prev_generated, s.last_real.is_some(), s.last_real.map(|o| o.res), out.is_some()
++        );
++    }
++    s.pending_generated = out.is_some();
++    if out.is_none() {
++        s.last_real = Some(snap);
++    }
++    out
++}
++
++/// Consumed by the session renderer: skip the world passes this frame?
++pub fn take_generated() -> bool { std::mem::take(&mut st().pending_generated) }
++
++/// Peek (run loop, before rendering).
++pub fn is_generated_pending() -> bool { st().pending_generated }
++
++/// How long to wait before recording a generated frame so it is shown about
++/// one present interval after the previous real frame.
++pub fn pre_present_wait() -> Option<Duration> {
++    let s = st();
++    if !s.pending_generated {
++        return None;
++    }
++    let t = s.last_real_present?;
++    let goal = 1.0 / PRESENT_FPS as f64 - s.gen_ema;
++    let left = goal - t.elapsed().as_secs_f64();
++    (left > 0.0005).then(|| Duration::from_secs_f64(left.min(0.05)))
++}
++
++/// After the frame was presented; `work` = tick + acquire + record seconds.
++pub fn frame_finished(generated: bool, work: f64) {
++    let mut s = st();
++    let now = Instant::now();
++    if generated {
++        s.gen_ema = 0.9 * s.gen_ema + 0.1 * work;
++        s.n_gen += 1;
++    } else {
++        s.real_ema = if s.real_ema == 0.0 { work } else { 0.9 * s.real_ema + 0.1 * work };
++        s.n_real += 1;
++        if s.enabled && s.n_real % 120 == 0 {
++            tracing::debug!(
++                "VEL-FG real={} gen={} cut={} backoff={}",
++                s.n_real, s.n_gen, s.n_cut, s.n_backoff
++            );
++        }
++        s.last_real_present = Some(now);
++        // A real frame that alone takes longer than ~1.3 present intervals
++        // cannot be paced with a generated one: step aside for 5 s.
++        if s.enabled
++            && !s.forced
++            && !s.backoff_until.is_some_and(|t| now < t)
++            && s.n_real > 30
++            && s.real_ema > 1.3 / PRESENT_FPS as f64
++        {
++            s.backoff_until = Some(now + Duration::from_secs(5));
++            s.n_backoff += 1;
++            s.real_ema = 1.0 / PRESENT_FPS as f64;
++        }
++    }
++    s.prev_generated = if generated { s.prev_generated + 1 } else { 0 };
++}
++
++/// Generated frames per real frame: 1, or `MY_VELOREN_FG_HOLD` (desktop
++/// harness: hold the world for many frames to inspect the re-projection).
++fn debug_hold() -> u32 {
++    static HOLD: std::sync::OnceLock<u32> = std::sync::OnceLock::new();
++    *HOLD.get_or_init(|| {
++        std::env::var("MY_VELOREN_FG_HOLD")
++            .ok()
++            .and_then(|v| v.parse().ok())
++            .unwrap_or(1)
++            .max(1)
++    })
++}
++
++/// (generated, real) frames so far.
++pub fn counters() -> (u64, u64) {
++    let s = st();
++    (s.n_gen, s.n_real)
++}
++
++/// One line for VEL-PERF.
++pub fn summary() -> String {
++    let s = st();
++    format!(
++        "fg[on={} forced={} real={} gen={} cut={} backoff={} real_ms={:.1} gen_ms={:.1}]",
++        s.enabled as u8,
++        s.forced as u8,
++        s.n_real,
++        s.n_gen,
++        s.n_cut,
++        s.n_backoff,
++        s.real_ema * 1000.0,
++        s.gen_ema * 1000.0
++    )
++}
+diff --git a/voxygen/src/hud/settings_window/video.rs b/voxygen/src/hud/settings_window/video.rs
+index 7636be3..243952b 100644
+--- a/voxygen/src/hud/settings_window/video.rs
++++ b/voxygen/src/hud/settings_window/video.rs
+@@ -39,6 +39,7 @@ widget_ids! {
+         medium_graphics_button,
+         high_graphics_button,
+         ultra_graphics_button,
++        frame_gen_button,
+         fps_counter,
+         pipeline_recreation_text,
+         terrain_vd_slider,
+@@ -380,6 +381,34 @@ impl Widget for Video<'_> {
+             lhs = id;
+         }
+ 
++        // my-veloren dev.10: frame generation toggle (see framegen.rs).
++        let frame_gen = self.global_state.settings.graphics.frame_generation;
++        if Button::new()
++            .label(&self.localized_strings.get_msg(if frame_gen {
++                "hud-settings-frame_generation_on"
++            } else {
++                "hud-settings-frame_generation_off"
++            }))
++            .w_h(150.0, 34.0)
++            .color(if frame_gen { UI_MAIN } else { UI_SUBTLE })
++            .hover_color(UI_MAIN)
++            .press_color(UI_HIGHLIGHT_0)
++            .right_from(lhs, 12.0)
++            .label_font_size(self.fonts.cyri.scale(14))
++            .label_color(TEXT_COLOR)
++            .label_font_id(self.fonts.cyri.conrod_id)
++            .label_y(Relative::Scalar(2.0))
++            .set(state.ids.frame_gen_button, ui)
++            .was_clicked()
++        {
++            events.push(GraphicsChange::ChangeGraphicsSettings(Rc::new(
++                move |g: GraphicsSettings| GraphicsSettings {
++                    frame_generation: !frame_gen,
++                    ..g
++                },
++            )));
++        }
++
+         // View Distance
+         Text::new(&self.localized_strings.get_msg("hud-settings-view_distance"))
+             .down_from(state.ids.reset_graphics_button, 10.0)
+@@ -906,6 +935,7 @@ impl Widget for Video<'_> {
+             AaMode::MsaaX16, */
+             AaMode::FxUpscale,
+             AaMode::Hqx,
++            AaMode::Sgsr,
+         ];
+         let mode_label_list = [
+             "None",
+@@ -916,6 +946,7 @@ impl Widget for Video<'_> {
+             "MSAA x16 (experimental)", */
+             "FXUpscale",
+             "HQX",
++            "Snapdragon GSR",
+         ];
+ 
+         // Get which AA mode is currently active
+diff --git a/voxygen/src/lib.rs b/voxygen/src/lib.rs
+index 5789899..384443c 100644
+--- a/voxygen/src/lib.rs
++++ b/voxygen/src/lib.rs
+@@ -20,6 +20,7 @@ pub mod audio;
+ pub mod touch;
+ pub mod mobile;
+ pub mod mobile_gpu;
++pub mod framegen;
+ pub mod cli;
+ pub mod cmd;
+ mod credits;
+diff --git a/voxygen/src/mobile.rs b/voxygen/src/mobile.rs
+index c3e8c3a..50242e9 100644
+--- a/voxygen/src/mobile.rs
++++ b/voxygen/src/mobile.rs
+@@ -74,8 +74,10 @@ impl Tier {
+                     particles_chance: 0.15,
+                     max_fps: Fps::Max(60),
+                     max_background_fps: Fps::Max(10),
++                    frame_generation: false,
+                     render_mode: RenderMode {
+-                        aa: AaMode::FxUpscale,
++                        // dev.10: Snapdragon GSR upscaling (sharper than FxUpscale at 0.6).
++                        aa: AaMode::Sgsr,
+                         cloud: CloudMode::Minimal,
+                         reflection: ReflectionMode::Low,
+                         fluid: FluidMode::Low,
+@@ -99,10 +101,13 @@ impl Tier {
+                     sprite_render_distance: 100,
+                     max_fps: Fps::Max(60),
+                     max_background_fps: Fps::Max(10),
++                    frame_generation: false,
+                     render_mode: RenderMode {
++                        aa: AaMode::Sgsr,
+                         cloud: CloudMode::Minimal,
+                         reflection: ReflectionMode::Low,
+-                        upscale_mode: UpscaleMode { factor: 0.75 },
++                        // dev.10: 0.75 -> 0.7, SGSR keeps it sharp.
++                        upscale_mode: UpscaleMode { factor: 0.7 },
+                         present_mode: PresentMode::Fifo,
+                         ..base.render_mode
+                     },
+@@ -118,6 +123,8 @@ impl Tier {
+                     lod_detail: 200,
+                     sprite_render_distance: 150,
+                     max_fps: Fps::Max(60),
++                    // dev.10: world at 30, frame generation shows 60.
++                    frame_generation: true,
+                     max_background_fps: Fps::Max(10),
+                     render_mode: RenderMode {
+                         cloud: CloudMode::Low,
+@@ -125,7 +132,9 @@ impl Tier {
+                         fluid: FluidMode::Medium,
+                         lighting: LightingMode::BlinnPhong,
+                         shadow: ShadowMode::Map(ShadowMapMode { resolution: 0.5 }),
+-                        upscale_mode: UpscaleMode { factor: 0.85 },
++                        aa: AaMode::Sgsr,
++                        // dev.10: 0.85 -> 0.75 with SGSR (-22 % pixels).
++                        upscale_mode: UpscaleMode { factor: 0.75 },
+                         present_mode: PresentMode::Fifo,
+                         ..base.render_mode
+                     },
+@@ -142,6 +151,8 @@ impl Tier {
+                     sprite_render_distance: 200,
+                     // Half the frames of High: the main heat saver.
+                     max_fps: Fps::Max(30),
++                    // dev.10: ... and frame generation presents 60 from those 30.
++                    frame_generation: true,
+                     max_background_fps: Fps::Max(10),
+                     render_mode: RenderMode {
+                         cloud: CloudMode::Medium,
+@@ -149,7 +160,9 @@ impl Tier {
+                         fluid: FluidMode::Medium,
+                         lighting: LightingMode::BlinnPhong,
+                         shadow: ShadowMode::Map(ShadowMapMode { resolution: 0.75 }),
+-                        upscale_mode: UpscaleMode { factor: 1.0 },
++                        aa: AaMode::Sgsr,
++                        // dev.10: 1.0 -> 0.8 with SGSR (-36 % pixels).
++                        upscale_mode: UpscaleMode { factor: 0.8 },
+                         present_mode: PresentMode::Fifo,
+                         ..high.render_mode
+                     },
+@@ -180,7 +193,8 @@ pub fn cool_down(g: &GraphicsSettings) -> Option<(GraphicsSettings, &'static str
+         Fps::Unlimited => true,
+         Fps::Max(f) => f > 30,
+     };
+-    if fps_over_30 {
++    // dev.10: with frame generation the world is already rendered at <= 30.
++    if fps_over_30 && !g.frame_generation {
+         n.max_fps = Fps::Max(30);
+         return Some((n, "fps 30"));
+     }
+@@ -620,12 +634,40 @@ pub fn first_launch(g: &mut GraphicsSettings, config_dir: &std::path::Path) -> b
+     let marker = std::fs::read_to_string(config_dir.join("mobile_preset")).unwrap_or_default();
+     if marker.split_whitespace().next() == Some(PRESET_VERSION) {
+         tracing::info!("mobile preset: keeping user settings ({})", marker.trim());
++        dev10_upgrade(g, config_dir);
+         return false;
+     }
+     *g = Tier::Low.apply(g.clone());
+     true
+ }
+ 
++/// dev.10, once per install: bring settings saved by older builds to the
++/// dev.10 tiers without touching anything the player changed by hand:
++/// FxUpscale (every old tier) -> Snapdragon GSR, and the old High / Ultra
++/// presets get frame generation and their lower SGSR render scale.
++pub fn dev10_upgrade(g: &mut GraphicsSettings, config_dir: &std::path::Path) {
++    use crate::render::{AaMode, UpscaleMode};
++    let path = config_dir.join("dev10_upgrade");
++    if path.exists() {
++        return;
++    }
++    let mut what = Vec::new();
++    if g.render_mode.aa == AaMode::FxUpscale {
++        g.render_mode.aa = AaMode::Sgsr;
++        what.push("sgsr");
++    }
++    let f = g.render_mode.upscale_mode.factor;
++    let old_ultra = g.max_fps == Fps::Max(30) && g.terrain_view_distance >= 12 && f >= 0.99;
++    let old_high = g.lod_detail == 200 && g.sprite_render_distance == 150 && (f - 0.85).abs() < 0.01;
++    if old_ultra || old_high {
++        g.frame_generation = true;
++        g.render_mode.upscale_mode = UpscaleMode { factor: if old_ultra { 0.8 } else { 0.75 } };
++        what.push(if old_ultra { "ultra" } else { "high" });
++    }
++    let _ = std::fs::write(&path, format!("dev10 {}\n", what.join(",")));
++    tracing::info!("mobile preset: dev10 upgrade [{}]", what.join(","));
++}
++
+ /// After the renderer picked a GPU: choose the tier, return it if it differs from Low.
+ pub fn choose_tier(config_dir: &std::path::Path) -> Tier {
+     let forced = std::fs::read_to_string(config_dir.join("force_tier"))
+@@ -678,3 +720,159 @@ pub fn ui_scale_first_launch(
+     let _ = std::fs::write(&path, format!("{UI_SCALE_VERSION} dpi={dpi} scale={scale:.2}\n"));
+     tracing::info!("mobile ui scale: dpi={dpi} -> Absolute({scale:.2})");
+ }
++
++// ------------------------------------------------- frame pacing (dev.10) ---
++//
++// * `ANativeWindow_setFrameRate` (API 30+): ask the display to run at the
++//   game's present rate (60 or 30 Hz instead of 120 Hz on phones like the
++//   Poco F3), so every frame is shown for the same time and the panel uses
++//   less power.
++// * ADPF `APerformanceHint` (API 33+): report each frame's CPU work against
++//   the frame budget so the kernel clocks the CPU just high enough.
++// Both are looked up with dlsym, so older Android versions simply skip them.
++
++#[cfg(target_os = "android")]
++#[allow(unsafe_code)]
++pub mod pacing {
++    use std::sync::Mutex;
++    type SetFrameRate = unsafe extern "C" fn(*mut core::ffi::c_void, f32, i8) -> i32;
++    type GetManager = unsafe extern "C" fn() -> *mut core::ffi::c_void;
++    type CreateSession =
++        unsafe extern "C" fn(*mut core::ffi::c_void, *const i32, usize, i64) -> *mut core::ffi::c_void;
++    type UpdateTarget = unsafe extern "C" fn(*mut core::ffi::c_void, i64) -> i32;
++    type ReportActual = unsafe extern "C" fn(*mut core::ffi::c_void, i64) -> i32;
++
++    struct Api {
++        set_frame_rate: Option<SetFrameRate>,
++        hint: Option<(GetManager, CreateSession, UpdateTarget, ReportActual)>,
++    }
++
++    struct St {
++        api: Option<Option<Api>>,
++        window: usize,
++        rate: u32,
++        rate_rc: i32,
++        session: usize,
++        target_ns: i64,
++        reports: u64,
++    }
++    static ST: Mutex<St> = Mutex::new(St {
++        api: None,
++        window: 0,
++        rate: 0,
++        rate_rc: -1,
++        session: 0,
++        target_ns: 0,
++        reports: 0,
++    });
++
++    fn load() -> Option<Api> {
++        // SAFETY: dlopen/dlsym of documented NDK symbols; the function types
++        // match <android/native_window.h> and <android/performance_hint.h>.
++        unsafe {
++            let lib = libc::dlopen(c"libandroid.so".as_ptr(), libc::RTLD_NOW);
++            if lib.is_null() {
++                return None;
++            }
++            let sym = |n: &core::ffi::CStr| {
++                let p = libc::dlsym(lib, n.as_ptr());
++                (!p.is_null()).then_some(p)
++            };
++            let set_frame_rate = sym(c"ANativeWindow_setFrameRate")
++                .map(|p| std::mem::transmute::<*mut libc::c_void, SetFrameRate>(p));
++            let hint = match (
++                sym(c"APerformanceHint_getManager"),
++                sym(c"APerformanceHint_createSession"),
++                sym(c"APerformanceHint_updateTargetWorkDuration"),
++                sym(c"APerformanceHint_reportActualWorkDuration"),
++            ) {
++                (Some(a), Some(b), Some(c), Some(d)) => Some((
++                    std::mem::transmute::<*mut libc::c_void, GetManager>(a),
++                    std::mem::transmute::<*mut libc::c_void, CreateSession>(b),
++                    std::mem::transmute::<*mut libc::c_void, UpdateTarget>(c),
++                    std::mem::transmute::<*mut libc::c_void, ReportActual>(d),
++                )),
++                _ => None,
++            };
++            Some(Api { set_frame_rate, hint })
++        }
++    }
++
++    /// Main loop, once per frame: `fps` = the present rate the frame cap
++    /// aims at, `work` = seconds of CPU work this frame (no cap sleep).
++    pub fn frame(fps: u32, work: f64) {
++        let mut st = ST.lock().unwrap_or_else(|e| e.into_inner());
++        if st.api.is_none() {
++            let api = load();
++            tracing::info!(
++                "VEL-PACING setFrameRate={} adpf={}",
++                api.as_ref().is_some_and(|a| a.set_frame_rate.is_some()),
++                api.as_ref().is_some_and(|a| a.hint.is_some())
++            );
++            st.api = Some(api);
++        }
++        let Some(Some(api)) = st.api.as_ref() else { return };
++        let (set_frame_rate, hint) = (api.set_frame_rate, api.hint);
++        let fps = fps.clamp(10, 120);
++        // Display rate.
++        if let Some(set) = set_frame_rate {
++            let win = crate::android::app().native_window();
++            let ptr = win.as_ref().map_or(0, |w| w.ptr().as_ptr() as usize);
++            if ptr != 0 && (ptr != st.window || fps != st.rate) {
++                // SAFETY: `win` holds a reference on the window for this call.
++                // compatibility 0 = DEFAULT (the app may run at multiples).
++                let rc = unsafe { set(ptr as *mut core::ffi::c_void, fps as f32, 0) };
++                tracing::info!("VEL-PACING display rate {fps} Hz rc={rc}");
++                st.window = ptr;
++                st.rate = fps;
++                st.rate_rc = rc;
++            }
++            drop(win);
++        }
++        // ADPF hint session for the main thread.
++        if let Some((get, create, update, report)) = hint {
++            let target = (1e9 / fps as f64) as i64;
++            // SAFETY: documented ADPF calls; the session lives for the process.
++            unsafe {
++                if st.session == 0 {
++                    let mgr = get();
++                    if !mgr.is_null() {
++                        let tid = libc::gettid();
++                        let s = create(mgr, &tid, 1, target);
++                        st.session = s as usize;
++                        st.target_ns = target;
++                        tracing::info!("VEL-PACING adpf session={}", !s.is_null());
++                        if s.is_null() {
++                            // Unsupported on this device: do not retry.
++                            st.api = Some(Some(Api { set_frame_rate, hint: None }));
++                            return;
++                        }
++                    }
++                }
++                if st.session != 0 {
++                    let s = st.session as *mut core::ffi::c_void;
++                    if target != st.target_ns {
++                        update(s, target);
++                        st.target_ns = target;
++                    }
++                    let w = (work * 1e9) as i64;
++                    if w > 0 {
++                        report(s, w);
++                        st.reports += 1;
++                    }
++                }
++            }
++        }
++    }
++
++    pub fn summary() -> String {
++        let st = ST.lock().unwrap_or_else(|e| e.into_inner());
++        format!(
++            "pacing[hz={} rc={} adpf={} reports={}]",
++            st.rate, st.rate_rc, (st.session != 0) as u8, st.reports
++        )
++    }
++}
++
++#[cfg(target_os = "android")]
++pub fn pacing_summary() -> String { pacing::summary() }
+diff --git a/voxygen/src/render/mod.rs b/voxygen/src/render/mod.rs
+index 7f31995..c90f6a7 100644
+--- a/voxygen/src/render/mod.rs
++++ b/voxygen/src/render/mod.rs
+@@ -113,6 +113,10 @@ pub enum AaMode {
+     /// Linear interpolation of the color buffer in each axis to determine the
+     /// pixel.
+     Bilinear,
++    /// my-veloren dev.10: Snapdragon Game Super Resolution 1 (Qualcomm,
++    /// BSD-3-Clause): single-pass edge-aware upscale + sharpening, made for
++    /// mobile GPUs rendering below the screen resolution.
++    Sgsr,
+     /// Nearest-neighbour filtering.
+     ///
+     /// The colour of each pixel is determined by the colour of the spatially
+@@ -124,7 +128,12 @@ pub enum AaMode {
+ impl AaMode {
+     pub fn samples(&self) -> u32 {
+         match self {
+-            AaMode::None | AaMode::Bilinear | AaMode::Fxaa | AaMode::Hqx | AaMode::FxUpscale => 1,
++            AaMode::None
++            | AaMode::Bilinear
++            | AaMode::Fxaa
++            | AaMode::Hqx
++            | AaMode::FxUpscale
++            | AaMode::Sgsr => 1,
+             AaMode::MsaaX4 => 4,
+             AaMode::MsaaX8 => 8,
+             AaMode::MsaaX16 => 16,
+diff --git a/voxygen/src/render/pipelines/postprocess.rs b/voxygen/src/render/pipelines/postprocess.rs
+index 454825a..f16e606 100644
+--- a/voxygen/src/render/pipelines/postprocess.rs
++++ b/voxygen/src/render/pipelines/postprocess.rs
+@@ -7,6 +7,12 @@ use vek::*;
+ pub struct Locals {
+     proj_mat_inv: [[f32; 4]; 4],
+     view_mat_inv: [[f32; 4]; 4],
++    /// my-veloren dev.10 frame generation: previous-frame NDC → current clip.
++    reproj_mat: [[f32; 4]; 4],
++    /// Inverse of `reproj_mat` (current NDC → previous-frame clip).
++    reproj_inv: [[f32; 4]; 4],
++    /// x = 1.0 when this frame is generated by re-projection.
++    reproj_params: [f32; 4],
+ }
+ 
+ impl Default for Locals {
+@@ -18,8 +24,21 @@ impl Locals {
+         Self {
+             proj_mat_inv: proj_mat_inv.into_col_arrays(),
+             view_mat_inv: view_mat_inv.into_col_arrays(),
++            reproj_mat: Mat4::<f32>::identity().into_col_arrays(),
++            reproj_inv: Mat4::<f32>::identity().into_col_arrays(),
++            reproj_params: [0.0; 4],
+         }
+     }
++
++    /// dev.10: mark this frame as generated from the previous one.
++    pub fn with_reproj(mut self, reproj: Option<(Mat4<f32>, Mat4<f32>)>) -> Self {
++        if let Some((m, inv)) = reproj {
++            self.reproj_mat = m.into_col_arrays();
++            self.reproj_inv = inv.into_col_arrays();
++            self.reproj_params = [1.0, 0.0, 0.0, 0.0];
++        }
++        self
++    }
+ }
+ 
+ pub struct BindGroup {
+diff --git a/voxygen/src/render/renderer/mod.rs b/voxygen/src/render/renderer/mod.rs
+index 26c41c6..5e947cd 100644
+--- a/voxygen/src/render/renderer/mod.rs
++++ b/voxygen/src/render/renderer/mod.rs
+@@ -433,7 +433,12 @@ impl Renderer {
+                     .contains(Usages::RENDER_ATTACHMENT | Usages::COPY_SRC | Usages::TEXTURE_BINDING);
+ 
+                 let msaa_flags = match pipeline_modes.aa {
+-                    AaMode::None | AaMode::Fxaa | AaMode::Hqx | AaMode::FxUpscale | AaMode::Bilinear => Flags::empty(),
++                    AaMode::None
++                    | AaMode::Fxaa
++                    | AaMode::Hqx
++                    | AaMode::FxUpscale
++                    | AaMode::Bilinear
++                    | AaMode::Sgsr => Flags::empty(),
+                     AaMode::MsaaX4 => Flags::MULTISAMPLE_X4,
+                     AaMode::MsaaX8 => Flags::MULTISAMPLE_X8,
+                     AaMode::MsaaX16 => Flags::MULTISAMPLE_X8, // TODO?
+@@ -712,6 +717,8 @@ impl Renderer {
+ 
+     /// Change the render mode.
+     pub fn set_render_mode(&mut self, mode: RenderMode) -> Result<(), RenderError> {
++        // my-veloren dev.10: targets may be recreated; never re-project stale ones.
++        crate::framegen::invalidate();
+         let (mut pipeline_modes, other_modes) = mode.split();
+         pipeline_modes.remove_unsupported();
+ 
+@@ -790,6 +797,7 @@ impl Renderer {
+ 
+     /// Resize internal render targets to match window render target dimensions.
+     pub fn on_resize(&mut self, dims: Vec2<u32>) {
++        crate::framegen::invalidate();
+         // Avoid panics when creating texture with w,h of 0,0.
+         if dims.x != 0 && dims.y != 0 {
+             self.is_minimized = false;
+diff --git a/voxygen/src/render/renderer/pipeline_creation.rs b/voxygen/src/render/renderer/pipeline_creation.rs
+index 801b78c..6f05a61 100644
+--- a/voxygen/src/render/renderer/pipeline_creation.rs
++++ b/voxygen/src/render/renderer/pipeline_creation.rs
+@@ -276,6 +276,7 @@ impl ShaderModules {
+                 AaMode::MsaaX16 => "antialias.msaa-x16",
+                 AaMode::Hqx => "antialias.hqx",
+                 AaMode::FxUpscale => "antialias.fxupscale",
++                AaMode::Sgsr => "antialias.sgsr",
+             })
+             .unwrap();
+ 
+diff --git a/voxygen/src/render/renderer/shaders.rs b/voxygen/src/render/renderer/shaders.rs
+index 0d1c88d..887bab2 100644
+--- a/voxygen/src/render/renderer/shaders.rs
++++ b/voxygen/src/render/renderer/shaders.rs
+@@ -46,6 +46,7 @@ impl Asset for Shaders {
+             "antialias.msaa-x16",
+             "antialias.hqx",
+             "antialias.fxupscale",
++            "antialias.sgsr",
+             "include.cloud.flat",
+             "include.cloud.regular",
+             "figure-vert",
+diff --git a/voxygen/src/run.rs b/voxygen/src/run.rs
+index 5059b4d..b102ac5 100644
+--- a/voxygen/src/run.rs
++++ b/voxygen/src/run.rs
+@@ -177,6 +177,7 @@ fn handle_main_events_cleared(
+     // to the game.
+     #[cfg(target_os = "android")]
+     let t_tick = std::time::Instant::now();
++    let t_fg_tick = std::time::Instant::now();
+     let mut exit = true;
+     while let Some(state_result) = states.last_mut().map(|last| {
+         let events = global_state.window.fetch_events(&mut global_state.settings);
+@@ -253,6 +254,14 @@ fn handle_main_events_cleared(
+         #[cfg(feature = "egui-ui")]
+         let mut platform_output = None;
+ 
++        // my-veloren dev.10: hold a generated frame back so it is shown about
++        // one present interval after the real frame before it.
++        let fg_generated = crate::framegen::is_generated_pending();
++        let fg_wait = crate::framegen::pre_present_wait().unwrap_or_default();
++        if !fg_wait.is_zero() {
++            std::thread::sleep(fg_wait);
++        }
++
+         // Render the screen using the global renderer
+         #[cfg(target_os = "android")]
+         let t_acquire = std::time::Instant::now();
+@@ -299,6 +308,10 @@ fn handle_main_events_cleared(
+         {
+             d_record = t_record.elapsed().as_secs_f64();
+         }
++        crate::framegen::frame_finished(
++            fg_generated,
++            (t_fg_tick.elapsed().saturating_sub(fg_wait)).as_secs_f64(),
++        );
+         drop(guard);
+     }
+ 
+@@ -324,9 +337,15 @@ fn handle_main_events_cleared(
+ 
+         let target_fps = if capped_fps {
+             u32::min(TITLE_SCREEN_FPS_CAP, max_fps_focus_adjusted)
++        } else if global_state.window.focused {
++            // dev.10: frame generation presents at 60 while the world renders at half.
++            crate::framegen::target_fps(max_fps_focus_adjusted)
+         } else {
+             max_fps_focus_adjusted
+         };
++        crate::framegen::set_enabled(global_state.settings.graphics.frame_generation);
++        #[cfg(target_os = "android")]
++        crate::mobile::pacing::frame(target_fps.min(120), d_tick + d_acquire + d_record);
+ 
+         global_state
+             .clock
+diff --git a/voxygen/src/scene/mod.rs b/voxygen/src/scene/mod.rs
+index 31c0af3..f4fd8f6 100644
+--- a/voxygen/src/scene/mod.rs
++++ b/voxygen/src/scene/mod.rs
+@@ -1014,7 +1014,18 @@ impl Scene {
+             self.screen_fade,
+         )]);
+         renderer.update_clouds_locals(CloudsLocals::new(proj_mat_inv, view_mat_inv));
+-        renderer.update_postprocess_locals(PostProcessLocals::new(proj_mat_inv, view_mat_inv));
++        // my-veloren dev.10: frame generation decides here whether this frame
++        // is rendered or re-projected from the previous one.
++        let reproj = crate::framegen::plan(
++            view_mat,
++            proj_mat,
++            focus_off,
++            renderer.internal_resolution(),
++            !matches!(self.camera.get_mode(), CameraMode::FirstPerson),
++        );
++        renderer.update_postprocess_locals(
++            PostProcessLocals::new(proj_mat_inv, view_mat_inv).with_reproj(reproj),
++        );
+ 
+         // Maintain LoD.
+         self.lod.maintain(renderer, client, focus_pos, &self.camera);
+diff --git a/voxygen/src/session/mod.rs b/voxygen/src/session/mod.rs
+index eee2695..910ed2f 100644
+--- a/voxygen/src/session/mod.rs
++++ b/voxygen/src/session/mod.rs
+@@ -2561,33 +2561,39 @@ impl PlayState for SessionState {
+             wind_vel: self.scene.wind_vel,
+         };
+ 
+-        // Render world
+-        self.scene.render(
+-            drawer,
+-            client.state(),
+-            viewpoint_entity,
+-            client.get_tick(),
+-            &scene_data,
+-        );
++        // my-veloren dev.10: a generated frame skips every world pass; the
++        // post-process pass re-projects the previous frame's targets.
++        let generated = crate::framegen::take_generated();
++
++        if !generated {
++            // Render world
++            self.scene.render(
++                drawer,
++                client.state(),
++                viewpoint_entity,
++                client.get_tick(),
++                &scene_data,
++            );
+ 
+-        if let Some(mut volumetric_pass) = drawer.volumetric_pass() {
+-            // Clouds
+-            prof_span!("clouds");
+-            volumetric_pass.draw_clouds();
+-        }
+-        if let Some(mut transparent_pass) = drawer.transparent_pass() {
+-            // Trails
+-            prof_span!("trails");
+-            if let Some(mut trail_drawer) = transparent_pass.draw_trails() {
+-                self.scene
+-                    .trail_mgr()
+-                    .render(&mut trail_drawer, &scene_data);
++            if let Some(mut volumetric_pass) = drawer.volumetric_pass() {
++                // Clouds
++                prof_span!("clouds");
++                volumetric_pass.draw_clouds();
++            }
++            if let Some(mut transparent_pass) = drawer.transparent_pass() {
++                // Trails
++                prof_span!("trails");
++                if let Some(mut trail_drawer) = transparent_pass.draw_trails() {
++                    self.scene
++                        .trail_mgr()
++                        .render(&mut trail_drawer, &scene_data);
++                }
++            }
++            // Bloom (call does nothing if bloom is off)
++            {
++                prof_span!("bloom");
++                drawer.run_bloom_passes()
+             }
+-        }
+-        // Bloom (call does nothing if bloom is off)
+-        {
+-            prof_span!("bloom");
+-            drawer.run_bloom_passes()
+         }
+         // PostProcess and UI
+         {
+diff --git a/voxygen/src/settings/graphics.rs b/voxygen/src/settings/graphics.rs
+index ad792cb..9608048 100644
+--- a/voxygen/src/settings/graphics.rs
++++ b/voxygen/src/settings/graphics.rs
+@@ -51,6 +51,10 @@ pub struct GraphicsSettings {
+     pub window: WindowSettings,
+     pub fullscreen: FullScreenSettings,
+     pub lod_detail: u32,
++    /// my-veloren dev.10: re-project every second in-world frame instead of
++    /// rendering it (see `framegen.rs`). Presents up to 60 fps while the
++    /// world is rendered at half that.
++    pub frame_generation: bool,
+ }
+ 
+ impl Default for GraphicsSettings {
+@@ -74,6 +78,7 @@ impl Default for GraphicsSettings {
+             window: WindowSettings::default(),
+             fullscreen: FullScreenSettings::default(),
+             lod_detail: 250,
++            frame_generation: false,
+         }
+     }
+ }

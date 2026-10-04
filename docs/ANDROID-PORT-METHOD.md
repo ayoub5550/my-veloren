@@ -132,6 +132,11 @@ Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
 | (dev.9) `CertificateLoad("no native root CA certificates found")` on login | rustls-native-certs has no Android CA store | set `SSL_CERT_DIR` to `/apex/com.android.conscrypt/cacerts` + `/system/etc/security/cacerts` |
 | (dev.9) a test "passed" on the wrong error | the multiplayer check accepted any client error | match the expected error (auth `ServerError(400…)`) and exclude local ones (`CertificateLoad`) |
 | (dev.9) first injected D-pad press lost after a touch | window-local injection skips InputDispatcher; with `windowTouchMode=true` ViewRootImpl consumed the first navigation key to leave touch mode, before the NativeActivity queue (confirmed in vm9d) | check that the press reached the hook; retry with `FLAG_KEEP_TOUCH_MODE` and log it |
+| (dev.10) shader pipeline panics on `textureGather` | naga (wgpu shader translator in this pin) rejects it | port gather-based shaders (SGSR) with 4× `texelFetch` |
+| (dev.10) audio re-encode loop stopped after the first file | `ffmpeg` read the loop's stdin (`while read`) | always `ffmpeg -nostdin` inside read loops |
+| (dev.10) script exited silently under `set -e` | `read` from a process substitution without a trailing newline returns 1 | `read … || true`, or print a newline |
+| (dev.10) background build killed (exit 143) | a plain `( nohup … & )` job died with the tool call | start long builds with `setsid nohup … < /dev/null &` |
+| (dev.10) host harness: typing into text fields did nothing | touch-UI mode (`MY_VELOREN_TOUCH_UI`) routes text to the Android dialog | use the desktop mode of the harness for menu flows |
 | (dev.9) owner's account auto-muted 180 s | `chat_cli` sent empty lines after its stdin pipe closed | never drive a real account with a closable stdin; test logins in the app (scenario 13) |
 - **Perf numbers (dev.4):** measure fps as frames ÷ wall clock, never as frames ÷ (sum of timed parts):
   the parts miss work outside them, and that overstated fps about 10× in build8. On the Test Lab VM (llvmpipe),
