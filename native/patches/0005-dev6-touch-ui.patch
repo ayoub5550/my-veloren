@@ -1,0 +1,1784 @@
+diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
+index 0c7963eef..af0f0d822 100644
+--- a/voxygen/src/android.rs
++++ b/voxygen/src/android.rs
+@@ -27,7 +27,7 @@ use std::{
+ };
+ use winit::{
+     application::ApplicationHandler,
+-    event::{DeviceId, ElementState, Event, MouseButton, TouchPhase, WindowEvent},
++    event::{DeviceId, ElementState, Event, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent},
+     event_loop::ActiveEventLoop,
+     keyboard::{Key, KeyCode, NamedKey, PhysicalKey},
+     platform::{
+@@ -39,7 +39,7 @@ use winit::{
+ use crate::{
+     GlobalState,
+     game_input::GameInput,
+-    touch::{self, Ctl, Out, Phase, Tool},
++    touch::{self, Ctl, MouseBtn, Out, Phase, Tool},
+     window::{AnalogGameInput, Event as VEvent, KeyMouse},
+ };
+ 
+@@ -339,6 +339,170 @@ enum JniCall {
+     CycleBackground(u32),
+     /// dev.5 test: inject a real KEYCODE_BACK through Instrumentation.
+     SendBack,
++    /// dev.6 (6.4): show the Android text dialog (system keyboard, any
++    /// language incl. Arabic). `auto` = Test Lab: type this and press OK.
++    TextInput {
++        title: String,
++        initial: String,
++        auto: Option<String>,
++    },
++}
++
++// ------------------------------------------------------- text input (6.4) ---
++
++/// Where a text dialog result goes.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum TextTarget {
++    /// The focused conrod text field in the HUD (chat, searches...).
++    Hud,
++    /// The character name in character creation (iced).
++    CharName,
++}
++
++static TEXT_PENDING: Mutex<Option<TextTarget>> = Mutex::new(None);
++static TEXT_RESULTS: Mutex<Vec<(TextTarget, Option<String>)>> = Mutex::new(Vec::new());
++/// Test Lab: text the next dialog types by itself.
++static TEXT_AUTO: Mutex<Option<String>> = Mutex::new(None);
++pub static TEXT_DIALOGS: AtomicU64 = AtomicU64::new(0);
++
++/// Open the system text dialog unless one is already open.
++pub fn request_text(target: TextTarget, title: &str, initial: &str) {
++    let mut p = TEXT_PENDING.lock().unwrap();
++    if p.is_some() {
++        return;
++    }
++    *p = Some(target);
++    TEXT_DIALOGS.fetch_add(1, Ordering::SeqCst);
++    let auto = TEXT_AUTO.lock().unwrap().take();
++    ainfo!("text: dialog for {target:?} (auto={})", auto.is_some());
++    jni_send(JniCall::TextInput {
++        title: title.to_owned(),
++        initial: initial.to_owned(),
++        auto,
++    });
++}
++
++/// Results for `target` (Some = OK with text, None = cancelled).
++pub fn take_text(target: TextTarget) -> Option<Option<String>> {
++    let mut r = TEXT_RESULTS.lock().unwrap();
++    let i = r.iter().position(|(t, _)| *t == target)?;
++    Some(r.remove(i).1)
++}
++
++pub fn text_dialog_open() -> bool { TEXT_PENDING.lock().unwrap().is_some() }
++
++/// `VelorenActivity.nativeText(String text, boolean ok)`, registered with
++/// RegisterNatives from the JNI thread (NativeActivity does not use
++/// System.loadLibrary, so JNI could not find it by name).
++extern "system" fn native_text(
++    mut env: jni::JNIEnv,
++    _this: jni::objects::JObject,
++    text: jni::objects::JString,
++    ok: jni::sys::jboolean,
++) {
++    let s: Option<String> = if ok != 0 && !text.is_null() {
++        env.get_string(&text).ok().map(|j| j.into())
++    } else {
++        None
++    };
++    let target = TEXT_PENDING.lock().unwrap().take().unwrap_or(TextTarget::Hud);
++    ainfo!(
++        "text: result for {target:?}: {}",
++        match &s {
++            Some(t) => format!("ok, {} chars", t.chars().count()),
++            None => "cancelled".into(),
++        }
++    );
++    TEXT_RESULTS.lock().unwrap().push((target, s));
++}
++
++/// Hand typed text to the UI that asked for it (HUD: conrod text + Enter;
++/// escape = unfocus on cancel). Character name is read by char selection.
++fn deliver_text(state_name: Option<&'static str>, gs: &mut GlobalState) {
++    if state_name != Some("Session") {
++        return;
++    }
++    if let Some(res) = take_text(TextTarget::Hud) {
++        match res {
++            Some(t) if !t.is_empty() => {
++                use conrod_core::{event::Input, input::{Button, Key as CKey}};
++                gs.window.send_event(VEvent::Ui(crate::ui::Event(Input::Text(t))));
++                gs.window.send_event(VEvent::Ui(crate::ui::Event(Input::Press(Button::Keyboard(
++                    CKey::Return,
++                )))));
++                gs.window.send_event(VEvent::Ui(crate::ui::Event(Input::Release(
++                    Button::Keyboard(CKey::Return),
++                ))));
++                // Upstream keeps the chat field focused after Enter (desktop
++                // users press Enter/Esc again), which on touch left every HUD
++                // button dead. Release the focus a few frames later, once the
++                // message has been sent.
++                UNFOCUS_IN.store(3, Ordering::SeqCst);
++            },
++            _ => {
++                gs.window.send_event(VEvent::InputUpdate(GameInput::Escape, true));
++                gs.window.send_event(VEvent::InputUpdate(GameInput::Escape, false));
++            },
++        }
++    }
++}
++
++static WAS_TYPING: AtomicBool = AtomicBool::new(false);
++/// Frames until the HUD text field is unfocused after a submitted dialog.
++static UNFOCUS_IN: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
++
++fn unfocus_after_send(state_name: Option<&'static str>, gs: &mut GlobalState) {
++    let n = UNFOCUS_IN.load(Ordering::SeqCst);
++    if n == 0 {
++        return;
++    }
++    UNFOCUS_IN.store(n - 1, Ordering::SeqCst);
++    if n == 1 && state_name == Some("Session") && touch::typing() {
++        ainfo!("text: chat sent, releasing the chat field");
++        gs.window.send_event(VEvent::InputUpdate(GameInput::Escape, true));
++        gs.window.send_event(VEvent::InputUpdate(GameInput::Escape, false));
++    }
++}
++
++/// Rising edge of "a HUD text field has the keyboard" opens the dialog.
++fn watch_typing(state_name: Option<&'static str>) {
++    let typing = state_name == Some("Session") && touch::typing();
++    if typing && !WAS_TYPING.load(Ordering::SeqCst) && !text_dialog_open() {
++        request_text(TextTarget::Hud, "Chat", "");
++    }
++    WAS_TYPING.store(typing, Ordering::SeqCst);
++}
++
++/// Test Lab: text typed by the next dialog / character name for scenario 8.
++pub const TEST_CHAT_TEXT: &str = "مرحبا Veloren 123";
++pub const TEST_CHAR_NAME: &str = "أيوب";
++
++pub fn set_text_auto(t: &str) { *TEXT_AUTO.lock().unwrap() = Some(t.to_owned()); }
++
++static LAST_CHATS: Mutex<Vec<String>> = Mutex::new(Vec::new());
++
++/// Plain chat messages received by the client (scenario 7 checks its own).
++pub fn note_chat(t: &str) {
++    let mut v = LAST_CHATS.lock().unwrap();
++    v.push(t.to_owned());
++    if v.len() > 20 {
++        v.remove(0);
++    }
++}
++
++static CHAR_NAME: Mutex<Option<String>> = Mutex::new(None);
++
++pub fn note_char_name(n: &str) { *CHAR_NAME.lock().unwrap() = Some(n.to_owned()); }
++
++/// A check that happens outside the session autopilot (char selection).
++pub fn alog_check(name: &str, ok: bool, detail: &str) {
++    ainfo!("VEL-CHECK {name} {} {detail}", if ok { "PASS" } else { "FAIL" });
++}
++
++/// Monotonic seconds for the touch layer (long-press / double-tap).
++fn clock() -> f64 {
++    static T0: OnceLock<Instant> = OnceLock::new();
++    T0.get_or_init(Instant::now).elapsed().as_secs_f64()
+ }
+ 
+ static JNI_TX: Mutex<Option<mpsc::Sender<JniCall>>> = Mutex::new(None);
+@@ -364,6 +528,19 @@ fn start_jni_thread() {
+             };
+             let activity =
+                 unsafe { jni::objects::JObject::from_raw(app.activity_as_ptr() as jni::sys::jobject) };
++            match env.get_object_class(&activity).and_then(|cls| {
++                env.register_native_methods(&cls, &[jni::NativeMethod {
++                    name: "nativeText".into(),
++                    sig: "(Ljava/lang/String;Z)V".into(),
++                    fn_ptr: native_text as *mut std::ffi::c_void,
++                }])
++            }) {
++                Ok(()) => ainfo!("jni: nativeText registered"),
++                Err(e) => {
++                    let _ = env.exception_clear();
++                    aerror!("jni: RegisterNatives failed: {e}")
++                },
++            }
+             ainfo!("jni: ready");
+             for call in rx {
+                 let r = match call {
+@@ -385,6 +562,21 @@ fn start_jni_thread() {
+                         )])
+                         .map(|_| ()),
+                     JniCall::SendBack => env.call_method(&activity, "sendBack", "()V", &[]).map(|_| ()),
++                    JniCall::TextInput { title, initial, auto } => (|| {
++                        let t = env.new_string(title)?;
++                        let i = env.new_string(initial)?;
++                        let a = match auto {
++                            Some(a) => jni::objects::JObject::from(env.new_string(a)?),
++                            None => jni::objects::JObject::null(),
++                        };
++                        env.call_method(
++                            &activity,
++                            "showTextInput",
++                            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
++                            &[(&t).into(), (&i).into(), (&a).into()],
++                        )
++                        .map(|_| ())
++                    })(),
+                 };
+                 if let Err(e) = r {
+                     let _ = env.exception_describe();
+@@ -436,6 +628,10 @@ pub struct Probe {
+     pub esc_open: bool,
+     pub inv_slots: u32,
+     pub inv_items: u32,
++    /// dev.6: inventory content signature, own map marker, map zoom.
++    pub inv_sig: u64,
++    pub marker: Option<[i32; 2]>,
++    pub map_zoom: f64,
+     pub ctx: touch::Context,
+ }
+ 
+@@ -538,7 +734,11 @@ fn handle_touch(
+     let size = gs.window.window().inner_size();
+     let (w, h) = (size.width.max(1) as f64, size.height.max(1) as f64);
+     let ctx = current_context(state_name, gs);
+-    let outs = touch::with_layer(|l| l.on_touch(id, phase, x, y, w, h, &ctx, &mut gs.settings.touch));
++    let now = clock();
++    let outs = touch::with_layer(|l| {
++        l.now = now;
++        l.on_touch(id, phase, x, y, w, h, &ctx, &mut gs.settings.touch)
++    });
+     apply_outs(outs, gs, out_events);
+ }
+ 
+@@ -590,6 +790,61 @@ fn apply_outs(outs: Vec<Out>, gs: &mut GlobalState, out_events: &mut Vec<Event<(
+                     },
+                 });
+             },
++            Out::Click(b, x, y) => {
++                let button = match b {
++                    MouseBtn::Right => MouseButton::Right,
++                    MouseBtn::Middle => MouseButton::Middle,
++                };
++                out_events.push(Event::WindowEvent {
++                    window_id,
++                    event: WindowEvent::CursorMoved {
++                        device_id,
++                        position: pos(x, y),
++                    },
++                });
++                for state in [ElementState::Pressed, ElementState::Released] {
++                    out_events.push(Event::WindowEvent {
++                        window_id,
++                        event: WindowEvent::MouseInput {
++                            device_id,
++                            state,
++                            button,
++                        },
++                    });
++                }
++            },
++            Out::Scroll(dx, dy) => out_events.push(Event::WindowEvent {
++                window_id,
++                event: WindowEvent::MouseWheel {
++                    device_id,
++                    delta: MouseScrollDelta::PixelDelta(pos(dx, dy)),
++                    phase: TouchPhase::Moved,
++                },
++            }),
++            Out::Wheel(x, y, lines) => {
++                out_events.push(Event::WindowEvent {
++                    window_id,
++                    event: WindowEvent::CursorMoved {
++                        device_id,
++                        position: pos(x, y),
++                    },
++                });
++                out_events.push(Event::WindowEvent {
++                    window_id,
++                    event: WindowEvent::MouseWheel {
++                        device_id,
++                        delta: MouseScrollDelta::LineDelta(0.0, lines),
++                        phase: TouchPhase::Moved,
++                    },
++                });
++            },
++            Out::MouseLeave => out_events.push(Event::WindowEvent {
++                window_id,
++                event: WindowEvent::CursorMoved {
++                    device_id,
++                    position: pos(-10000.0, -10000.0),
++                },
++            }),
+             Out::Save => {
+                 gs.settings.save_to_file_warn(&gs.config_dir);
+                 ainfo!("touch: layout saved to settings.ron");
+@@ -671,15 +926,20 @@ fn frame(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut Vec<E
+     // A window opened/closed without a touch (e.g. by the game): keep the layer
+     // in sync so held buttons are released.
+     let ctx = current_context(state_name, gs);
++    let now = clock();
+     let outs = touch::with_layer(|l| {
++        l.now = now;
+         let mut o = l.sync_context(&ctx);
+-        o.extend(l.on_frame(&gs.settings.touch));
++        o.extend(l.on_frame_ctx(&ctx, &gs.settings.touch));
+         o
+     });
+     apply_outs(outs, gs, out);
+     for ms in touch::take_haptics() {
+         vibrate(ms);
+     }
++    watch_typing(state_name);
++    deliver_text(state_name, gs);
++    unfocus_after_send(state_name, gs);
+     if state_name == Some("Session") {
+         let (tested, culled, us, _) = crate::scene::terrain::occlusion_stats();
+         let mut a = OCC_ACC.lock().unwrap();
+@@ -754,6 +1014,15 @@ enum Act {
+     SendBack,
+     /// dev.5 (5.6): switch terrain occlusion culling on/off.
+     Occlusion(bool),
++    /// dev.6: the next text dialog types this by itself.
++    TextAuto(&'static str),
++    /// dev.6: tap (or double-tap) a named UI point; all touches of the
++    /// gesture go out in one frame, so slow VM frames cannot turn them into
++    /// long-presses.
++    TapPoint(&'static str, bool),
++    /// dev.6: hold a named UI point (or a fixed fraction) for s seconds.
++    HoldPoint(&'static str, f32),
++    HoldAt(f32, f32, f32),
+     Finish,
+     /// dev.5: end the scenario and SIGKILL the process (no clean shutdown).
+     FinishKill,
+@@ -777,6 +1046,8 @@ struct Rec {
+     bg_surface_gone: bool,
+     resumed_after: f32,
+     inv_before: (u32, u32),
++    /// dev.6: touch gesture counters at `Begin`
++    touch_base: touch::Stats,
+ }
+ 
+ struct Pilot {
+@@ -942,6 +1213,68 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
+             q.push(Act::Check("occlusion_culls"));
+             q.push(Act::Check("occlusion_not_slower"));
+         },
++        7 => {
++            // dev.6: touch UI. UI scale, chat through the Android text dialog
++            // (Arabic), window gestures in the bag, two-finger scroll in
++            // crafting, pinch zoom + long-press marker on the map.
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::EnsureGameInput(3));
++            q.push(Act::WaitPipelines(90.0));
++            q.push(Act::Check("ui_scale"));
++
++            q.push(Act::Begin("chat_ime"));
++            q.push(Act::TextAuto(TEST_CHAT_TEXT));
++            tap_at(&mut q, center(Ctl::Chat, gs));
++            q.push(Act::Wait(10.0));
++            q.push(Act::Check("chat_ime"));
++            q.push(Act::EnsureGameInput(3));
++
++            tap_at(&mut q, center(Ctl::Bag, gs));
++            q.push(Act::Wait(2.0));
++            q.push(Act::Begin("long_press"));
++            q.push(Act::HoldPoint("inv_first", 1.6));
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("long_press_tooltip"));
++            q.push(Act::Begin("double_tap"));
++            q.push(Act::TapPoint("inv_first", true));
++            q.push(Act::Wait(4.0));
++            q.push(Act::Check("double_tap_use"));
++            tap_at(&mut q, center(Ctl::Bag, gs));
++            q.push(Act::EnsureGameInput(3));
++
++            tap_at(&mut q, center(Ctl::Crafting, gs));
++            q.push(Act::Wait(2.0));
++            q.push(Act::Begin("scroll"));
++            q.push(Act::Down(STICK_ID, 0.40, 0.62));
++            q.push(Act::Down(CAM_ID, 0.46, 0.62));
++            q.push(Act::MoveTo(CAM_ID, 0.46, 0.35, 1.5));
++            q.push(Act::Up(CAM_ID));
++            q.push(Act::Up(STICK_ID));
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("two_finger_scroll"));
++            q.push(Act::EnsureGameInput(3));
++
++            tap_at(&mut q, center(Ctl::Map, gs));
++            q.push(Act::Wait(3.0));
++            q.push(Act::Begin("map"));
++            q.push(Act::Down(STICK_ID, 0.45, 0.55));
++            q.push(Act::Down(CAM_ID, 0.52, 0.55));
++            q.push(Act::MoveTo(CAM_ID, 0.72, 0.55, 1.5));
++            q.push(Act::Up(CAM_ID));
++            q.push(Act::Up(STICK_ID));
++            q.push(Act::Wait(1.5));
++            q.push(Act::Check("map_pinch_zoom"));
++            q.push(Act::HoldAt(0.42, 0.40, 1.6));
++            q.push(Act::Wait(1.5));
++            q.push(Act::Check("map_marker"));
++            q.push(Act::EnsureGameInput(3));
++        },
++        8 => {
++            // dev.6: the character was created in the creation form with the
++            // name from the text dialog (char selection, see menu/char_selection).
++            q.push(Act::Wait(3.0));
++            q.push(Act::Check("char_name_arabic"));
++        },
+         3 => {
+             // dev.4 benchmark: same spot, slow camera sweep, one window per tier,
+             // then a 10 min soak on the automatic tier walking in circles.
+@@ -1338,6 +1671,71 @@ fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (boo
+                 )
+             }
+         },
++        "ui_scale" => {
++            let m = gs.settings.interface.ui_scale;
++            let ok = matches!(m, crate::ui::ScaleMode::Absolute(x) if x >= 1.2);
++            let size = gs.window.window().inner_size();
++            (
++                ok,
++                format!("mode={m:?} window={}x{} density={:?}", size.width, size.height,
++                    app().config().density()),
++            )
++        },
++        "chat_ime" => {
++            let dialogs = TEXT_DIALOGS.load(Ordering::SeqCst);
++            let chats = LAST_CHATS.lock().unwrap().clone();
++            let got = chats.iter().any(|c| c.contains(TEST_CHAT_TEXT));
++            let released = !touch::typing();
++            (
++                dialogs >= 1 && got && released,
++                format!(
++                    "dialogs={dialogs} sent={TEST_CHAT_TEXT:?} received={got} field_released={released} last={:?}",
++                    chats.last()
++                ),
++            )
++        },
++        "long_press_tooltip" => {
++            let st = touch::with_layer(|l| l.stats);
++            let lp = st.long_presses - rec.touch_base.long_presses;
++            (
++                lp >= 1 && p.bag_open && p.inv_sig == rec.base.inv_sig,
++                format!("long_presses={lp} bag_open={} inventory_unchanged={} point={:?}", p.bag_open,
++                    p.inv_sig == rec.base.inv_sig, touch::ui_point("inv_first")),
++            )
++        },
++        "double_tap_use" => {
++            let st = touch::with_layer(|l| l.stats);
++            let dt = st.double_taps - rec.touch_base.double_taps;
++            (
++                dt >= 1 && p.inv_sig != rec.base.inv_sig,
++                format!("double_taps={dt} inventory_changed={} slots {}->{} items {}->{}",
++                    p.inv_sig != rec.base.inv_sig, rec.base.inv_slots, p.inv_slots, rec.base.inv_items, p.inv_items),
++            )
++        },
++        "two_finger_scroll" => {
++            let st = touch::with_layer(|l| l.stats);
++            let sc = st.scrolls - rec.touch_base.scrolls;
++            let taps = st.taps - rec.touch_base.taps;
++            (
++                sc >= 3 && taps == 0 && !p.ctx.game_input,
++                format!("scroll_events={sc} taps={taps} window_open={}", !p.ctx.game_input),
++            )
++        },
++        "map_pinch_zoom" => (
++            p.map_open && p.map_zoom > rec.base.map_zoom * 1.05,
++            format!("map_open={} zoom {:.3} -> {:.3}", p.map_open, rec.base.map_zoom, p.map_zoom),
++        ),
++        "map_marker" => (
++            p.marker.is_some() && p.marker != rec.base.marker,
++            format!("marker {:?} -> {:?}", rec.base.marker, p.marker),
++        ),
++        "char_name_arabic" => {
++            let n = CHAR_NAME.lock().unwrap().clone();
++            (
++                n.as_deref() == Some(TEST_CHAR_NAME),
++                format!("character={n:?} expected={TEST_CHAR_NAME:?}"),
++            )
++        },
+         "back_opens_menu" => {
+             let backs = BACK_PRESSES.load(Ordering::SeqCst);
+             (
+@@ -1519,6 +1917,7 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+             p.rec = Rec {
+                 base: pr.clone(),
+                 slow: p.rec.slow,
++                touch_base: touch::with_layer(|l| l.stats),
+                 ..Rec::default()
+             };
+             true
+@@ -1856,6 +2255,43 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+             p.results.push(("crash_report_written".into(), ok));
+             true
+         },
++        Act::TextAuto(t) => {
++            set_text_auto(t);
++            true
++        },
++        Act::TapPoint(name, double) => {
++            match touch::ui_point(name) {
++                Some((x, y)) => {
++                    ainfo!("VEL-STEP {} {name} at ({x:.3}, {y:.3})", if double { "double-tap" } else { "tap" });
++                    for _ in 0..if double { 2 } else { 1 } {
++                        touches.push((TAP_ID, Phase::Started, x, y));
++                        touches.push((TAP_ID, Phase::Ended, x, y));
++                    }
++                },
++                None => ainfo!("VEL-STEP ui point {name} unknown"),
++            }
++            true
++        },
++        Act::HoldPoint(name, secs) => match touch::ui_point(name) {
++            Some((x, y)) => {
++                ainfo!("VEL-STEP long-press {name} at ({x:.3}, {y:.3}) for {secs}s");
++                p.inject = vec![
++                    Act::Down(TAP_ID, x, y),
++                    Act::Wait(secs),
++                    Act::Up(TAP_ID),
++                    Act::Wait(0.5),
++                ];
++                true
++            },
++            None => {
++                ainfo!("VEL-STEP ui point {name} unknown");
++                true
++            },
++        },
++        Act::HoldAt(x, y, secs) => {
++            p.inject = vec![Act::Down(TAP_ID, x, y), Act::Wait(secs), Act::Up(TAP_ID), Act::Wait(0.5)];
++            true
++        },
+         Act::SendBack => {
+             ainfo!("VEL-STEP inject KEYCODE_BACK");
+             jni_send(JniCall::SendBack);
+diff --git a/voxygen/src/android_main_body.rs b/voxygen/src/android_main_body.rs
+index e075fed61..dde72897b 100644
+--- a/voxygen/src/android_main_body.rs
++++ b/voxygen/src/android_main_body.rs
+@@ -141,6 +141,11 @@ pub fn run() {
+ 
+     // my-veloren dev.4 (4.2/4.3): phone graphics on first launch.
+     let mobile_pending = crate::mobile::first_launch(&mut settings.graphics, &config_dir);
++    // my-veloren dev.6 (6.6): UI scale from the screen density, once.
++    {
++        let dpi = crate::android::app().config().density();
++        crate::mobile::ui_scale_first_launch(&mut settings.interface, dpi, &config_dir);
++    }
+ 
+     // Create window
+     use veloren_voxygen::{error::Error, render::RenderError};
+diff --git a/voxygen/src/hud/bag.rs b/voxygen/src/hud/bag.rs
+index 65c9ce476..7aa81df3a 100644
+--- a/voxygen/src/hud/bag.rs
++++ b/voxygen/src/hud/bag.rs
+@@ -1573,6 +1573,20 @@ impl Widget for InventoryMenu<'_> {
+             }
+         }
+ 
++        // my-veloren dev.6 Test Lab: centre of the first slot of the own bag
++        // (InventoryMenu is the live bag; InventoryScroller is trade-only).
++        if crate::touch::active() {
++            if let Some(r) = ui.rect_of(state.ids.slot_grid) {
++                let half = if self.details_mode { 10.0 } else { slot_size / 2.0 };
++                let (x, y) = (r.left() + half, r.top() - half);
++                crate::touch::set_ui_point(
++                    "inv_first",
++                    (x / ui.win_w + 0.5) as f32,
++                    (0.5 - y / ui.win_h) as f32,
++                );
++            }
++        }
++
+         // Slots scrollbar
+         if space_max > scroll_size {
+             // Scrollbar-BG
+diff --git a/voxygen/src/hud/mod.rs b/voxygen/src/hud/mod.rs
+index 965175090..413be76c6 100755
+--- a/voxygen/src/hud/mod.rs
++++ b/voxygen/src/hud/mod.rs
+@@ -4771,6 +4771,11 @@ impl Hud {
+         )
+     }
+ 
++    /// my-veloren dev.6 Test Lab: own map marker (long-press on the map).
++    pub fn touch_marker(&self) -> Option<[i32; 2]> {
++        self.persisted_state.borrow().location_markers.owned.map(|v| v.into_array())
++    }
++
+     /// my-veloren dev.5: Esc menu open (Android Back button test).
+     pub fn esc_menu_open(&self) -> bool { self.show.esc_menu }
+ 
+@@ -4858,6 +4863,9 @@ impl Hud {
+     /// Checks if a TextEdit widget has the keyboard captured.
+     fn typing(&self) -> bool { Hud::is_captured::<widget::TextEdit>(&self.ui.ui) }
+ 
++    /// dev.6: a text field has the keyboard (Android opens the system text dialog).
++    pub fn touch_typing(&self) -> bool { self.typing() }
++
+     /// Checks if a widget of type `W` has captured the keyboard
+     fn is_captured<W: Widget>(ui: &conrod_core::Ui) -> bool {
+         if let Some(id) = ui.global_input().current.widget_capturing_keyboard {
+diff --git a/voxygen/src/menu/char_selection/mod.rs b/voxygen/src/menu/char_selection/mod.rs
+index 87ec72111..ca2a736ac 100644
+--- a/voxygen/src/menu/char_selection/mod.rs
++++ b/voxygen/src/menu/char_selection/mod.rs
+@@ -139,10 +139,38 @@ impl PlayState for CharSelectionState {
+                     let mut since = SINCE.lock().unwrap();
+                     since.get_or_insert_with(std::time::Instant::now).elapsed().as_secs() >= 5
+                 };
+-                let client = self.client.borrow();
+-                let list = client.character_list();
+-                if ready && !list.loading {
+-                    match (STAGE.load(Ordering::Relaxed), list.characters.first()) {
++                let (loading, chars) = {
++                    let client = self.client.borrow();
++                    let list = client.character_list();
++                    (list.loading, list.characters.clone())
++                };
++                if ready && !loading {
++                    let scenario8 = std::env::var("VELOREN_ANDROID_SCENARIO").as_deref() == Ok("8");
++                    match (STAGE.load(Ordering::Relaxed), chars.first()) {
++                        // dev.6 scenario 8: create the character through the real
++                        // creation form; the name comes from the Android text dialog.
++                        (0, None) if scenario8 => {
++                            tracing::info!("android-autostart: scenario 8, creation form + name dialog");
++                            STAGE.store(10, Ordering::Relaxed);
++                            *SINCE.lock().unwrap() = Some(std::time::Instant::now());
++                            events.extend(self.char_selection_ui.test_step(ui::TestStep::NewCharacter, &chars));
++                            crate::android::set_text_auto(crate::android::TEST_CHAR_NAME);
++                            events.extend(self.char_selection_ui.test_step(ui::TestStep::FocusName, &chars));
++                        },
++                        (10, None) => {
++                            let name = self.char_selection_ui.test_name();
++                            let waited = SINCE.lock().unwrap().map_or(0, |t| t.elapsed().as_secs());
++                            let ok = name.as_deref() == Some(crate::android::TEST_CHAR_NAME);
++                            if ok || waited > 40 {
++                                crate::android::alog_check(
++                                    "char_name_dialog",
++                                    ok,
++                                    &format!("name={name:?} dialogs={}", crate::android::TEXT_DIALOGS.load(Ordering::SeqCst)),
++                                );
++                                STAGE.store(1, Ordering::Relaxed);
++                                events.extend(self.char_selection_ui.test_step(ui::TestStep::Create, &chars));
++                            }
++                        },
+                         (0, None) => {
+                             tracing::info!("android-autostart: creating character");
+                             STAGE.store(1, Ordering::Relaxed);
+@@ -160,6 +188,7 @@ impl PlayState for CharSelectionState {
+                         (0 | 1, Some(c)) => {
+                             if let Some(id) = c.character.id {
+                                 tracing::info!("android-autostart: entering world");
++                                crate::android::note_char_name(&c.character.alias);
+                                 STAGE.store(2, Ordering::Relaxed);
+                                 events.push(ui::Event::Play(id));
+                             }
+diff --git a/voxygen/src/menu/char_selection/ui.rs b/voxygen/src/menu/char_selection/ui.rs
+index c51f218e0..7be87b69f 100644
+--- a/voxygen/src/menu/char_selection/ui.rs
++++ b/voxygen/src/menu/char_selection/ui.rs
+@@ -2070,6 +2070,39 @@ impl Controls {
+     }
+ }
+ 
++/// my-veloren dev.6 Test Lab steps for scenario 8 (character creation with
++/// the name typed in the Android text dialog).
++#[cfg(target_os = "android")]
++pub enum TestStep {
++    NewCharacter,
++    FocusName,
++    Create,
++}
++
++#[cfg(target_os = "android")]
++impl CharSelectionUi {
++    pub fn test_step(&mut self, step: TestStep, characters: &[CharacterItem<Content>]) -> Vec<Event> {
++        let mut events = Vec::new();
++        match step {
++            TestStep::NewCharacter => self.controls.update(Message::NewCharacter, &mut events, characters),
++            TestStep::FocusName => {
++                if let Mode::CreateOrEdit { name_input, .. } = &mut self.controls.mode {
++                    name_input.focus();
++                }
++            },
++            TestStep::Create => self.controls.update(Message::CreateCharacter, &mut events, characters),
++        }
++        events
++    }
++
++    pub fn test_name(&self) -> Option<String> {
++        match &self.controls.mode {
++            Mode::CreateOrEdit { name, .. } => Some(name.clone()),
++            _ => None,
++        }
++    }
++}
++
+ pub struct CharSelectionUi {
+     ui: Ui,
+     controls: Controls,
+@@ -2213,6 +2246,23 @@ impl CharSelectionUi {
+             messages.push(Message::Select(id))
+         }
+ 
++        // dev.6 (6.4/6.5): on Android the character name is typed in the
++        // system text dialog (full keyboard incl. Arabic), not with key events.
++        #[cfg(target_os = "android")]
++        {
++            use crate::android::{TextTarget, request_text, take_text, text_dialog_open};
++            if let Mode::CreateOrEdit { name, name_input, .. } = &mut self.controls.mode {
++                if name_input.is_focused() && !text_dialog_open() {
++                    request_text(TextTarget::CharName, "Character name", name);
++                    // Unfocus, so the dialog opens again only on the next tap.
++                    *name_input = text_input::State::new();
++                }
++            }
++            if let Some(Some(t)) = take_text(TextTarget::CharName) {
++                messages.push(Message::Name(t.trim().to_owned()));
++            }
++        }
++
+         messages.into_iter().for_each(|message| {
+             self.controls
+                 .update(message, &mut events, &client.character_list().characters)
+diff --git a/voxygen/src/mobile.rs b/voxygen/src/mobile.rs
+index fcfe3b856..13e55f706 100644
+--- a/voxygen/src/mobile.rs
++++ b/voxygen/src/mobile.rs
+@@ -477,3 +477,39 @@ pub fn choose_tier(config_dir: &std::path::Path) -> Tier {
+     );
+     tier
+ }
++
++// ---------------------------------------------------------- UI scale (6.6) ---
++
++/// Marker in the config dir; bump to re-apply the automatic UI scale once.
++pub const UI_SCALE_VERSION: &str = "dev6-v1";
++
++/// UI pixels (physical) per Veloren UI unit for a screen density in dpi.
++///
++/// Veloren's HUD is laid out for >= 1280x720 UI units on a monitor. On a
++/// phone the default (`RelativeToWindow 1920x1080`) maps one UI unit to
++/// about one physical pixel, which is ~0.06 mm at 420 dpi: unreadable and
++/// too small to touch. 0.57 dp per UI unit gives a 1080 px tall phone
++/// ~720 UI units (the HUD's minimum design height) and keeps the physical
++/// size the same on denser screens.
++pub fn ui_scale_for_dpi(dpi: u32) -> f64 {
++    let density = dpi.max(120) as f64 / 160.0;
++    (0.57 * density).clamp(1.0, 2.5)
++}
++
++pub fn ui_scale_first_launch(
++    interface: &mut crate::settings::InterfaceSettings,
++    dpi: Option<u32>,
++    config_dir: &std::path::Path,
++) {
++    let path = config_dir.join("ui_scale_preset");
++    let marker = std::fs::read_to_string(&path).unwrap_or_default();
++    if marker.split_whitespace().next() == Some(UI_SCALE_VERSION) {
++        tracing::info!("mobile ui scale: keeping user setting ({})", marker.trim());
++        return;
++    }
++    let dpi = dpi.unwrap_or(420);
++    let scale = ui_scale_for_dpi(dpi);
++    interface.ui_scale = crate::ui::ScaleMode::Absolute(scale);
++    let _ = std::fs::write(&path, format!("{UI_SCALE_VERSION} dpi={dpi} scale={scale:.2}\n"));
++    tracing::info!("mobile ui scale: dpi={dpi} -> Absolute({scale:.2})");
++}
+diff --git a/voxygen/src/session/mod.rs b/voxygen/src/session/mod.rs
+index aa36943f2..e056f959b 100644
+--- a/voxygen/src/session/mod.rs
++++ b/voxygen/src/session/mod.rs
+@@ -148,8 +148,10 @@ impl SessionState {
+             riding: riders.get(me).is_some(),
+             in_liquid: phys.get(me).is_some_and(|p| p.in_liquid().is_some()),
+             dead: healths.get(me).is_some_and(|h| h.is_dead),
++            map_open: self.hud.touch_windows().3,
+         };
+         crate::touch::set_context(ctx);
++        crate::touch::set_typing(self.hud.touch_typing());
+ 
+         #[cfg(target_os = "android")]
+         {
+@@ -204,6 +206,19 @@ impl SessionState {
+                 });
+             let (quest, trade, bag, map) = self.hud.touch_windows();
+             let inventories = ecs.read_storage::<comp::Inventory>();
++            // dev.6: signature of what sits in which slot (detects use / equip).
++            let inv_sig = inventories.get(me).map_or(0u64, |inv| {
++                use std::hash::{Hash, Hasher};
++                let mut h = std::collections::hash_map::DefaultHasher::new();
++                for (i, item) in inv.slots().enumerate() {
++                    if let Some(item) = item {
++                        i.hash(&mut h);
++                        item.item_definition_id().hash(&mut h);
++                        item.amount().hash(&mut h);
++                    }
++                }
++                h.finish()
++            });
+             let (inv_slots, inv_items) = inventories.get(me).map_or((0, 0), |inv| {
+                 inv.slots().flatten().fold((0u32, 0u32), |(s, n), item| {
+                     (s + 1, n + item.amount())
+@@ -233,6 +248,9 @@ impl SessionState {
+                 esc_open: self.hud.esc_menu_open(),
+                 inv_slots,
+                 inv_items,
++                inv_sig,
++                marker: self.hud.touch_marker(),
++                map_zoom: global_state.settings.interface.map_zoom,
+                 ctx,
+             });
+         }
+@@ -396,6 +414,10 @@ impl SessionState {
+         for event in client.tick(self.inputs.clone(), dt)? {
+             match event {
+                 client::Event::Chat(m) => {
++                    #[cfg(target_os = "android")]
++                    if let Some(t) = m.content().as_plain() {
++                        crate::android::note_chat(t);
++                    }
+                     self.hud.new_message(m);
+                 },
+                 client::Event::GroupInventoryUpdate(item, uid) => {
+diff --git a/voxygen/src/touch.rs b/voxygen/src/touch.rs
+index db7b74739..28af05b91 100644
+--- a/voxygen/src/touch.rs
++++ b/voxygen/src/touch.rs
+@@ -299,6 +299,8 @@ pub struct Context {
+     pub riding: bool,
+     pub in_liquid: bool,
+     pub dead: bool,
++    /// dev.6: the world map window is open (long-press places a marker there).
++    pub map_open: bool,
+ }
+ 
+ impl Context {
+@@ -345,10 +347,27 @@ pub enum Out {
+     MouseMove(f64, f64),
+     MouseDown(f64, f64),
+     MouseUp(f64, f64),
++    /// dev.6: a full click of another mouse button at (x, y).
++    Click(MouseBtn, f64, f64),
++    /// dev.6: two-finger scroll in a window, physical pixels, same direction as
++    /// the fingers moved (content follows the fingers).
++    Scroll(f64, f64),
++    /// dev.6: pinch inside a window = mouse-wheel "lines" (positive = zoom in /
++    /// wheel up), at the finger centre.
++    Wheel(f64, f64, f32),
++    /// dev.6: move the cursor off the window so hover tooltips disappear.
++    MouseLeave,
+     /// Persist settings (layout editor "Done").
+     Save,
+ }
+ 
++/// Mouse buttons the touch layer can click besides the left one (dev.6).
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum MouseBtn {
++    Right,
++    Middle,
++}
++
+ /// Edit-mode toolbar buttons (3.8).
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+ pub enum Tool {
+@@ -392,7 +411,15 @@ impl Tool {
+ 
+ #[derive(Clone, Copy, Debug, PartialEq)]
+ enum Finger {
++    /// Left button held (dragging an item, a slider, the map...).
+     Mouse,
++    /// dev.6: finger down in a window, nothing clicked yet; the cursor hovers.
++    /// Becomes a tap, a drag (`Mouse`) or a long-press (`Hover`).
++    MousePending { sx: f64, sy: f64, t0: f64 },
++    /// dev.6: long-press reached: the cursor only hovers (tooltips).
++    Hover,
++    /// dev.6: one of two fingers scrolling / pinching a window.
++    Scroll { lx: f64, ly: f64 },
+     Button(Ctl),
+     Stick { ox: f64, oy: f64 },
+     Camera { lx: f64, ly: f64 },
+@@ -427,6 +454,13 @@ pub struct TouchLayer {
+     last_ctx: Context,
+     /// Counters for logs / tests.
+     pub stats: Stats,
++    /// dev.6: seconds, set by the host before every call (monotonic clock).
++    pub now: f64,
++    /// dev.6: last tap in a window (time, x, y) for double-tap detection.
++    last_tap: Option<(f64, f64, f64)>,
++    /// dev.6: finger distance of a two-finger window gesture.
++    scroll_dist: Option<f64>,
++    hover_pos: Option<(f64, f64)>,
+ }
+ 
+ #[derive(Clone, Copy, Debug, Default, PartialEq)]
+@@ -436,6 +470,12 @@ pub struct Stats {
+     pub zooms: u32,
+     pub stick_moves: u32,
+     pub max_fingers: u32,
++    /// dev.6 window gestures
++    pub taps: u32,
++    pub long_presses: u32,
++    pub double_taps: u32,
++    pub scrolls: u32,
++    pub wheels: u32,
+ }
+ 
+ /// Pixel scale for camera pans: the dev2 value (0.6 at 1080 px height).
+@@ -444,6 +484,15 @@ const PAN_BASE: f64 = 0.6 * 1080.0;
+ const ZOOM_PER_HEIGHT: f64 = 40.0;
+ /// Extra touch radius around buttons (fingers are fat).
+ const HIT_SLOP: f32 = 1.15;
++/// dev.6: a window touch that moves less than this (fraction of the height)
++/// is a tap / long-press, more is a drag.
++const TAP_SLOP: f64 = 0.025;
++/// dev.6: hold time for a long-press (seconds).
++pub const LONG_PRESS: f64 = 0.45;
++/// dev.6: max gap between two taps of a double-tap (seconds).
++pub const DOUBLE_TAP: f64 = 0.35;
++/// dev.6: pinch inside a window: wheel lines per screen height of finger spread.
++const WHEEL_PER_HEIGHT: f64 = 12.0;
+ /// Left part of the screen that starts the virtual stick.
+ const STICK_ZONE: f32 = 0.45;
+ 
+@@ -520,6 +569,8 @@ impl TouchLayer {
+         }
+         self.pinch_dist = None;
+         self.pan_pending = (0.0, 0.0);
++        self.scroll_dist = None;
++        self.hover_pos = None;
+     }
+ 
+     /// A mode change (session entered/left, window opened/closed) drops all
+@@ -560,39 +611,13 @@ impl TouchLayer {
+ 
+         out.extend(self.sync_context(ctx));
+ 
+-        // ---- menus / open windows: one finger = mouse, menu bar still works --
++        // ---- menus / open windows (dev.6 gestures) ----------------------------
++        // One finger: tap = left click, drag = left drag, long-press = hover
++        // (tooltip) or a map marker, double-tap = right click (use / equip).
++        // Two fingers: scroll lists, pinch = mouse wheel (map zoom).
++        // The menu bar stays usable.
+         if !ctx.in_session || !ctx.game_input {
+-            match phase {
+-                Phase::Started => {
+-                    if let Some(c) = self
+-                        .hit(fx, fy, aspect, ctx, s, false)
+-                        .filter(|c| c.group() == Group::MenuBar)
+-                    {
+-                        self.set_finger(id, Finger::Button(c));
+-                        self.stats.presses += 1;
+-                        out.push(Out::Press(c));
+-                    } else if !self.fingers.iter().any(|(_, f)| *f == Finger::Mouse) {
+-                        self.set_finger(id, Finger::Mouse);
+-                        out.push(Out::MouseMove(x, y));
+-                        out.push(Out::MouseDown(x, y));
+-                    } else {
+-                        self.set_finger(id, Finger::Ignored);
+-                    }
+-                },
+-                Phase::Moved => {
+-                    if self.finger(id) == Some(Finger::Mouse) {
+-                        out.push(Out::MouseMove(x, y));
+-                    }
+-                },
+-                Phase::Ended | Phase::Cancelled => match self.remove_finger(id) {
+-                    Some(Finger::Mouse) => {
+-                        out.push(Out::MouseMove(x, y));
+-                        out.push(Out::MouseUp(x, y));
+-                    },
+-                    Some(Finger::Button(c)) => out.push(Out::Release(c)),
+-                    _ => {},
+-                },
+-            }
++            self.window_touch(id, phase, x, y, fx, fy, aspect, ctx, s, &mut out);
+             return out;
+         }
+ 
+@@ -731,6 +756,198 @@ impl TouchLayer {
+         out
+     }
+ 
++    fn mouse_like(f: &Finger) -> bool {
++        matches!(
++            f,
++            Finger::Mouse | Finger::MousePending { .. } | Finger::Hover | Finger::Scroll { .. }
++        )
++    }
++
++    fn slop_px(&self) -> f64 { TAP_SLOP * self.last_h() }
++
++    #[allow(clippy::too_many_arguments)]
++    fn window_touch(
++        &mut self,
++        id: u64,
++        phase: Phase,
++        x: f64,
++        y: f64,
++        fx: f32,
++        fy: f32,
++        aspect: f32,
++        ctx: &Context,
++        s: &TouchSettings,
++        out: &mut Vec<Out>,
++    ) {
++        match phase {
++            Phase::Started => {
++                if let Some(c) = self
++                    .hit(fx, fy, aspect, ctx, s, false)
++                    .filter(|c| c.group() == Group::MenuBar)
++                {
++                    self.set_finger(id, Finger::Button(c));
++                    self.stats.presses += 1;
++                    out.push(Out::Press(c));
++                    return;
++                }
++                let others: Vec<(u64, Finger)> = self
++                    .fingers
++                    .iter()
++                    .copied()
++                    .filter(|(_, f)| Self::mouse_like(f))
++                    .collect();
++                match others.as_slice() {
++                    [] => {
++                        self.set_finger(id, Finger::MousePending {
++                            sx: x,
++                            sy: y,
++                            t0: self.now,
++                        });
++                        out.push(Out::MouseMove(x, y));
++                    },
++                    // Second finger while the first has not clicked/dragged yet:
++                    // both become a two-finger scroll / pinch.
++                    [(fid, first @ (Finger::MousePending { .. } | Finger::Hover))] => {
++                        let (lx, ly) = match *first {
++                            Finger::MousePending { sx, sy, .. } => (sx, sy),
++                            _ => self.hover_pos.unwrap_or((x, y)),
++                        };
++                        let fid = *fid;
++                        self.set_finger(fid, Finger::Scroll { lx, ly });
++                        self.set_finger(id, Finger::Scroll { lx: x, ly: y });
++                        self.scroll_dist = Some(((lx - x).powi(2) + (ly - y).powi(2)).sqrt());
++                        out.push(Out::MouseMove((lx + x) / 2.0, (ly + y) / 2.0));
++                    },
++                    _ => self.set_finger(id, Finger::Ignored),
++                }
++            },
++            Phase::Moved => match self.finger(id) {
++                Some(Finger::Mouse) => out.push(Out::MouseMove(x, y)),
++                Some(Finger::Hover) => {
++                    self.hover_pos = Some((x, y));
++                    out.push(Out::MouseMove(x, y));
++                },
++                Some(Finger::MousePending { sx, sy, .. }) => {
++                    if ((x - sx).powi(2) + (y - sy).powi(2)).sqrt() > self.slop_px() {
++                        // A drag: press where the finger landed, then follow it.
++                        self.set_finger(id, Finger::Mouse);
++                        out.push(Out::MouseDown(sx, sy));
++                        out.push(Out::MouseMove(x, y));
++                    }
++                },
++                Some(Finger::Scroll { lx, ly }) => {
++                    self.set_finger(id, Finger::Scroll { lx: x, ly: y });
++                    self.window_two_finger(ctx, (x - lx, y - ly), out);
++                },
++                _ => {},
++            },
++            Phase::Ended | Phase::Cancelled => match self.remove_finger(id) {
++                Some(Finger::Mouse) => {
++                    out.push(Out::MouseMove(x, y));
++                    out.push(Out::MouseUp(x, y));
++                },
++                Some(Finger::MousePending { sx, sy, .. }) if phase == Phase::Ended => {
++                    let double = self.last_tap.is_some_and(|(t, tx, ty)| {
++                        self.now - t <= DOUBLE_TAP
++                            && ((tx - sx).powi(2) + (ty - sy).powi(2)).sqrt() <= 2.0 * self.slop_px()
++                    });
++                    if double {
++                        // Double-tap = right click (use / equip an item).
++                        self.last_tap = None;
++                        self.stats.double_taps += 1;
++                        out.push(Out::Click(MouseBtn::Right, sx, sy));
++                    } else {
++                        self.last_tap = Some((self.now, sx, sy));
++                        self.stats.taps += 1;
++                        out.push(Out::MouseDown(sx, sy));
++                        out.push(Out::MouseUp(sx, sy));
++                    }
++                },
++                Some(Finger::Hover) => {
++                    self.hover_pos = None;
++                    out.push(Out::MouseLeave);
++                },
++                Some(Finger::Scroll { .. }) => {
++                    // The other finger keeps hovering only; nothing is clicked.
++                    let rest: Vec<u64> = self
++                        .fingers
++                        .iter()
++                        .filter(|(_, f)| matches!(f, Finger::Scroll { .. }))
++                        .map(|(i, _)| *i)
++                        .collect();
++                    for r in rest {
++                        self.set_finger(r, Finger::Ignored);
++                    }
++                    self.scroll_dist = None;
++                },
++                Some(Finger::Button(c)) => out.push(Out::Release(c)),
++                _ => {},
++            },
++        }
++    }
++
++    fn window_two_finger(&mut self, ctx: &Context, (dx, dy): (f64, f64), out: &mut Vec<Out>) {
++        let pts: Vec<(f64, f64)> = self
++            .fingers
++            .iter()
++            .filter_map(|(_, f)| match f {
++                Finger::Scroll { lx, ly } => Some((*lx, *ly)),
++                _ => None,
++            })
++            .collect();
++        if pts.len() != 2 {
++            return;
++        }
++        let (cx, cy) = ((pts[0].0 + pts[1].0) / 2.0, (pts[0].1 + pts[1].1) / 2.0);
++        let dist = ((pts[0].0 - pts[1].0).powi(2) + (pts[0].1 - pts[1].1).powi(2)).sqrt();
++        let h = self.last_h();
++        let dd = dist - self.scroll_dist.unwrap_or(dist);
++        if ctx.map_open {
++            // Map: pinch zooms around the finger centre.
++            if (dd / h).abs() > 0.004 {
++                self.scroll_dist = Some(dist);
++                self.stats.wheels += 1;
++                out.push(Out::Wheel(cx, cy, (dd / h * WHEEL_PER_HEIGHT) as f32));
++            }
++        } else {
++            // Lists: the moving finger scrolls (half, since each of the two
++            // fingers reports its own motion).
++            self.scroll_dist = Some(dist);
++            if dx.abs() + dy.abs() > 0.0 {
++                self.stats.scrolls += 1;
++                out.push(Out::MouseMove(cx, cy));
++                out.push(Out::Scroll(dx / 2.0, dy / 2.0));
++            }
++        }
++    }
++
++    /// dev.6: time-based window gestures (long-press).
++    fn window_frame(&mut self, ctx: &Context, out: &mut Vec<Out>) {
++        let now = self.now;
++        let due: Vec<(u64, f64, f64)> = self
++            .fingers
++            .iter()
++            .filter_map(|(i, f)| match f {
++                Finger::MousePending { sx, sy, t0 } if now - t0 >= LONG_PRESS => Some((*i, *sx, *sy)),
++                _ => None,
++            })
++            .collect();
++        for (i, sx, sy) in due {
++            self.stats.long_presses += 1;
++            request_haptic(15);
++            if ctx.in_session && ctx.map_open {
++                // Map: long-press sets the location marker (middle click).
++                self.set_finger(i, Finger::Ignored);
++                out.push(Out::Click(MouseBtn::Middle, sx, sy));
++            } else {
++                // Elsewhere: keep hovering so the item tooltip shows.
++                self.set_finger(i, Finger::Hover);
++                self.hover_pos = Some((sx, sy));
++                out.push(Out::MouseMove(sx, sy));
++            }
++        }
++    }
++
+     fn pinch_distance(&self) -> Option<f64> {
+         let cam = self.fingers.iter().find_map(|(_, f)| match f {
+             Finger::Camera { lx, ly } => Some((*lx, *ly)),
+@@ -793,6 +1010,16 @@ impl TouchLayer {
+         }
+     }
+ 
++    /// dev.6: per-frame window gestures (long-press); `ctx` = current context.
++    pub fn on_frame_ctx(&mut self, ctx: &Context, s: &TouchSettings) -> Vec<Out> {
++        let mut out = Vec::new();
++        if !ctx.in_session || !ctx.game_input {
++            self.window_frame(ctx, &mut out);
++        }
++        out.extend(self.on_frame(s));
++        out
++    }
++
+     /// Per-frame update: releases smoothed camera motion (3.3).
+     pub fn on_frame(&mut self, s: &TouchSettings) -> Vec<Out> {
+         let (px, py) = self.pan_pending;
+@@ -971,8 +1198,36 @@ static CONTEXT: Mutex<Context> = Mutex::new(Context {
+     riding: false,
+     in_liquid: false,
+     dead: false,
++    map_open: false,
+ });
+ static HAPTICS: Mutex<VecDeque<u32>> = Mutex::new(VecDeque::new());
++/// dev.6: a HUD text field has the keyboard (set by the session every tick).
++static TYPING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
++
++/// dev.6 Test Lab: named UI points (window fractions) published by HUD widgets,
++/// e.g. the first inventory slot, so scripted taps hit real widgets.
++static UI_POINTS: Mutex<Vec<(&'static str, f32, f32)>> = Mutex::new(Vec::new());
++
++pub fn set_ui_point(name: &'static str, fx: f32, fy: f32) {
++    let mut v = UI_POINTS.lock().unwrap_or_else(|e| e.into_inner());
++    match v.iter_mut().find(|p| p.0 == name) {
++        Some(p) => (p.1, p.2) = (fx, fy),
++        None => v.push((name, fx, fy)),
++    }
++}
++
++pub fn ui_point(name: &str) -> Option<(f32, f32)> {
++    UI_POINTS
++        .lock()
++        .unwrap_or_else(|e| e.into_inner())
++        .iter()
++        .find(|p| p.0 == name)
++        .map(|p| (p.1, p.2))
++}
++
++pub fn set_typing(t: bool) { TYPING.store(t, std::sync::atomic::Ordering::Relaxed); }
++
++pub fn typing() -> bool { TYPING.load(std::sync::atomic::Ordering::Relaxed) }
+ 
+ /// Whether the touch overlay is active on this platform.
+ pub fn active() -> bool { cfg!(target_os = "android") }
+@@ -1198,10 +1453,10 @@ mod tests {
+         t.on_touch(1, Phase::Started, x, y, W, H, &c, &mut s);
+         c.game_input = false;
+         let o = t.on_touch(2, Phase::Started, 0.5 * W, 0.5 * H, W, H, &c, &mut s);
++        // dev.6: the press waits for tap / drag / long-press; the cursor hovers.
+         assert_eq!(o, vec![
+             Out::Release(Ctl::Primary),
+             Out::MouseMove(0.5 * W, 0.5 * H),
+-            Out::MouseDown(0.5 * W, 0.5 * H)
+         ]);
+         let (bx, by) = px(s.layout(Ctl::Bag));
+         assert_eq!(t.on_touch(3, Phase::Started, bx, by, W, H, &c, &mut s), vec![
+@@ -1260,4 +1515,111 @@ mod tests {
+         let none = t.primitives(&Context::default(), &s, 2.2);
+         assert!(none.is_empty());
+     }
++
++    fn win() -> Context {
++        Context {
++            in_session: true,
++            game_input: false,
++            ..Default::default()
++        }
++    }
++
++    #[test]
++    fn window_tap_is_left_click_on_release() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        let c = win();
++        t.now = 1.0;
++        t.on_touch(1, Phase::Started, 1000.0, 500.0, W, H, &c, &mut s);
++        t.now = 1.1;
++        // a little jitter stays a tap
++        assert!(t.on_touch(1, Phase::Moved, 1005.0, 503.0, W, H, &c, &mut s).is_empty());
++        let o = t.on_touch(1, Phase::Ended, 1005.0, 503.0, W, H, &c, &mut s);
++        assert_eq!(o, vec![Out::MouseDown(1000.0, 500.0), Out::MouseUp(1000.0, 500.0)]);
++        assert_eq!(t.stats.taps, 1);
++    }
++
++    #[test]
++    fn window_drag_presses_at_start_and_follows() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        let c = win();
++        t.on_touch(1, Phase::Started, 1000.0, 500.0, W, H, &c, &mut s);
++        let o = t.on_touch(1, Phase::Moved, 1100.0, 500.0, W, H, &c, &mut s);
++        assert_eq!(o, vec![Out::MouseDown(1000.0, 500.0), Out::MouseMove(1100.0, 500.0)]);
++        let o = t.on_touch(1, Phase::Ended, 1200.0, 520.0, W, H, &c, &mut s);
++        assert_eq!(o, vec![Out::MouseMove(1200.0, 520.0), Out::MouseUp(1200.0, 520.0)]);
++    }
++
++    #[test]
++    fn window_long_press_hovers_then_leaves() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        let c = win();
++        t.now = 5.0;
++        t.on_touch(1, Phase::Started, 800.0, 400.0, W, H, &c, &mut s);
++        t.now = 5.2;
++        assert!(t.on_frame_ctx(&c, &s).is_empty());
++        t.now = 5.5;
++        assert_eq!(t.on_frame_ctx(&c, &s), vec![Out::MouseMove(800.0, 400.0)]);
++        assert_eq!(t.stats.long_presses, 1);
++        // no click on release, the tooltip goes away
++        assert_eq!(t.on_touch(1, Phase::Ended, 800.0, 400.0, W, H, &c, &mut s), vec![
++            Out::MouseLeave
++        ]);
++    }
++
++    #[test]
++    fn map_long_press_sets_marker() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        let c = Context { map_open: true, ..win() };
++        t.now = 1.0;
++        t.on_touch(1, Phase::Started, 900.0, 450.0, W, H, &c, &mut s);
++        t.now = 1.5;
++        assert_eq!(t.on_frame_ctx(&c, &s), vec![Out::Click(MouseBtn::Middle, 900.0, 450.0)]);
++        assert!(t.on_touch(1, Phase::Ended, 900.0, 450.0, W, H, &c, &mut s).is_empty());
++    }
++
++    #[test]
++    fn window_double_tap_is_right_click() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        let c = win();
++        t.now = 1.0;
++        t.on_touch(1, Phase::Started, 700.0, 300.0, W, H, &c, &mut s);
++        t.on_touch(1, Phase::Ended, 700.0, 300.0, W, H, &c, &mut s);
++        t.now = 1.2;
++        t.on_touch(2, Phase::Started, 705.0, 302.0, W, H, &c, &mut s);
++        let o = t.on_touch(2, Phase::Ended, 705.0, 302.0, W, H, &c, &mut s);
++        assert_eq!(o, vec![Out::Click(MouseBtn::Right, 705.0, 302.0)]);
++        // a third tap later is a plain tap again
++        t.now = 2.0;
++        t.on_touch(3, Phase::Started, 705.0, 302.0, W, H, &c, &mut s);
++        let o = t.on_touch(3, Phase::Ended, 705.0, 302.0, W, H, &c, &mut s);
++        assert_eq!(o, vec![Out::MouseDown(705.0, 302.0), Out::MouseUp(705.0, 302.0)]);
++    }
++
++    #[test]
++    fn window_two_finger_scroll_and_map_pinch() {
++        let mut t = TouchLayer::default();
++        let mut s = TouchSettings::default();
++        let c = win();
++        t.on_touch(1, Phase::Started, 1000.0, 600.0, W, H, &c, &mut s);
++        t.on_touch(2, Phase::Started, 1200.0, 600.0, W, H, &c, &mut s);
++        let o = t.on_touch(1, Phase::Moved, 1000.0, 500.0, W, H, &c, &mut s);
++        assert!(o.contains(&Out::Scroll(0.0, -50.0)), "{o:?}");
++        // lifting does not click anything
++        assert!(t.on_touch(1, Phase::Ended, 1000.0, 500.0, W, H, &c, &mut s).is_empty());
++        assert!(t.on_touch(2, Phase::Ended, 1200.0, 600.0, W, H, &c, &mut s).is_empty());
++
++        let m = Context { map_open: true, ..win() };
++        t.on_touch(3, Phase::Started, 1000.0, 540.0, W, H, &m, &mut s);
++        t.on_touch(4, Phase::Started, 1100.0, 540.0, W, H, &m, &mut s);
++        let o = t.on_touch(4, Phase::Moved, 1400.0, 540.0, W, H, &m, &mut s);
++        match o.as_slice() {
++            [Out::Wheel(_, _, l)] => assert!(*l > 0.0, "spread = zoom in"),
++            _ => panic!("{o:?}"),
++        }
++    }
+ }
+diff --git a/voxygen/src/ui/ice/renderer/mod.rs b/voxygen/src/ui/ice/renderer/mod.rs
+index 77d60b6a8..db78f805e 100644
+--- a/voxygen/src/ui/ice/renderer/mod.rs
++++ b/voxygen/src/ui/ice/renderer/mod.rs
+@@ -385,6 +385,19 @@ impl IcedRenderer {
+ 
+         let p_scale = self.p_scale;
+ 
++        // my-veloren dev.6 (6.7): Arabic shaping + RTL order (per explicit line).
++        let visual;
++        let text: &str = if text.chars().any(crate::ui::rtl::is_rtl) {
++            visual = text
++                .split('\n')
++                .map(|l| crate::ui::rtl::visual_line(l).into_owned())
++                .collect::<Vec<_>>()
++                .join("\n");
++            &visual
++        } else {
++            text
++        };
++
+         let section = glyph_brush::Section {
+             screen_position: (x * p_scale, y * p_scale),
+             bounds: (bounds.width * p_scale, bounds.height * p_scale),
+diff --git a/voxygen/src/ui/mod.rs b/voxygen/src/ui/mod.rs
+index e2b1d5269..e0ebd677c 100644
+--- a/voxygen/src/ui/mod.rs
++++ b/voxygen/src/ui/mod.rs
+@@ -2,6 +2,7 @@ mod cache;
+ mod event;
+ pub mod graphic;
+ mod scale;
++pub mod rtl;
+ mod widgets;
+ #[macro_use]
+ pub mod img_ids;
+@@ -515,7 +516,8 @@ impl Ui {
+                 let trans_y = |y: Scalar| ((-y) + ui_win_h / 2.0) * dpi_factor as Scalar;
+ 
+                 // Produce the text layout iterators.
+-                let lines = line_infos.iter().map(|info| &text[info.byte_range()]);
++                // my-veloren dev.6 (6.7): Arabic shaping + RTL order per wrapped line.
++                let lines = line_infos.iter().map(|info| rtl::visual_line(&text[info.byte_range()]));
+                 let line_rects = text::line::rects(line_infos.iter(), font_size, rect,
+                                                    justify, y_align, line_spacing);
+ 
+@@ -524,7 +526,7 @@ impl Ui {
+                 let positioned_glyphs = lines.zip(line_rects).flat_map(|(line, line_rect)| {
+                     let (x, y) = (trans_x(line_rect.left()) as f32, trans_y(line_rect.bottom()) as f32);
+                     let point = text::rt::Point { x, y };
+-                    font.layout(line, scale, point)
++                    font.layout(&line, scale, point).collect::<Vec<_>>()
+                 });
+ 
+                 // Reuse the mesh allocation if possible at this entry if possible; we
+diff --git a/voxygen/src/ui/rtl.rs b/voxygen/src/ui/rtl.rs
+new file mode 100644
+index 000000000..2c214fb67
+--- /dev/null
++++ b/voxygen/src/ui/rtl.rs
+@@ -0,0 +1,340 @@
++//! my-veloren dev.6 (6.7): right-to-left text for the conrod UI.
++//!
++//! Veloren lays out text glyph by glyph from the string (`font.layout`), with
++//! no shaping and no bidi. Arabic then shows isolated letters in the wrong
++//! order. `visual_line` converts one already-wrapped line into its visual
++//! form: Arabic letters become their joined presentation forms (the bundled
++//! GoNotoCurrent font has them) and right-to-left runs are reversed.
++//! Lines without RTL characters are returned unchanged (borrowed, no cost).
++//!
++//! This is a compact subset of the Unicode bidi algorithm: one paragraph
++//! level from the first strong character, digits keep their order, brackets
++//! are mirrored inside RTL runs. Good for UI labels and chat lines.
++
++use std::borrow::Cow;
++
++// Generated from Unicode decomposition data (Python unicodedata 15.1.0):
++// (base, isolated, final, initial, medial); 0 = form does not exist.
++const FORMS: &[(u32, u32, u32, u32, u32)] = &[
++    (0x0621, 0xFE80, 0x0000, 0x0000, 0x0000),
++    (0x0622, 0xFE81, 0xFE82, 0x0000, 0x0000),
++    (0x0623, 0xFE83, 0xFE84, 0x0000, 0x0000),
++    (0x0624, 0xFE85, 0xFE86, 0x0000, 0x0000),
++    (0x0625, 0xFE87, 0xFE88, 0x0000, 0x0000),
++    (0x0626, 0xFE89, 0xFE8A, 0xFE8B, 0xFE8C),
++    (0x0627, 0xFE8D, 0xFE8E, 0x0000, 0x0000),
++    (0x0628, 0xFE8F, 0xFE90, 0xFE91, 0xFE92),
++    (0x0629, 0xFE93, 0xFE94, 0x0000, 0x0000),
++    (0x062A, 0xFE95, 0xFE96, 0xFE97, 0xFE98),
++    (0x062B, 0xFE99, 0xFE9A, 0xFE9B, 0xFE9C),
++    (0x062C, 0xFE9D, 0xFE9E, 0xFE9F, 0xFEA0),
++    (0x062D, 0xFEA1, 0xFEA2, 0xFEA3, 0xFEA4),
++    (0x062E, 0xFEA5, 0xFEA6, 0xFEA7, 0xFEA8),
++    (0x062F, 0xFEA9, 0xFEAA, 0x0000, 0x0000),
++    (0x0630, 0xFEAB, 0xFEAC, 0x0000, 0x0000),
++    (0x0631, 0xFEAD, 0xFEAE, 0x0000, 0x0000),
++    (0x0632, 0xFEAF, 0xFEB0, 0x0000, 0x0000),
++    (0x0633, 0xFEB1, 0xFEB2, 0xFEB3, 0xFEB4),
++    (0x0634, 0xFEB5, 0xFEB6, 0xFEB7, 0xFEB8),
++    (0x0635, 0xFEB9, 0xFEBA, 0xFEBB, 0xFEBC),
++    (0x0636, 0xFEBD, 0xFEBE, 0xFEBF, 0xFEC0),
++    (0x0637, 0xFEC1, 0xFEC2, 0xFEC3, 0xFEC4),
++    (0x0638, 0xFEC5, 0xFEC6, 0xFEC7, 0xFEC8),
++    (0x0639, 0xFEC9, 0xFECA, 0xFECB, 0xFECC),
++    (0x063A, 0xFECD, 0xFECE, 0xFECF, 0xFED0),
++    (0x0641, 0xFED1, 0xFED2, 0xFED3, 0xFED4),
++    (0x0642, 0xFED5, 0xFED6, 0xFED7, 0xFED8),
++    (0x0643, 0xFED9, 0xFEDA, 0xFEDB, 0xFEDC),
++    (0x0644, 0xFEDD, 0xFEDE, 0xFEDF, 0xFEE0),
++    (0x0645, 0xFEE1, 0xFEE2, 0xFEE3, 0xFEE4),
++    (0x0646, 0xFEE5, 0xFEE6, 0xFEE7, 0xFEE8),
++    (0x0647, 0xFEE9, 0xFEEA, 0xFEEB, 0xFEEC),
++    (0x0648, 0xFEED, 0xFEEE, 0x0000, 0x0000),
++    (0x0649, 0xFEEF, 0xFEF0, 0xFBE8, 0xFBE9),
++    (0x064A, 0xFEF1, 0xFEF2, 0xFEF3, 0xFEF4),
++    (0x0671, 0xFB50, 0xFB51, 0x0000, 0x0000),
++    (0x0677, 0xFBDD, 0x0000, 0x0000, 0x0000),
++    (0x0679, 0xFB66, 0xFB67, 0xFB68, 0xFB69),
++    (0x067A, 0xFB5E, 0xFB5F, 0xFB60, 0xFB61),
++    (0x067B, 0xFB52, 0xFB53, 0xFB54, 0xFB55),
++    (0x067E, 0xFB56, 0xFB57, 0xFB58, 0xFB59),
++    (0x067F, 0xFB62, 0xFB63, 0xFB64, 0xFB65),
++    (0x0680, 0xFB5A, 0xFB5B, 0xFB5C, 0xFB5D),
++    (0x0683, 0xFB76, 0xFB77, 0xFB78, 0xFB79),
++    (0x0684, 0xFB72, 0xFB73, 0xFB74, 0xFB75),
++    (0x0686, 0xFB7A, 0xFB7B, 0xFB7C, 0xFB7D),
++    (0x0687, 0xFB7E, 0xFB7F, 0xFB80, 0xFB81),
++    (0x0688, 0xFB88, 0xFB89, 0x0000, 0x0000),
++    (0x068C, 0xFB84, 0xFB85, 0x0000, 0x0000),
++    (0x068D, 0xFB82, 0xFB83, 0x0000, 0x0000),
++    (0x068E, 0xFB86, 0xFB87, 0x0000, 0x0000),
++    (0x0691, 0xFB8C, 0xFB8D, 0x0000, 0x0000),
++    (0x0698, 0xFB8A, 0xFB8B, 0x0000, 0x0000),
++    (0x06A4, 0xFB6A, 0xFB6B, 0xFB6C, 0xFB6D),
++    (0x06A6, 0xFB6E, 0xFB6F, 0xFB70, 0xFB71),
++    (0x06A9, 0xFB8E, 0xFB8F, 0xFB90, 0xFB91),
++    (0x06AD, 0xFBD3, 0xFBD4, 0xFBD5, 0xFBD6),
++    (0x06AF, 0xFB92, 0xFB93, 0xFB94, 0xFB95),
++    (0x06B1, 0xFB9A, 0xFB9B, 0xFB9C, 0xFB9D),
++    (0x06B3, 0xFB96, 0xFB97, 0xFB98, 0xFB99),
++    (0x06BA, 0xFB9E, 0xFB9F, 0x0000, 0x0000),
++    (0x06BB, 0xFBA0, 0xFBA1, 0xFBA2, 0xFBA3),
++    (0x06BE, 0xFBAA, 0xFBAB, 0xFBAC, 0xFBAD),
++    (0x06C0, 0xFBA4, 0xFBA5, 0x0000, 0x0000),
++    (0x06C1, 0xFBA6, 0xFBA7, 0xFBA8, 0xFBA9),
++    (0x06C5, 0xFBE0, 0xFBE1, 0x0000, 0x0000),
++    (0x06C6, 0xFBD9, 0xFBDA, 0x0000, 0x0000),
++    (0x06C7, 0xFBD7, 0xFBD8, 0x0000, 0x0000),
++    (0x06C8, 0xFBDB, 0xFBDC, 0x0000, 0x0000),
++    (0x06C9, 0xFBE2, 0xFBE3, 0x0000, 0x0000),
++    (0x06CB, 0xFBDE, 0xFBDF, 0x0000, 0x0000),
++    (0x06CC, 0xFBFC, 0xFBFD, 0xFBFE, 0xFBFF),
++    (0x06D0, 0xFBE4, 0xFBE5, 0xFBE6, 0xFBE7),
++    (0x06D2, 0xFBAE, 0xFBAF, 0x0000, 0x0000),
++    (0x06D3, 0xFBB0, 0xFBB1, 0x0000, 0x0000),
++];
++// Lam + alef ligatures: (alef, isolated, final).
++const LAM_ALEF: &[(u32, u32, u32)] = &[
++    (0x0622, 0xFEF5, 0xFEF6),
++    (0x0623, 0xFEF7, 0xFEF8),
++    (0x0625, 0xFEF9, 0xFEFA),
++    (0x0627, 0xFEFB, 0xFEFC),
++];
++
++const TATWEEL: char = '\u{0640}';
++const LAM: char = '\u{0644}';
++
++fn forms(c: char) -> Option<&'static (u32, u32, u32, u32, u32)> {
++    let cp = c as u32;
++    FORMS.binary_search_by_key(&cp, |r| r.0).ok().map(|i| &FORMS[i])
++}
++
++/// Combining marks (harakat etc.) are transparent for joining.
++fn transparent(c: char) -> bool {
++    matches!(c as u32, 0x0610..=0x061A | 0x064B..=0x065F | 0x0670 | 0x06D6..=0x06ED)
++}
++
++/// Joins to the following letter (dual-joining).
++fn joins_next(c: char) -> bool { c == TATWEEL || forms(c).is_some_and(|f| f.3 != 0 || f.4 != 0) }
++
++/// Joins to the previous letter (dual- or right-joining).
++fn joins_prev(c: char) -> bool { c == TATWEEL || forms(c).is_some_and(|f| f.2 != 0) }
++
++pub fn is_rtl(c: char) -> bool {
++    matches!(c as u32,
++        0x0590..=0x08FF | 0xFB1D..=0xFDFF | 0xFE70..=0xFEFF | 0x10800..=0x10FFF | 0x1E800..=0x1EFFF)
++}
++
++/// Arabic letters -> presentation forms (logical order is kept).
++pub fn shape_arabic(s: &str) -> String {
++    let chars: Vec<char> = s.chars().collect();
++    let mut out = String::with_capacity(s.len());
++    let prev_letter = |i: usize| chars[..i].iter().rev().find(|c| !transparent(**c)).copied();
++    let next_letter = |i: usize| chars[i + 1..].iter().find(|c| !transparent(**c)).copied();
++    let mut i = 0;
++    while i < chars.len() {
++        let c = chars[i];
++        let Some(f) = forms(c) else {
++            out.push(c);
++            i += 1;
++            continue;
++        };
++        let jp = prev_letter(i).is_some_and(joins_next) && joins_prev(c);
++        // Lam + alef ligature.
++        if c == LAM {
++            if let Some(j) = (i + 1..chars.len()).find(|j| !transparent(chars[*j])) {
++                if let Some(l) = LAM_ALEF.iter().find(|l| l.0 == chars[j] as u32) {
++                    let lig = if jp { l.2 } else { l.1 };
++                    out.push(char::from_u32(lig).unwrap_or(c));
++                    // keep marks that sat between lam and alef
++                    out.extend(chars[i + 1..j].iter());
++                    i = j + 1;
++                    continue;
++                }
++            }
++        }
++        let jn = joins_next(c) && next_letter(i).is_some_and(joins_prev);
++        let (iso, fin, ini, med) = (f.1, f.2, f.3, f.4);
++        let pick = match (jp, jn) {
++            (true, true) if med != 0 => med,
++            (true, _) if fin != 0 => fin,
++            (false, true) if ini != 0 => ini,
++            _ => iso,
++        };
++        out.push(char::from_u32(if pick != 0 { pick } else { c as u32 }).unwrap_or(c));
++        i += 1;
++    }
++    out
++}
++
++#[derive(Clone, Copy, PartialEq, Eq, Debug)]
++enum Class {
++    R,
++    L,
++    Num,
++    Neutral,
++}
++
++fn class(c: char) -> Class {
++    if is_rtl(c) && !c.is_ascii_digit() && !matches!(c as u32, 0x0660..=0x0669 | 0x06F0..=0x06F9) {
++        Class::R
++    } else if c.is_numeric() {
++        Class::Num
++    } else if c.is_alphabetic() {
++        Class::L
++    } else {
++        Class::Neutral
++    }
++}
++
++fn mirror(c: char) -> char {
++    match c {
++        '(' => ')',
++        ')' => '(',
++        '[' => ']',
++        ']' => '[',
++        '{' => '}',
++        '}' => '{',
++        '<' => '>',
++        '>' => '<',
++        '«' => '»',
++        '»' => '«',
++        c => c,
++    }
++}
++
++/// Reverse an RTL run; digit groups (with . , : inside) keep their order.
++fn reverse_rtl(run: &[char], out: &mut Vec<char>) {
++    let mut segs: Vec<(bool, Vec<char>)> = Vec::new();
++    for (k, &c) in run.iter().enumerate() {
++        let num = class(c) == Class::Num
++            || (matches!(c, '.' | ',' | ':' | '/')
++                && k > 0
++                && class(run[k - 1]) == Class::Num
++                && run.get(k + 1).is_some_and(|n| class(*n) == Class::Num));
++        match segs.last_mut() {
++            Some((n, v)) if *n == num => v.push(c),
++            _ => segs.push((num, vec![c])),
++        }
++    }
++    for (num, v) in segs.into_iter().rev() {
++        if num {
++            out.extend(v);
++        } else {
++            out.extend(v.into_iter().rev().map(mirror));
++        }
++    }
++}
++
++/// Visual order of one line (see module docs).
++pub fn visual_line(line: &str) -> Cow<'_, str> {
++    if !line.chars().any(is_rtl) {
++        return Cow::Borrowed(line);
++    }
++    let shaped = shape_arabic(line);
++    let chars: Vec<char> = shaped.chars().collect();
++    let cls: Vec<Class> = chars.iter().map(|c| class(*c)).collect();
++    let base_rtl = cls
++        .iter()
++        .find(|c| matches!(c, Class::R | Class::L))
++        .is_some_and(|c| *c == Class::R);
++    // Runs of the "other" direction: from its first strong char to its last
++    // strong char before the next strong char of the base direction.
++    let other = if base_rtl { Class::L } else { Class::R };
++    let base = if base_rtl { Class::R } else { Class::L };
++    let mut runs: Vec<(bool, std::ops::Range<usize>)> = Vec::new(); // (is_rtl, range)
++    let mut i = 0;
++    let n = chars.len();
++    while i < n {
++        let in_other = cls[i] == other;
++        if in_other {
++            let start = i;
++            let mut last = i;
++            let mut j = i + 1;
++            while j < n && cls[j] != base {
++                // numbers inside the run stay with it
++                if cls[j] == other || cls[j] == Class::Num {
++                    last = j;
++                }
++                j += 1;
++            }
++            runs.push((!base_rtl, start..last + 1));
++            i = last + 1;
++        } else {
++            let start = i;
++            let mut j = i + 1;
++            while j < n && cls[j] != other {
++                j += 1;
++            }
++            runs.push((base_rtl, start..j));
++            i = j;
++        }
++    }
++    let mut out: Vec<char> = Vec::with_capacity(n);
++    let emit = |rtl: bool, r: &std::ops::Range<usize>, out: &mut Vec<char>| {
++        if rtl {
++            reverse_rtl(&chars[r.clone()], out);
++        } else {
++            out.extend(&chars[r.clone()]);
++        }
++    };
++    if base_rtl {
++        for (rtl, r) in runs.iter().rev() {
++            emit(*rtl, r, &mut out);
++        }
++    } else {
++        for (rtl, r) in runs.iter() {
++            emit(*rtl, r, &mut out);
++        }
++    }
++    Cow::Owned(out.into_iter().collect())
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    fn cps(s: &str) -> Vec<u32> { s.chars().map(|c| c as u32).collect() }
++
++    #[test]
++    fn latin_is_untouched_and_borrowed() {
++        assert!(matches!(visual_line("Hello, world 42"), Cow::Borrowed(_)));
++    }
++
++    #[test]
++    fn salam_joins() {
++        // سلام: seen initial, lam-alef final ligature, meem isolated
++        assert_eq!(cps(&shape_arabic("سلام")), vec![0xFEB3, 0xFEFC, 0xFEE1]);
++        // visual order is reversed
++        assert_eq!(cps(&visual_line("سلام")), vec![0xFEE1, 0xFEFC, 0xFEB3]);
++    }
++
++    #[test]
++    fn marhaba_forms() {
++        // مرحبا: meem initial, reh final, hah initial, beh medial, alef final
++        assert_eq!(cps(&shape_arabic("مرحبا")), vec![0xFEE3, 0xFEAE, 0xFEA3, 0xFE92, 0xFE8E]);
++    }
++
++    #[test]
++    fn mixed_ltr_paragraph_keeps_name_first() {
++        let v = visual_line("[Ayoub] مرحبا");
++        assert!(v.starts_with("[Ayoub] "), "{v}");
++        assert_eq!(v.chars().skip(8).count(), 5);
++    }
++
++    #[test]
++    fn rtl_paragraph_with_number_and_latin() {
++        // "level 12 في Veloren" in an Arabic sentence: numbers keep order.
++        let v = visual_line("المستوى 12");
++        assert!(v.starts_with("12 "), "{v}");
++        let v = visual_line("مرحبا Veloren");
++        assert!(v.starts_with("Veloren "), "{v}");
++    }
++
++    #[test]
++    fn brackets_mirror_in_rtl() {
++        let v = visual_line("(نعم)");
++        assert_eq!(v.chars().next(), Some('('));
++        assert_eq!(v.chars().last(), Some(')'));
++    }
++}

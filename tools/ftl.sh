@@ -6,6 +6,9 @@
 # 4 = dev.5 background/foreground x5 (cover activity) + autosave + SIGKILL, 5 = relaunch after the kill:
 #     save kept, assets not re-extracted, crash report collected, Back opens/closes the Esc menu (run 4,5 together).
 # 6 = dev.5 (5.6) terrain occlusion culling A/B: same camera sweep with culling off/on (ABBA), 30 s each.
+# 7 = dev.6 touch UI: UI scale, chat via the Android text dialog (Arabic), bag long-press/double-tap,
+#     two-finger scroll (crafting), map pinch zoom + long-press marker.
+# 8 = dev.6 character creation form with the name from the text dialog (run FIRST on a fresh install: 8,7,1).
 # Results: grep 'VEL-CHECK\|VEL-SCENARIO' in <OUT>/<device>/logcat.
 # Project ayoub-261d7 (Spark: ~5 physical tests/day). Never enable billing; never cancel a running matrix.
 # Needs a service-account key (FIREBASE_SA_JSON, never committed). Run as a background job (~15 min with upload).
