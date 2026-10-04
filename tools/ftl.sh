@@ -11,6 +11,10 @@
 # 8 = dev.6 character creation form with the name from the text dialog (run FIRST on a fresh install: 8,7,1).
 # 9 = dev.7 phone fixes: layout fits without overlap, ability buttons follow the hotbar, AThermal API + cool-down steps,
 #     floating stick (full/follow/stop), Glide shown in Jump's place while airborne. Run 9,1,2.
+# 10 = dev.8 content audit (towns, NPC talk, farm harvest, caves, 5 dungeon kinds + bosses, day/night, rain, mining,
+#      hunting, collar taming, riding, gliding, boat/airship). Uses /buff invulnerability + /site teleports. FTL_TIMEOUT=60m.
+# 11 = dev.8 worlds/characters/saves: add the ready-made 'Small land', export (tar → Download) + import, second character.
+#      Run 11,10,1 on a fresh install.
 # Spark quota: ~10 virtual-device tests/day as well; a rejected matrix ends with TEST_QUOTA_EXCEEDED.
 # Results: grep 'VEL-CHECK\|VEL-SCENARIO' in <OUT>/<device>/logcat.
 # Project ayoub-261d7 (Spark: ~5 physical tests/day). Never enable billing; never cancel a running matrix.

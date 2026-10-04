@@ -119,6 +119,13 @@ Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
 | Self-test Back press: `SecurityException` from `Instrumentation.sendKeyDownUpSync` | needs `INJECT_EVENTS` (system-only) | send `KEYCODE_BACK` with `new BaseInputConnection(decorView,false).sendKeyEvent(...)` on the UI thread; it goes through the window's own input stages to the NativeActivity InputQueue → winit |
 | `npc_interact` timeout with `npc_count>0` | the only villagers were on another floor (dz −11 m) and the same-floor filter dropped them | prefer \|dz\|<3, fall back to \|dz\|<16 |
 | Shell killed by `pkill -f <pattern>` | the pattern also matched the agent's own command line | kill by PID, never `pkill -f` with a pattern from your own command |
+| (dev.8) Android cargo build wrote to the host target dir / linked with `mold` | host env (`CARGO_TARGET_DIR`, `RUSTFLAGS`) leaked into the Android build; upstream `.cargo/config` forces mold on x86 hosts | launch builds with `env -i HOME=$HOME PATH=/usr/local/bin:/usr/bin:/bin` and source one env file; host builds override `RUSTFLAGS` |
+| (dev.8) `javac` fails on Arabic toast strings under `env -i` | default encoding became ASCII | `javac -encoding UTF-8` |
+| (dev.8) `veloren-common` build script: `git: detected dubious ownership` | sandbox UID ≠ repo owner | `GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=safe.directory GIT_CONFIG_VALUE_0=*` in the build env |
+| (dev.8) signing key lost between build environments → owner must uninstall (saves lost) | the dev.6/dev.7 keystore lived only in the old build sandbox | keep the keystore with the owner (sent privately in Slack), never in the repo; reuse it via `ANDROID_KEYSTORE` |
+| (dev.8) `Use` on a tool from the inventory equips it in the wrong hand / mining does nothing | inventory Use ≠ equip to `ActiveMainhand`; mining also needs the tool wielded and a block under the crosshair (`mine_target`) | swap the slot into `ActiveMainhand`, tap Wield, then aim the camera until `mine_target` is set |
+| (dev.8) `/goto` +60 m landed on a hill and the glide check failed | terrain under the target was higher than expected | go +150 m above the current position before testing the glider |
+| (dev.8) one dungeon check `hostiles=0` after a 14 km teleport | at ~5 fps on the VM the far chunks + NPCs did not stream in within 90 s | VM timing, not a game bug; judge on a phone |
 - **Perf numbers (dev.4):** measure fps as frames ÷ wall clock, never as frames ÷ (sum of timed parts):
   the parts miss work outside them, and that overstated fps about 10× in build8. On the Test Lab VM (llvmpipe),
   `device.poll()` in `GlobalState::maintain` absorbs GPU work (~140 ms/frame), so VM fps only ranks tiers
@@ -138,6 +145,11 @@ Read results: `grep -a " veloren" <OUT>/<device>/logcat`. Markers:
   need both touches (double-tap, two-finger) a single frame for all their events.
 - **One signing key (dev.6):** every worktree generated its own debug keystore, so each build had a new signature and
   could not update the previous one (uninstall = lost saves). Sign with one key kept outside the repo (`ANDROID_KEYSTORE`).
+  dev.8 lost that key with the old build environment; the new key (cert SHA-256 `F4:F4:8A:3D:…:FE:FB:59`) was sent to the
+  owner privately so the next environment can reuse it.
+- **Ready-made worlds (dev.8):** generating a world on the phone is slow, so small worlds are pre-generated on the build
+  machine (`tools/pregen_worlds.sh`, deterministic: seed + size → same `.bin`) and shipped in `assets-extra`. The world
+  selector copies one into `userdata/` as a normal singleplayer world (`map.bin` + `settings.ron`).
 - **Host harness (dev.6):** a desktop build of the same patched tree under Xvfb + lavapipe gives UI screenshots
   (fonts, Arabic, scale) without spending Test Lab quota.
 - **RTL text:** conrod/iced do no shaping or bidi. Shape Arabic to presentation forms and reorder per laid-out line;

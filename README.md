@@ -1,6 +1,8 @@
 # my-veloren — Unity / Android / Offline
 
-> **الحالة: dev.7 (0.1.0-dev.7، فرع مراجعة) — إصلاحات تجربة المالك على Poco F3: Ultra آمن للهاتف مع مراقب حرارة، أزرار بأيقونات بلا تداخل، عصا عائمة أنعم، قائمة رئيسية للمس، إعدادات تحكم باللمس فقط، وأيقونة جديدة. التفاصيل: [docs/DEV7.md](docs/DEV7.md).**
+> **الحالة: dev.8 (0.1.0-dev.8، فرع مراجعة فوق dev.7) — مراجعة محتوى العالم على الهاتف (مدن، زنزانات وزعماء، طقس، ليل ونهار، طيران شراعي، قوارب ومناطيد، حصاد)، وعوالم جاهزة تُشحن مع اللعبة، وعالم جديد بحجم آمن للهاتف، وعدة شخصيات، وتصدير الحفظ واستيراده. التفاصيل: [docs/DEV8.md](docs/DEV8.md).**
+>
+> **dev.7 (0.1.0-dev.7، فرع مراجعة) — إصلاحات تجربة المالك على Poco F3: Ultra آمن للهاتف مع مراقب حرارة، أزرار بأيقونات بلا تداخل، عصا عائمة أنعم، قائمة رئيسية للمس، إعدادات تحكم باللمس فقط، وأيقونة جديدة. التفاصيل: [docs/DEV7.md](docs/DEV7.md).**
 >
 > **dev.5 (0.1.0-dev.5) — Veloren الأصلية (Rust) على أندرويد، تعمل دون إنترنت، مع تحكم لمس كامل، وإعدادات رسوميات للهاتف، ودورة حياة أندرويد سليمة (خروج وعودة، حفظ تلقائي، زر الرجوع، تقرير كراش)، وإخفاء التضاريس المحجوبة. التفاصيل: [docs/DEV5.md](docs/DEV5.md) · dev.4: [docs/DEV4.md](docs/DEV4.md).**
 > المسار الأصلي native (ADR-002): عميل Voxygen الحقيقي مع خادم فردي مدمج، وكل الموارد، وخريطة العالم الرسمية.
@@ -36,7 +38,7 @@
 
 ## English summary
 
-Status: **dev.3 (native, ADR-002)** — the real upstream Veloren client (Voxygen, Rust) cross-compiled for arm64 Android with the complete asset tree (~444 MB) and the official world map, offline singleplayer, plus a full on-screen touch layer (analog stick, camera drag/pinch, combat/movement buttons, menu bar, context buttons, layout editor, haptics) tested with injected touches on Firebase Test Lab. See [docs/DEV3.md](docs/DEV3.md) and [docs/DEV2-NATIVE.md](docs/DEV2-NATIVE.md). dev1 (Unity slice, docs/DEV1.md) is archived.
+Status: **dev.8 (native, ADR-002; review branch stacked on dev.7)** — content audit on the phone, ready-made small worlds shipped in the APK, phone-safe new-world size, several characters, save export/import ([docs/DEV8.md](docs/DEV8.md)). dev.4–dev.7: mobile tiers, lifecycle, touch UI, owner phone fixes ([DEV7](docs/DEV7.md)). Base: the real upstream Veloren client (Voxygen, Rust) cross-compiled for arm64 Android with the complete asset tree (~444 MB) and the official world map, offline singleplayer, plus a full on-screen touch layer (analog stick, camera drag/pinch, combat/movement buttons, menu bar, context buttons, layout editor, haptics) tested with injected touches on Firebase Test Lab. See [docs/DEV3.md](docs/DEV3.md) and [docs/DEV2-NATIVE.md](docs/DEV2-NATIVE.md). dev1 (Unity slice, docs/DEV1.md) is archived.
 Each further milestone starts only on an owner instruction (see docs/ROADMAP.md).
 
 Read [AGENTS.md](AGENTS.md) before editing. The requested lowercase

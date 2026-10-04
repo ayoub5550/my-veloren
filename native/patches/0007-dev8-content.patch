@@ -1,0 +1,1844 @@
+diff --git a/assets/voxygen/i18n/ar-SA/main.ftl b/assets/voxygen/i18n/ar-SA/main.ftl
+index e69de29..1a7099d 100644
+--- a/assets/voxygen/i18n/ar-SA/main.ftl
++++ b/assets/voxygen/i18n/ar-SA/main.ftl
+@@ -0,0 +1,4 @@
++
++main-singleplayer-ready_world = + { $name } (جاهز)
++main-singleplayer-export = تصدير الحفظ
++main-singleplayer-import = استيراد الحفظ
+diff --git a/assets/voxygen/i18n/en/main.ftl b/assets/voxygen/i18n/en/main.ftl
+index ec4b164..9e5d59a 100644
+--- a/assets/voxygen/i18n/en/main.ftl
++++ b/assets/voxygen/i18n/en/main.ftl
+@@ -47,6 +47,9 @@ main-singleplayer-map_shape-circle = Circle
+ main-singleplayer-map_shape-square = Square
+ main-singleplayer-play = Play
+ main-singleplayer-generate_and_play = Generate & Play
++main-singleplayer-ready_world = + { $name } (ready)
++main-singleplayer-export = Export saves
++main-singleplayer-import = Import saves
+ menu-singleplayer-confirm_delete = Are you sure you want to delete "{ $world_name }"?
+ menu-singleplayer-confirm_regenerate = Are you sure you want to regenerate "{ $world_name }"?
+ main-login-server_not_found = Server not found.
+diff --git a/voxygen/src/android.rs b/voxygen/src/android.rs
+index 31df1ff..e4decd0 100644
+--- a/voxygen/src/android.rs
++++ b/voxygen/src/android.rs
+@@ -346,6 +346,53 @@ enum JniCall {
+         initial: String,
+         auto: Option<String>,
+     },
++    /// dev.8 (8.4): copy a file to the public Downloads folder (MediaStore).
++    ExportFile { path: String, name: String },
++    /// dev.8 (8.4): open the system file picker for a saves file.
++    PickImport { dest: String },
++    /// dev.8: short on-screen message.
++    Toast(String),
++}
++
++// ---------------------------------------------------- save transfer (8.4) ---
++
++/// Results from Java: (op, text, ok). op 1 = export finished (text = where /
++/// error), op 2 = import file picked and copied (text = local path / error).
++static FILE_RESULTS: Mutex<Vec<(i32, String, bool)>> = Mutex::new(Vec::new());
++
++pub fn export_file(path: &std::path::Path, name: &str) {
++    ainfo!("files: export {} as {name}", path.display());
++    jni_send(JniCall::ExportFile { path: path.to_string_lossy().into_owned(), name: name.to_owned() });
++}
++
++pub fn pick_import(dest: &std::path::Path) {
++    ainfo!("files: pick an import file -> {}", dest.display());
++    jni_send(JniCall::PickImport { dest: dest.to_string_lossy().into_owned() });
++}
++
++pub fn toast(msg: &str) { jni_send(JniCall::Toast(msg.to_owned())); }
++
++pub fn take_file_result(op: i32) -> Option<(String, bool)> {
++    let mut r = FILE_RESULTS.lock().unwrap();
++    let i = r.iter().position(|x| x.0 == op)?;
++    let (_, t, ok) = r.remove(i);
++    Some((t, ok))
++}
++
++extern "system" fn native_file(
++    mut env: jni::JNIEnv,
++    _this: jni::objects::JObject,
++    op: jni::sys::jint,
++    text: jni::objects::JString,
++    ok: jni::sys::jboolean,
++) {
++    let s: String = if text.is_null() {
++        String::new()
++    } else {
++        env.get_string(&text).map(|j| j.into()).unwrap_or_default()
++    };
++    ainfo!("files: result op={op} ok={} {s}", ok != 0);
++    FILE_RESULTS.lock().unwrap().push((op, s, ok != 0));
+ }
+ 
+ // ------------------------------------------------------- text input (6.4) ---
+@@ -357,6 +404,9 @@ pub enum TextTarget {
+     Hud,
+     /// The character name in character creation (iced).
+     CharName,
++    /// dev.8: world name / seed in the singleplayer world list (iced).
++    WorldName,
++    WorldSeed,
+ }
+ 
+ static TEXT_PENDING: Mutex<Option<TextTarget>> = Mutex::new(None);
+@@ -529,13 +579,20 @@ fn start_jni_thread() {
+             let activity =
+                 unsafe { jni::objects::JObject::from_raw(app.activity_as_ptr() as jni::sys::jobject) };
+             match env.get_object_class(&activity).and_then(|cls| {
+-                env.register_native_methods(&cls, &[jni::NativeMethod {
+-                    name: "nativeText".into(),
+-                    sig: "(Ljava/lang/String;Z)V".into(),
+-                    fn_ptr: native_text as *mut std::ffi::c_void,
+-                }])
++                env.register_native_methods(&cls, &[
++                    jni::NativeMethod {
++                        name: "nativeText".into(),
++                        sig: "(Ljava/lang/String;Z)V".into(),
++                        fn_ptr: native_text as *mut std::ffi::c_void,
++                    },
++                    jni::NativeMethod {
++                        name: "nativeFile".into(),
++                        sig: "(ILjava/lang/String;Z)V".into(),
++                        fn_ptr: native_file as *mut std::ffi::c_void,
++                    },
++                ])
+             }) {
+-                Ok(()) => ainfo!("jni: nativeText registered"),
++                Ok(()) => ainfo!("jni: nativeText + nativeFile registered"),
+                 Err(e) => {
+                     let _ = env.exception_clear();
+                     aerror!("jni: RegisterNatives failed: {e}")
+@@ -577,6 +634,27 @@ fn start_jni_thread() {
+                         )
+                         .map(|_| ())
+                     })(),
++                    JniCall::ExportFile { path, name } => (|| {
++                        let p = env.new_string(path)?;
++                        let n = env.new_string(name)?;
++                        env.call_method(
++                            &activity,
++                            "exportFile",
++                            "(Ljava/lang/String;Ljava/lang/String;)V",
++                            &[(&p).into(), (&n).into()],
++                        )
++                        .map(|_| ())
++                    })(),
++                    JniCall::PickImport { dest } => (|| {
++                        let d = env.new_string(dest)?;
++                        env.call_method(&activity, "pickImport", "(Ljava/lang/String;)V", &[(&d).into()])
++                            .map(|_| ())
++                    })(),
++                    JniCall::Toast(msg) => (|| {
++                        let m = env.new_string(msg)?;
++                        env.call_method(&activity, "toast", "(Ljava/lang/String;)V", &[(&m).into()])
++                            .map(|_| ())
++                    })(),
+                 };
+                 if let Err(e) = r {
+                     let _ = env.exception_describe();
+@@ -1025,6 +1103,31 @@ enum Act {
+     /// dev.6: hold a named UI point (or a fixed fraction) for s seconds.
+     HoldPoint(&'static str, f32),
+     HoldAt(f32, f32, f32),
++    /// dev.8: server chat command as the singleplayer admin (name, args).
++    Cmd(&'static str, &'static [&'static str]),
++    /// dev.8: /goto straight up by this many metres (glide from height).
++    GotoUp(f32),
++    /// dev.8: use (equip/consume) the first inventory item whose id contains this.
++    UseItem(&'static str),
++    /// dev.8: snapshot the content probe (base for the next checks).
++    Mark8,
++    /// dev.8: wait until a content condition holds (name, max seconds).
++    Until(&'static str, f32),
++    /// dev.8: walk with the stick to a target until closer than d (target, d, max s).
++    Approach(crate::content_audit::Tgt, f32, f32),
++    /// dev.8: turn the camera (drag) until the target is in front (tries left).
++    Face(crate::content_audit::Tgt, u8),
++    /// dev.8: drag the camera down (then up) until a minable block is under
++    /// the crosshair (tries left, direction +1 down / -1 up).
++    AimMine(u8, i8),
++    /// dev.8: remember the strongest hostile around (dungeon visit name).
++    NoteStrongest(&'static str),
++    /// dev.8: leave a mount / ship seat.
++    UnmountReq,
++    /// dev.8: put an inventory item in the active main hand.
++    Equip(&'static str),
++    /// dev.8: tap a button only if a content condition is true / false.
++    TapIf(&'static str, bool, Ctl),
+     Finish,
+     /// dev.5: end the scenario and SIGKILL the process (no clean shutdown).
+     FinishKill,
+@@ -1147,6 +1250,202 @@ fn script(scenario: u32, gs: &GlobalState, aspect: f32) -> Vec<Act> {
+         q.push(Act::Wait(1.0));
+     };
+     match scenario {
++        11 => {
++            // dev.8 (8.2-8.4): the menu part ran before the world started
++            // (ready-made world, export, import, two characters).
++            q.push(Act::Wait(5.0));
++            q.push(Act::Check("world_small"));
++            q.push(Act::Check("second_character"));
++            q.push(Act::Check("export_downloads"));
++        },
++        10 => {
++            // dev.8 (8.1): content audit. Every system of the world is reached on
++            // the phone build with the singleplayer admin commands (teleport,
++            // spawn, time, weather) and then used with the touch controls.
++            use crate::content_audit::Tgt;
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::EnsureGameInput(3));
++            // dungeons and wild animals would kill the test character
++            q.push(Act::Cmd("buff", &["invulnerability", "1", "3600"]));
++            q.push(Act::Wait(2.0));
++            q.push(Act::Mark8);
++            q.push(Act::Check("world_sites"));
++            // day / night cycle
++            q.push(Act::Log("dev8 night"));
++            q.push(Act::Cmd("time", &["night"]));
++            q.push(Act::Until("night", 30.0));
++            q.push(Act::Wait(4.0));
++            q.push(Act::Check("night"));
++            q.push(Act::Log("dev8 day"));
++            q.push(Act::Cmd("time", &["noon"]));
++            q.push(Act::Until("day", 30.0));
++            q.push(Act::Wait(4.0));
++            q.push(Act::Check("day"));
++            // weather
++            q.push(Act::Mark8);
++            q.push(Act::Cmd("weather_zone", &["rain", "500", "600"]));
++            q.push(Act::Until("rain", 90.0));
++            q.push(Act::Log("dev8 rain"));
++            q.push(Act::Wait(3.0));
++            q.push(Act::Check("weather_rain"));
++            q.push(Act::Cmd("weather_zone", &["clear", "500", "600"]));
++            // mining: stone pickaxe in the main hand, wielded, an iron ore at
++            // the feet, step back, aim the camera at it, hold attack
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::Cmd("give_item", &["common.items.tool.pickaxe_stone"]));
++            q.push(Act::Until("pickaxe", 10.0));
++            q.push(Act::Equip("pickaxe_stone"));
++            q.push(Act::Until("equipped", 10.0));
++            q.push(Act::TapIf("wielding", false, Ctl::Wield));
++            q.push(Act::Until("wielding", 5.0));
++            q.push(Act::Cmd("make_sprite", &["Iron"]));
++            q.push(Act::Wait(3.0));
++            let (bx, by) = stick_pos(gs, aspect, (0.0, -1.0));
++            q.push(Act::Down(STICK_ID, STICK_BASE.0, STICK_BASE.1));
++            q.push(Act::MoveTo(STICK_ID, bx, by, 0.2));
++            q.push(Act::Wait(0.5));
++            q.push(Act::Up(STICK_ID));
++            q.push(Act::Wait(1.5));
++            q.push(Act::AimMine(10, 1));
++            q.push(Act::Mark8);
++            let (ax, ay) = center(Ctl::Primary, gs);
++            q.push(Act::Down(BTN_ID, ax, ay));
++            q.push(Act::Until("items_up", 20.0));
++            q.push(Act::Up(BTN_ID));
++            q.push(Act::Wait(1.0));
++            q.push(Act::Check("mining"));
++            // hunting: back to the sword, a wild animal (no AI so it stays),
++            // walk up, face it, attack until it dies
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::Equip("sword"));
++            q.push(Act::Wait(2.0));
++            q.push(Act::Cmd("spawn", &["wild", "boar", "1", "false"]));
++            q.push(Act::Until("wild", 15.0));
++            q.push(Act::Mark8);
++            // re-approach and re-face between attack bursts (a natural animal
++            // nearby may be the nearest target and wander off)
++            for _ in 0..3 {
++                q.push(Act::Approach(Tgt::Wild, 1.6, 15.0));
++                q.push(Act::Face(Tgt::Wild, 8));
++                q.push(Act::Down(BTN_ID, ax, ay));
++                q.push(Act::Until("wild_gone", 10.0));
++                q.push(Act::Up(BTN_ID));
++            }
++            q.push(Act::Until("loot", 8.0));
++            q.push(Act::Check("hunt"));
++            // taming with a collar (retried: an item use is ignored while an
++            // attack is still recovering), then riding the horse (contextual Mount)
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::Wait(2.0));
++            q.push(Act::Cmd("give_item", &["common.items.utility.collar"]));
++            q.push(Act::Until("collar", 10.0));
++            q.push(Act::Cmd("spawn", &["wild", "horse", "1", "false"]));
++            q.push(Act::Until("wild", 15.0));
++            q.push(Act::Wait(2.0));
++            q.push(Act::Approach(Tgt::Wild, 2.0, 20.0));
++            q.push(Act::Mark8);
++            for _ in 0..3 {
++                q.push(Act::UseItem("collar"));
++                q.push(Act::Until("tamed_or_used", 4.0));
++            }
++            q.push(Act::Until("pet", 6.0));
++            q.push(Act::Check("tame"));
++            // riding is checked on its own: a pet horse from /spawn (no AI so
++            // it stays put), independent of whether the collar worked
++            q.push(Act::Cmd("spawn", &["pet", "horse", "1", "false"]));
++            q.push(Act::Until("pet", 10.0));
++            q.push(Act::Wait(2.0));
++            q.push(Act::Approach(Tgt::Pet, 1.6, 15.0));
++            q.push(Act::Until("can_mount", 8.0));
++            q.push(Act::TapIf("can_mount", true, Ctl::Mount));
++            q.push(Act::Until("riding", 10.0));
++            q.push(Act::Check("ride"));
++            q.push(Act::Mark8);
++            let (fx, fy) = stick_pos(gs, aspect, (0.0, 1.0));
++            q.push(Act::Down(STICK_ID, STICK_BASE.0, STICK_BASE.1));
++            q.push(Act::MoveTo(STICK_ID, fx, fy, 0.2));
++            q.push(Act::Wait(4.0));
++            q.push(Act::Up(STICK_ID));
++            q.push(Act::Check("ride_moves"));
++            q.push(Act::TapIf("riding", true, Ctl::Mount));
++            q.push(Act::Until("not_riding", 10.0));
++            q.push(Act::Check("dismount"));
++            // gliding from height (150 m above, so a hill nearby cannot catch us)
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::GotoUp(150.0));
++            q.push(Act::Wait(1.5));
++            q.push(Act::Begin("glide"));
++            let (jx, jy) = center(Ctl::Jump, gs);
++            q.push(Act::Down(TAP_ID, jx, jy));
++            q.push(Act::Wait(0.2));
++            q.push(Act::Up(TAP_ID));
++            q.push(Act::Wait(3.0));
++            q.push(Act::Check("glide"));
++            q.push(Act::Wait(12.0));
++            // boats and airships
++            q.push(Act::EnsureAlive(3));
++            q.push(Act::Mark8);
++            q.push(Act::Cmd("ship", &["SailBoat"]));
++            q.push(Act::Until("ship", 20.0));
++            q.push(Act::Check("ship_spawned"));
++            q.push(Act::Wait(2.0));
++            q.push(Act::Approach(Tgt::Ship, 1.5, 15.0));
++            // the helm/seats are on the deck: hop up onto it
++            q.push(Act::GotoUp(4.0));
++            q.push(Act::Wait(2.0));
++            q.push(Act::Until("can_mount", 8.0));
++            q.push(Act::Mark8);
++            q.push(Act::TapIf("can_mount", true, Ctl::Mount));
++            q.push(Act::Until("riding", 10.0));
++            q.push(Act::Check("ship_board"));
++            q.push(Act::UnmountReq);
++            q.push(Act::Wait(2.0));
++            q.push(Act::Mark8);
++            q.push(Act::Cmd("airship", &["AirBalloon"]));
++            q.push(Act::Until("airship", 20.0));
++            q.push(Act::Check("airship_spawned"));
++            // towns, farm fields, caves, dungeons (teleport to a plot of that kind)
++            let visits: [(&'static [&'static str], &'static str, &'static str); 8] = [
++                (&["plot:tavern"], "town", "villagers"),
++                (&["plot:farmfield"], "farm_field", "teleported"),
++                (&["plot:trollcave"], "cave", "hostiles"),
++                (&["plot:gnarling"], "dungeon", "hostiles"),
++                (&["plot:adlet"], "dungeon", "hostiles"),
++                (&["plot:haniwa"], "dungeon", "hostiles"),
++                (&["plot:sahagin"], "dungeon", "hostiles"),
++                (&["plot:myrmidonarena"], "dungeon", "hostiles"),
++            ];
++            for (args, check, wait_for) in visits {
++                q.push(Act::EnsureAlive(3));
++                q.push(Act::Mark8);
++                q.push(Act::Log(args[0]));
++                q.push(Act::Cmd("site", args));
++                q.push(Act::Until("teleported", 30.0));
++                q.push(Act::Until(wait_for, 90.0));
++                q.push(Act::Wait(3.0));
++                q.push(Act::NoteStrongest(args[0]));
++                q.push(Act::Check(check));
++                if check == "farm_field" {
++                    // harvesting: crops of the field with the contextual Interact
++                    q.push(Act::Until("can_interact", 20.0));
++                    q.push(Act::Mark8);
++                    q.push(Act::TapIf("can_interact", true, Ctl::Interact));
++                    q.push(Act::Until("items_up", 12.0));
++                    q.push(Act::Check("harvest"));
++                }
++                if check == "town" {
++                    // villagers talk (dialogue = where rtsim quests are offered)
++                    q.push(Act::SeekNpc(120.0));
++                    q.push(Act::EnsureGameInput(3));
++                }
++            }
++            q.push(Act::Check("strong_enemy"));
++            // leave the character in a town (scenario 1 looks for villagers next)
++            q.push(Act::Mark8);
++            q.push(Act::Cmd("site", &["plot:tavern"]));
++            q.push(Act::Until("teleported", 30.0));
++            q.push(Act::Wait(5.0));
++        },
+         4 => {
+             // dev.5: 5 background/foreground cycles, then autosave + kill.
+             q.push(Act::EnsureAlive(3));
+@@ -1878,6 +2177,10 @@ fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (boo
+             p.marker.is_some() && p.marker != rec.base.marker,
+             format!("marker {:?} -> {:?}", rec.base.marker, p.marker),
+         ),
++        "second_character" => {
++            let n = CHAR_NAME.lock().unwrap().clone();
++            (n.as_deref() == Some("Second"), format!("playing as {n:?}"))
++        },
+         "char_name_arabic" => {
+             let n = CHAR_NAME.lock().unwrap().clone();
+             (
+@@ -1899,11 +2202,16 @@ fn check(name: &'static str, p: &Probe, rec: &mut Rec, gs: &GlobalState) -> (boo
+                 format!("esc_menu={} game_input={} back_presses={backs}", p.esc_open, p.ctx.game_input),
+             )
+         },
+-        _ => (false, "unknown check".into()),
++        _ => match crate::content_audit::probe8().and_then(|p8| crate::content_audit::check(name, &p8)) {
++            Some(r) => r,
++            None => (false, "unknown check".into()),
++        },
+     }
+ }
+ 
+ static LIFE_OK: Mutex<u32> = Mutex::new(0);
++/// dev.8 `Face`: (last angle, drag sign)
++static FACE_SIGN: Mutex<(Option<f32>, f32)> = Mutex::new((None, 1.0));
+ 
+ fn read_settings_touch(gs: &GlobalState) -> Option<touch::TouchSettings> {
+     let s = std::fs::read_to_string(gs.config_dir.join("settings.ron")).ok()?;
+@@ -2446,6 +2754,133 @@ fn autopilot(state_name: Option<&'static str>, gs: &mut GlobalState, out: &mut V
+             jni_send(JniCall::SendBack);
+             true
+         },
++        Act::Cmd(name, args) => {
++            crate::content_audit::request(crate::content_audit::Req::Cmd(
++                name.to_owned(),
++                args.iter().map(|a| a.to_string()).collect(),
++            ));
++            true
++        },
++        Act::GotoUp(dz) => {
++            let [x, y, z] = pr.pos;
++            crate::content_audit::request(crate::content_audit::Req::Cmd(
++                "goto".to_owned(),
++                vec![format!("{x:.1}"), format!("{y:.1}"), format!("{:.1}", z + dz)],
++            ));
++            true
++        },
++        Act::UseItem(needle) => {
++            crate::content_audit::request(crate::content_audit::Req::UseItem(needle.to_owned()));
++            true
++        },
++        Act::Equip(needle) => {
++            crate::content_audit::request(crate::content_audit::Req::Equip(needle.to_owned()));
++            true
++        },
++        Act::TapIf(cond, want, c) => {
++            let p8 = crate::content_audit::probe8().unwrap_or_default();
++            let v = crate::content_audit::cond(cond, &p8, &crate::content_audit::base8());
++            ainfo!("VEL-STEP tap {c:?} if {cond}=={want}: {cond}={v}");
++            if v == want {
++                let mut q = Vec::new();
++                tap_at(&mut q, center(c, gs));
++                p.inject = q;
++            }
++            true
++        },
++        Act::UnmountReq => {
++            crate::content_audit::request(crate::content_audit::Req::Unmount);
++            true
++        },
++        Act::Mark8 => {
++            crate::content_audit::mark();
++            true
++        },
++        Act::NoteStrongest(place) => {
++            crate::content_audit::note_strongest(place);
++            true
++        },
++        Act::Until(cond, max) => {
++            let p8 = crate::content_audit::probe8().unwrap_or_default();
++            let ok = crate::content_audit::cond(cond, &p8, &crate::content_audit::base8());
++            if ok || t > max {
++                ainfo!("VEL-STEP until {cond}: {} after {t:.1}s", if ok { "reached" } else { "timeout" });
++            }
++            (ok || t > max) && p.act_frames >= MIN_FRAMES
++        },
++        Act::Approach(tgt, stop, max) => {
++            let p8 = crate::content_audit::probe8().unwrap_or_default();
++            let rel = p8.rel(tgt);
++            let arrived = rel.is_some_and(|(_, d)| d < stop);
++            let finished = arrived || rel.is_none() || t > max;
++            if finished {
++                ainfo!("VEL-STEP approach {tgt:?}: arrived={arrived} dist={:?} after {t:.1}s", rel.map(|r| r.1));
++                if let Some((x, y)) = p.fingers.remove(&STICK_ID) {
++                    touches.push((STICK_ID, Phase::Ended, x, y));
++                }
++            } else if let Some((v, _)) = rel {
++                if !p.fingers.contains_key(&STICK_ID) {
++                    p.fingers.insert(STICK_ID, STICK_BASE);
++                    touches.push((STICK_ID, Phase::Started, STICK_BASE.0, STICK_BASE.1));
++                }
++                let (sx, sy) = stick_pos(gs, aspect, (v[0], v[1]));
++                p.fingers.insert(STICK_ID, (sx, sy));
++                touches.push((STICK_ID, Phase::Moved, sx, sy));
++            }
++            finished
++        },
++        Act::Face(tgt, left) => {
++            let p8 = crate::content_audit::probe8().unwrap_or_default();
++            match p8.rel(tgt) {
++                Some((v, d)) => {
++                    let ang = v[0].atan2(v[1]);
++                    // closed loop: if the last drag made it worse, the drag
++                    // direction is the other way round on this build
++                    let mut fs = FACE_SIGN.lock().unwrap();
++                    if let Some(prev) = fs.0 {
++                        if ang.abs() > prev.abs() + 0.05 {
++                            fs.1 = -fs.1;
++                        }
++                    }
++                    fs.0 = if left == 0 { None } else { Some(ang) };
++                    let sign = fs.1;
++                    drop(fs);
++                    if ang.abs() < 0.3 || left == 0 {
++                        ainfo!("VEL-STEP face {tgt:?}: angle={ang:.2} dist={d:.1} (tries left {left})");
++                    } else {
++                        let dx = (sign * ang * 0.12).clamp(-0.3, 0.3);
++                        p.inject = vec![
++                            Act::Down(CAM_ID, 0.55, 0.22),
++                            Act::MoveTo(CAM_ID, 0.55 + dx, 0.22, 0.4),
++                            Act::Up(CAM_ID),
++                            Act::Wait(0.6),
++                            Act::Face(tgt, left - 1),
++                        ];
++                    }
++                },
++                None => ainfo!("VEL-STEP face {tgt:?}: no target"),
++            }
++            true
++        },
++        Act::AimMine(left, dir) => {
++            let p8 = crate::content_audit::probe8().unwrap_or_default();
++            if p8.mine_target || (left == 0 && dir < 0) {
++                ainfo!("VEL-STEP aim mine: target={} (dir {dir}, tries left {left})", p8.mine_target);
++            } else if left == 0 {
++                // looking down did not find it: sweep back up
++                p.inject = vec![Act::AimMine(20, -1)];
++            } else {
++                let dy = 0.05 * dir as f32;
++                p.inject = vec![
++                    Act::Down(CAM_ID, 0.55, 0.30),
++                    Act::MoveTo(CAM_ID, 0.55, 0.30 + dy, 0.4),
++                    Act::Up(CAM_ID),
++                    Act::Wait(0.6),
++                    Act::AimMine(left - 1, dir),
++                ];
++            }
++            true
++        },
+         Act::Finish | Act::FinishKill => {
+             let kill = matches!(act, Act::FinishKill);
+             let pass = p.results.iter().filter(|r| r.1).count();
+diff --git a/voxygen/src/content_audit.rs b/voxygen/src/content_audit.rs
+new file mode 100644
+index 0000000..1244a3a
+--- /dev/null
++++ b/voxygen/src/content_audit.rs
+@@ -0,0 +1,572 @@
++//! my-veloren dev.8: content audit on the phone (Test Lab game-loop scenario 10).
++//!
++//! The session publishes a second probe (`Probe8`) with what the world around the
++//! player contains (sites on the map, time of day, weather, hostile/wild/tamed
++//! creatures, ships, loot, riding state, mining target, inventory) and executes
++//! harness requests (server chat commands of the singleplayer admin, use an
++//! inventory item, dismount). The scripted steps and checks live in `android.rs`;
++//! the check logic is here so it stays readable.
++
++use std::{
++    collections::BTreeMap,
++    sync::{
++        Mutex,
++        atomic::{AtomicBool, Ordering},
++    },
++};
++
++use client::Client;
++use common::{
++    comp::{self, inventory::slot::Slot},
++    link::Is,
++    mounting::{Rider, VolumeRider},
++    vol::ReadVol,
++};
++use specs::{Join, WorldExt};
++use vek::*;
++
++/// Things the harness can point the stick / camera at.
++#[derive(Clone, Copy, Debug, PartialEq, Eq)]
++pub enum Tgt {
++    /// nearest living wild (or hostile) creature
++    Wild,
++    /// nearest creature owned by the player
++    Pet,
++    /// nearest ship or airship
++    Ship,
++}
++
++#[derive(Clone, Debug, Default)]
++pub struct Probe8 {
++    pub pos: [f32; 3],
++    /// map markers by kind (`Town`, `Gnarling`, `Cave`, ...) — the whole world map
++    pub sites: BTreeMap<String, usize>,
++    pub tod_hours: f32,
++    pub rain: f32,
++    pub cloud: f32,
++    /// alive hostiles within 160 m and the strongest one (max health, body)
++    pub hostiles: usize,
++    pub strongest: Option<(f32, String)>,
++    pub villagers: usize,
++    pub wild_near: usize,
++    /// creatures within 8 m: "body/alignment d=.. hp=cur/max" (diagnostics)
++    pub near_desc: Vec<String>,
++    pub pets: usize,
++    pub ships: usize,
++    pub airships: usize,
++    pub loot_near: usize,
++    pub riding: bool,
++    pub riding_volume: bool,
++    pub mine_target: bool,
++    pub pickaxe_equipped: bool,
++    /// (item definition id, amount) of every inventory stack
++    pub inv: Vec<(String, u32)>,
++    /// solid blocks above the head within 40 m (= under a roof / underground)
++    pub roofed: bool,
++    pub health_frac: f32,
++    /// target → (stick-space direction [right, forward], horizontal distance)
++    pub rel: Vec<(Tgt, [f32; 2], f32)>,
++    /// chat lines that came back from the server since the last `Mark`
++    pub last_server_msg: Option<String>,
++    /// world size in chunks (official world: 1024 × 1024)
++    pub world_chunks: [u16; 2],
++    pub wielding: bool,
++    /// contextual buttons the touch layer would show now
++    pub can_interact: bool,
++    pub can_mount: bool,
++    /// block at the feet (diagnostics for placed sprites)
++    pub feet_block: String,
++}
++
++impl Probe8 {
++    pub fn rel(&self, t: Tgt) -> Option<([f32; 2], f32)> {
++        self.rel.iter().find(|r| r.0 == t).map(|r| (r.1, r.2))
++    }
++
++    pub fn count_item(&self, needle: &str) -> u32 {
++        self.inv
++            .iter()
++            .filter(|(id, _)| id.to_lowercase().contains(needle))
++            .map(|(_, n)| *n)
++            .sum()
++    }
++
++    pub fn total_items(&self) -> u32 { self.inv.iter().map(|(_, n)| *n).sum() }
++}
++
++#[derive(Clone, Debug)]
++pub enum Req {
++    Cmd(String, Vec<String>),
++    /// use (equip / consume) the first inventory item whose id contains this
++    UseItem(String),
++    /// put the first inventory item whose id contains this in the active main hand
++    Equip(String),
++    Unmount,
++}
++
++static PROBE8: Mutex<Option<Probe8>> = Mutex::new(None);
++static BASE8: Mutex<Option<Probe8>> = Mutex::new(None);
++static REQS: Mutex<Vec<Req>> = Mutex::new(Vec::new());
++static MINE_TARGET: AtomicBool = AtomicBool::new(false);
++static SERVER_MSG: Mutex<Option<String>> = Mutex::new(None);
++/// strongest hostile seen in any dungeon visit: (max health, body, where)
++static STRONGEST: Mutex<Option<(f32, String, String)>> = Mutex::new(None);
++
++pub fn request(r: Req) { REQS.lock().unwrap().push(r); }
++
++pub fn probe8() -> Option<Probe8> { PROBE8.lock().unwrap().clone() }
++
++pub fn mark() {
++    *SERVER_MSG.lock().unwrap() = None;
++    *BASE8.lock().unwrap() = probe8();
++}
++
++pub fn base8() -> Probe8 { BASE8.lock().unwrap().clone().unwrap_or_default() }
++
++pub fn set_mine_target(on: bool) { MINE_TARGET.store(on, Ordering::Relaxed); }
++
++/// Server answers to commands (errors, info) arrive as chat; keep the last one
++/// so a failing check can say why.
++pub fn note_server_msg(s: &str) { *SERVER_MSG.lock().unwrap() = Some(s.chars().take(160).collect()); }
++
++pub fn note_strongest(place: &str) {
++    if let Some((hp, body)) = probe8().and_then(|p| p.strongest) {
++        let mut s = STRONGEST.lock().unwrap();
++        if s.as_ref().is_none_or(|(best, _, _)| hp > *best) {
++            *s = Some((hp, body, place.to_owned()));
++        }
++    }
++}
++
++pub fn strongest() -> Option<(f32, String, String)> { STRONGEST.lock().unwrap().clone() }
++
++fn body_name(b: &comp::Body) -> String {
++    let s = format!("{b:?}");
++    // `Humanoid(Body { species: Human, .. })` → keep it short for the log
++    s.split(['{', ',']).take(2).collect::<Vec<_>>().join("").chars().take(60).collect()
++}
++
++/// Called every session tick on Android: run pending requests, then refresh
++/// `Probe8`.
++pub fn session_tick(client: &mut Client, forward: Vec2<f32>, right: Vec2<f32>) {
++    let reqs = std::mem::take(&mut *REQS.lock().unwrap());
++    for r in reqs {
++        match r {
++            Req::Cmd(name, args) => {
++                crate::android::alog(4, &format!("VEL-STEP command /{name} {}", args.join(" ")));
++                client.send_command(name, args);
++            },
++            Req::UseItem(needle) => {
++                let slot = client.inventories().get(client.entity()).and_then(|inv| {
++                    inv.slots_with_id()
++                        .find(|(_, s)| {
++                            s.as_ref().is_some_and(|i| {
++                                format!("{:?}", i.item_definition_id())
++                                    .to_lowercase()
++                                    .contains(&needle)
++                            })
++                        })
++                        .map(|(id, _)| id)
++                });
++                crate::android::alog(4, &format!("VEL-STEP use item '{needle}' slot={slot:?}"));
++                if let Some(slot) = slot {
++                    client.use_slot(Slot::Inventory(slot));
++                }
++            },
++            Req::Equip(needle) => {
++                let slot = client.inventories().get(client.entity()).and_then(|inv| {
++                    inv.slots_with_id()
++                        .find(|(_, s)| {
++                            s.as_ref().is_some_and(|i| {
++                                format!("{:?}", i.item_definition_id())
++                                    .to_lowercase()
++                                    .contains(&needle)
++                            })
++                        })
++                        .map(|(id, _)| id)
++                });
++                crate::android::alog(4, &format!("VEL-STEP equip '{needle}' slot={slot:?}"));
++                if let Some(slot) = slot {
++                    client.swap_slots(
++                        Slot::Inventory(slot),
++                        Slot::Equip(comp::inventory::slot::EquipSlot::ActiveMainhand),
++                    );
++                }
++            },
++            Req::Unmount => client.unmount(),
++        }
++    }
++
++    let me = client.entity();
++    let my_uid = client.uid();
++    let weather = client.weather_at_player();
++    let tod = client.state().get_time_of_day();
++    let sites = client.sites().values().fold(BTreeMap::new(), |mut m, s| {
++        *m.entry(format!("{:?}", s.marker.kind)).or_insert(0usize) += 1;
++        m
++    });
++    let ecs = client.state().ecs();
++    let positions = ecs.read_storage::<comp::Pos>();
++    let alignments = ecs.read_storage::<comp::Alignment>();
++    let bodies = ecs.read_storage::<comp::Body>();
++    let healths = ecs.read_storage::<comp::Health>();
++    let pickups = ecs.read_storage::<comp::PickupItem>();
++    let riders = ecs.read_storage::<Is<Rider>>();
++    let vriders = ecs.read_storage::<Is<VolumeRider>>();
++    let inventories = ecs.read_storage::<comp::Inventory>();
++    let my_pos = positions.get(me).map(|p| p.0).unwrap_or_default();
++    let alive = |e| !healths.get(e).is_some_and(|h: &comp::Health| h.is_dead);
++
++    let mut p = Probe8 {
++        pos: my_pos.into_array(),
++        sites,
++        tod_hours: ((tod.rem_euclid(86400.0)) / 3600.0) as f32,
++        rain: weather.rain,
++        cloud: weather.cloud,
++        mine_target: MINE_TARGET.load(Ordering::Relaxed),
++        riding: riders.get(me).is_some(),
++        riding_volume: vriders.get(me).is_some(),
++        health_frac: healths.get(me).map_or(0.0, |h| h.fraction()),
++        last_server_msg: SERVER_MSG.lock().unwrap().clone(),
++        world_chunks: client.world_data().chunk_size().into_array(),
++        wielding: client.is_wielding() == Some(true),
++        can_interact: crate::touch::context().can_interact,
++        can_mount: crate::touch::context().can_mount,
++        ..Default::default()
++    };
++    let mut nearest: BTreeMap<u8, (f32, Vec2<f32>)> = BTreeMap::new();
++    let mut consider = |k: u8, d: Vec2<f32>| {
++        let m = d.magnitude();
++        if nearest.get(&k).is_none_or(|(best, _)| m < *best) {
++            nearest.insert(k, (m, d));
++        }
++    };
++    for (e, pos, body) in (&ecs.entities(), &positions, &bodies).join() {
++        if e == me {
++            continue;
++        }
++        let d3 = pos.0 - my_pos;
++        let dist = d3.magnitude();
++        if let comp::Body::Ship(ship) = body {
++            if dist < 200.0 {
++                if matches!(ship, comp::ship::Body::DefaultAirship | comp::ship::Body::AirBalloon) {
++                    p.airships += 1;
++                } else {
++                    p.ships += 1;
++                }
++                consider(2, d3.xy());
++            }
++            continue;
++        }
++        if !alive(e) {
++            continue;
++        }
++        if dist < 8.0 && p.near_desc.len() < 6 {
++            let al = match alignments.get(e) {
++                Some(comp::Alignment::Wild) => "wild",
++                Some(comp::Alignment::Enemy) => "enemy",
++                Some(comp::Alignment::Npc) => "npc",
++                Some(comp::Alignment::Owned(_)) => "owned",
++                Some(_) => "other",
++                None => "none",
++            };
++            let hp = healths
++                .get(e)
++                .map_or("?".to_string(), |h| format!("{:.0}/{:.0}", h.current(), h.maximum()));
++            p.near_desc.push(format!("{}/{al} d={dist:.1} hp={hp}", body_name(body)));
++        }
++        match alignments.get(e) {
++            Some(comp::Alignment::Enemy) if dist < 160.0 => {
++                p.hostiles += 1;
++                if let Some(h) = healths.get(e) {
++                    let hp = h.maximum();
++                    if p.strongest.as_ref().is_none_or(|(best, _)| hp > *best) {
++                        p.strongest = Some((hp, body_name(body)));
++                    }
++                }
++            },
++            Some(comp::Alignment::Npc) if dist < 160.0 => {
++                if matches!(body, comp::Body::Humanoid(_)) {
++                    p.villagers += 1;
++                }
++            },
++            Some(comp::Alignment::Wild) => {
++                if dist < 40.0 {
++                    p.wild_near += 1;
++                    consider(0, d3.xy());
++                }
++            },
++            Some(comp::Alignment::Owned(uid)) if Some(*uid) == my_uid => {
++                p.pets += 1;
++                consider(1, d3.xy());
++            },
++            _ => {},
++        }
++    }
++    p.loot_near = (&positions, &pickups)
++        .join()
++        .filter(|(pos, _)| pos.0.distance(my_pos) < 25.0)
++        .count();
++    if let Some(inv) = inventories.get(me) {
++        p.inv = inv
++            .slots()
++            .flatten()
++            .map(|i| (format!("{:?}", i.item_definition_id()), i.amount()))
++            .collect();
++        p.pickaxe_equipped = inv
++            .equipped(comp::inventory::slot::EquipSlot::ActiveMainhand)
++            .is_some_and(|i| format!("{:?}", i.item_definition_id()).contains("pickaxe"));
++    }
++    {
++        let terrain = client.state().terrain();
++        let feet = my_pos.map(|e| e.floor() as i32);
++        p.feet_block = terrain.get(feet).map_or_else(
++            |_| "?".into(),
++            |b| format!("{:?}/{:?}", b.kind(), b.get_sprite()),
++        );
++        let head = feet + Vec3::unit_z() * 2;
++        p.roofed = (1..40).any(|dz| {
++            terrain
++                .get(head + Vec3::unit_z() * dz)
++                .is_ok_and(|b| b.is_solid())
++        });
++    }
++    for (k, (dist, d)) in nearest {
++        let n = d.try_normalized().unwrap_or_default();
++        let t = match k {
++            0 => Tgt::Wild,
++            1 => Tgt::Pet,
++            _ => Tgt::Ship,
++        };
++        p.rel.push((t, [n.dot(right), n.dot(forward)], dist));
++    }
++    *PROBE8.lock().unwrap() = Some(p);
++}
++
++/// Wait conditions for `Act::Until` (true = stop waiting).
++pub fn cond(name: &str, p: &Probe8, b: &Probe8) -> bool {
++    let moved = Vec3::<f32>::from(p.pos).distance(Vec3::<f32>::from(b.pos));
++    match name {
++        "night" => p.tod_hours >= 20.0 || p.tod_hours < 5.0,
++        "day" => (9.0..16.0).contains(&p.tod_hours),
++        "rain" => p.rain > 0.2,
++        "teleported" => moved > 60.0,
++        "villagers" => p.villagers >= 2,
++        "hostiles" => p.hostiles >= 1,
++        "pet" => p.pets > b.pets,
++        "wild" => p.wild_near > 0,
++        "riding" => p.riding || p.riding_volume,
++        "not_riding" => !p.riding && !p.riding_volume,
++        "ship" => p.ships > b.ships,
++        "airship" => p.airships > b.airships,
++        "pickaxe" => p.count_item("pickaxe") > 0 || p.pickaxe_equipped,
++        "equipped" => p.pickaxe_equipped,
++        "collar" => p.count_item("collar") > 0,
++        "items_up" => p.total_items() > b.total_items(),
++        "loot" => p.loot_near > b.loot_near || p.total_items() > b.total_items(),
++        "wild_gone" => p.wild_near < b.wild_near,
++        "wielding" => p.wielding,
++        "can_interact" => p.can_interact,
++        "can_mount" => p.can_mount,
++        "tamed_or_used" => p.pets > b.pets || p.count_item("collar") < b.count_item("collar"),
++        _ => true,
++    }
++}
++
++const DUNGEON_KINDS: [&str; 10] = [
++    "Gnarling",
++    "Adlet",
++    "Haniwa",
++    "Cultist",
++    "Sahagin",
++    "VampireCastle",
++    "Myrmidon",
++    "Terracotta",
++    "DwarvenMine",
++    "ChapelSite",
++];
++
++/// dev.8 checks (scenario 10). `None` = not a dev.8 check name.
++pub fn check(name: &str, p: &Probe8) -> Option<(bool, String)> {
++    let b = base8();
++    let moved = Vec3::<f32>::from(p.pos).distance(Vec3::<f32>::from(b.pos));
++    let why = || p.last_server_msg.clone().unwrap_or_default();
++    Some(match name {
++        "world_sites" => {
++            let towns = p.sites.get("Town").copied().unwrap_or(0);
++            let dungeons: usize = DUNGEON_KINDS.iter().filter_map(|k| p.sites.get(*k)).sum();
++            let caves = p.sites.get("Cave").copied().unwrap_or(0);
++            (
++                towns > 0 && dungeons > 0,
++                format!("towns={towns} dungeons={dungeons} caves={caves} all={:?}", p.sites),
++            )
++        },
++        "night" => (cond("night", p, &b), format!("hour={:.1}", p.tod_hours)),
++        "day" => (cond("day", p, &b), format!("hour={:.1}", p.tod_hours)),
++        "weather_rain" => (
++            p.rain > 0.2,
++            format!("rain={:.2} cloud={:.2} {}", p.rain, p.cloud, why()),
++        ),
++        "town" => (
++            moved > 60.0 && p.villagers >= 2,
++            format!("teleported {moved:.0} m to {:?}; villagers={} {}", p.pos.map(|v| v as i32), p.villagers, why()),
++        ),
++        "dungeon" => (
++            moved > 60.0 && p.hostiles >= 1,
++            format!(
++                "teleported {moved:.0} m to {:?}; hostiles={} strongest={:?} roofed={} {}",
++                p.pos.map(|v| v as i32),
++                p.hostiles,
++                p.strongest,
++                p.roofed,
++                why()
++            ),
++        ),
++        "cave" => (
++            moved > 60.0 && (p.roofed || p.hostiles > 0),
++            format!("teleported {moved:.0} m; roofed={} hostiles={} {}", p.roofed, p.hostiles, why()),
++        ),
++        "strong_enemy" => {
++            let s = strongest();
++            (
++                s.as_ref().is_some_and(|(hp, _, _)| *hp >= 400.0),
++                format!("strongest hostile seen in dungeons: {s:?} (boss-class >= 400 HP)"),
++            )
++        },
++        "farm_field" => (moved > 60.0, format!("teleported {moved:.0} m to a farm field {}", why())),
++        "harvest" => (
++            p.total_items() > b.total_items(),
++            format!(
++                "items {} -> {} can_interact(before)={} feet={} {}",
++                b.total_items(),
++                p.total_items(),
++                b.can_interact,
++                p.feet_block,
++                why()
++            ),
++        ),
++        "mining" => (
++            p.total_items() > b.total_items(),
++            format!(
++                "items {} -> {} pickaxe_equipped={} wielding={} mine_target(before)={} feet={} {}",
++                b.total_items(),
++                p.total_items(),
++                p.pickaxe_equipped,
++                p.wielding,
++                b.mine_target,
++                p.feet_block,
++                why()
++            ),
++        ),
++        "hunt" => (
++            p.wild_near < b.wild_near,
++            format!(
++                "animal killed: wild alive {} -> {}; loot near={} items {} -> {} \
++                 (a /spawn'ed animal has no loot table; natural animals drop loot) \
++                 near(before)={:?} near(now)={:?}",
++                b.wild_near,
++                p.wild_near,
++                p.loot_near,
++                b.total_items(),
++                p.total_items(),
++                b.near_desc,
++                p.near_desc
++            ),
++        ),
++        "tame" => (
++            p.pets > b.pets,
++            format!(
++                "pets {} -> {} collars {} -> {} near(before)={:?} {}",
++                b.pets,
++                p.pets,
++                b.count_item("collar"),
++                p.count_item("collar"),
++                b.near_desc,
++                why()
++            ),
++        ),
++        "ride" => (
++            p.riding,
++            format!(
++                "riding={} pet_dist={:?} can_mount(before)={} near={:?}",
++                p.riding,
++                p.rel(Tgt::Pet).map(|r| r.1),
++                b.can_mount,
++                p.near_desc
++            ),
++        ),
++        "ride_moves" => (
++            p.riding && moved > 5.0,
++            format!("riding={} moved {moved:.1} m in 4 s", p.riding),
++        ),
++        "dismount" => (!p.riding, format!("riding={}", p.riding)),
++        "ship_spawned" => (p.ships > b.ships, format!("ships {} -> {} {}", b.ships, p.ships, why())),
++        "ship_board" => (
++            p.riding_volume || p.riding,
++            format!(
++                "on board={} can_mount(before)={} ship_dist={:?}",
++                p.riding_volume,
++                b.can_mount,
++                p.rel(Tgt::Ship).map(|r| r.1)
++            ),
++        ),
++        "airship_spawned" => (
++            p.airships > b.airships,
++            format!("airships {} -> {} {}", b.airships, p.airships, why()),
++        ),
++        "world_small" => {
++            let [x, y] = p.world_chunks;
++            (
++                x == 128 && y == 128,
++                format!("world {x}x{y} chunks (ready-made 'Small land' = 128x128; official = 1024x1024)"),
++            )
++        },
++        "export_downloads" => match crate::android::take_file_result(1) {
++            Some((t, ok)) => (ok, t),
++            None => (false, "no export result from Java".into()),
++        },
++        _ => return None,
++    })
++}
++
++/// dev.8 scenario 11, main menu part (before the world starts): add the
++/// ready-made world, export every world, import the export back, then play the
++/// ready-made world. Results are logged as `VEL-CHECK`.
++pub fn menu_steps(w: &mut crate::singleplayer::SingleplayerWorlds) {
++    use crate::{android::alog_check, singleplayer::phone_worlds::transfer};
++    let n0 = w.worlds.len();
++    let idx = w.add_pregenerated(0);
++    let map_ok = idx
++        .and_then(|i| w.worlds.get(i))
++        .and_then(|x| std::fs::metadata(&x.map_path).ok())
++        .map(|m| m.len());
++    alog_check(
++        "pregen_world_added",
++        idx.is_some() && map_ok.unwrap_or(0) > 0 && w.worlds.len() == n0 + 1,
++        &format!("worlds {n0} -> {} map.bin bytes={map_ok:?}", w.worlds.len()),
++    );
++    let n1 = w.worlds.len();
++    match transfer::export_all(w) {
++        Ok(path) => {
++            let size = std::fs::metadata(&path).map(|m| m.len()).unwrap_or(0);
++            alog_check("export_tar", size > 0, &format!("{} bytes={size}", path.display()));
++            let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
++            crate::android::export_file(&path, &name);
++            match transfer::import_tar(w, &path) {
++                Ok(n) => alog_check(
++                    "import_tar",
++                    n == n1 && w.worlds.len() == 2 * n1,
++                    &format!("imported {n}, worlds {n1} -> {}", w.worlds.len()),
++                ),
++                Err(e) => alog_check("import_tar", false, &e),
++            }
++        },
++        Err(e) => alog_check("export_tar", false, &e.to_string()),
++    }
++    // play the first (not imported) ready-made world
++    w.current = w
++        .worlds
++        .iter()
++        .position(|x| x.name == crate::singleplayer::phone_worlds::PREGEN[0].name && x.is_generated);
++    crate::android::alog(4, &format!("VEL-STEP scenario 11 plays world {:?}", w.current));
++}
+diff --git a/voxygen/src/lib.rs b/voxygen/src/lib.rs
+index eb696b4..fea283a 100644
+--- a/voxygen/src/lib.rs
++++ b/voxygen/src/lib.rs
+@@ -14,6 +14,7 @@ pub mod ui;
+ #[cfg(target_os = "android")] pub mod android;
+ #[cfg(target_os = "android")] mod android_main_body;
+ #[cfg(target_os = "android")] pub mod lifecycle;
++#[cfg(target_os = "android")] pub mod content_audit;
+ pub mod audio;
+ pub mod touch;
+ pub mod mobile;
+diff --git a/voxygen/src/menu/char_selection/mod.rs b/voxygen/src/menu/char_selection/mod.rs
+index ca2a736..283e9a1 100644
+--- a/voxygen/src/menu/char_selection/mod.rs
++++ b/voxygen/src/menu/char_selection/mod.rs
+@@ -146,6 +146,8 @@ impl PlayState for CharSelectionState {
+                 };
+                 if ready && !loading {
+                     let scenario8 = std::env::var("VELOREN_ANDROID_SCENARIO").as_deref() == Ok("8");
++                    // dev.8 (8.3): scenario 11 keeps two characters in one world.
++                    let scenario11 = std::env::var("VELOREN_ANDROID_SCENARIO").as_deref() == Ok("11");
+                     match (STAGE.load(Ordering::Relaxed), chars.first()) {
+                         // dev.6 scenario 8: create the character through the real
+                         // creation form; the name comes from the Android text dialog.
+@@ -185,6 +187,40 @@ impl PlayState for CharSelectionState {
+                                 start_site: None,
+                             });
+                         },
++                        (0 | 1, Some(_)) if scenario11 && chars.len() < 2 => {
++                            tracing::info!("android-autostart: scenario 11, creating a second character");
++                            STAGE.store(21, Ordering::Relaxed);
++                            *SINCE.lock().unwrap() = Some(std::time::Instant::now());
++                            events.push(ui::Event::AddCharacter {
++                                alias: "Second".to_owned(),
++                                mainhand: Some("common.items.weapons.axe.starter_axe".to_owned()),
++                                offhand: None,
++                                body: common::comp::Body::Humanoid(
++                                    common::comp::humanoid::Body::random(),
++                                ),
++                                hardcore: false,
++                                start_site: None,
++                            });
++                        },
++                        (21, _) => {
++                            let waited = SINCE.lock().unwrap().map_or(0, |t| t.elapsed().as_secs());
++                            if chars.len() >= 2 || waited > 40 {
++                                let names: Vec<_> = chars.iter().map(|c| c.character.alias.clone()).collect();
++                                crate::android::alog_check(
++                                    "two_characters",
++                                    chars.len() >= 2,
++                                    &format!("characters={names:?}"),
++                                );
++                                if let Some(c) = chars.iter().find(|c| c.character.alias == "Second").or(chars.first())
++                                    && let Some(id) = c.character.id
++                                {
++                                    tracing::info!("android-autostart: entering world as {}", c.character.alias);
++                                    crate::android::note_char_name(&c.character.alias);
++                                    STAGE.store(2, Ordering::Relaxed);
++                                    events.push(ui::Event::Play(id));
++                                }
++                            }
++                        },
+                         (0 | 1, Some(c)) => {
+                             if let Some(id) = c.character.id {
+                                 tracing::info!("android-autostart: entering world");
+diff --git a/voxygen/src/menu/main/mod.rs b/voxygen/src/menu/main/mod.rs
+index 891998c..033b8a5 100644
+--- a/voxygen/src/menu/main/mod.rs
++++ b/voxygen/src/menu/main/mod.rs
+@@ -111,6 +111,29 @@ impl PlayState for MainMenuState {
+         // Pull in localizations
+         let localized_strings = &global_state.i18n.read();
+ 
++        // my-veloren dev.8 (8.4): results of the Java export / import file steps.
++        #[cfg(all(target_os = "android", feature = "singleplayer"))]
++        if !crate::android::autostart_enabled() {
++            if let Some((text, ok)) = crate::android::take_file_result(1) {
++                tracing::info!("export finished ok={ok}: {text}");
++            }
++            if let Some((text, ok)) = crate::android::take_file_result(2) {
++                if ok {
++                    if let SingleplayerState::Init(init) = &mut global_state.singleplayer {
++                        let path = std::path::PathBuf::from(&text);
++                        let msg = match crate::singleplayer::phone_worlds::transfer::import_tar(init, &path) {
++                            Ok(n) => format!("Imported {n} world(s) / تم استيراد {n}"),
++                            Err(e) => format!("Import failed / فشل الاستيراد: {e}"),
++                        };
++                        let _ = std::fs::remove_file(&path);
++                        crate::android::toast(&msg);
++                    }
++                } else if !text.is_empty() {
++                    crate::android::toast(&text);
++                }
++            }
++        }
++
+         // Android Test Lab game-loop: start the default singleplayer world automatically.
+         #[cfg(all(target_os = "android", feature = "singleplayer"))]
+         if crate::android::autostart_enabled()
+@@ -122,11 +145,20 @@ impl PlayState for MainMenuState {
+                 tracing::info!("android-autostart: starting singleplayer");
+                 let mut st = SingleplayerState::init();
+                 if let SingleplayerState::Init(w) = &mut st {
+-                    if w.worlds.is_empty() {
+-                        w.new_world();
++                    if std::env::var("VELOREN_ANDROID_SCENARIO").as_deref() == Ok("11") {
++                        // dev.8: ready-made world, export, import; play the ready-made one
++                        crate::content_audit::menu_steps(w);
+                     }
+                     if w.current.is_none() {
+-                        w.current = Some(0);
++                        // dev.8: other scenarios play the official world, even when
++                        // scenario 11 added ready-made worlds to the list
++                        match w.worlds.iter().position(|x| x.gen_opts.is_none()) {
++                            Some(i) => w.current = Some(i),
++                            None => {
++                                w.new_world();
++                                w.current = Some(w.worlds.len() - 1);
++                            },
++                        }
+                     }
+                 }
+                 global_state.singleplayer = st;
+@@ -536,6 +568,35 @@ impl PlayState for MainMenuState {
+                                     init.save_current_meta();
+                                 }
+                             },
++                            // my-veloren dev.8 (8.2): shipped ready-made small world
++                            ui::WorldsChange::AddPregenerated(i) => {
++                                if let Some(idx) = init.add_pregenerated(i) {
++                                    init.current = Some(idx);
++                                }
++                            },
++                            // my-veloren dev.8 (8.4): all worlds (maps + characters) → Downloads
++                            ui::WorldsChange::Export => {
++                                #[cfg(target_os = "android")]
++                                match crate::singleplayer::phone_worlds::transfer::export_all(init) {
++                                    Ok(path) => {
++                                        let name = path
++                                            .file_name()
++                                            .map(|n| n.to_string_lossy().into_owned())
++                                            .unwrap_or_default();
++                                        crate::android::export_file(&path, &name);
++                                    },
++                                    Err(e) => crate::android::toast(&format!("Export failed: {e}")),
++                                }
++                            },
++                            ui::WorldsChange::Import => {
++                                #[cfg(target_os = "android")]
++                                crate::android::pick_import(
++                                    &crate::singleplayer::phone_worlds::transfer::exchange_dir(
++                                        init.worlds_folder(),
++                                    )
++                                    .join("incoming.tar"),
++                                );
++                            },
+                         }
+                     }
+                 },
+diff --git a/voxygen/src/menu/main/ui/mod.rs b/voxygen/src/menu/main/ui/mod.rs
+index 0b0fdb8..4256029 100644
+--- a/voxygen/src/menu/main/ui/mod.rs
++++ b/voxygen/src/menu/main/ui/mod.rs
+@@ -141,7 +141,13 @@ impl WorldChange {
+             WorldChange::Scale(scale) => gen_opts.scale = scale,
+             WorldChange::MapKind(kind) => gen_opts.map_kind = kind,
+             WorldChange::ErosionQuality(q) => gen_opts.erosion_quality = q,
+-            WorldChange::DefaultGenOps => world.gen_opts = Some(Default::default()),
++            WorldChange::DefaultGenOps => {
++                world.gen_opts = Some(if crate::touch::active() {
++                    crate::singleplayer::phone_worlds::phone_gen_opts()
++                } else {
++                    Default::default()
++                })
++            },
+         }
+     }
+ }
+@@ -154,6 +160,11 @@ pub enum WorldsChange {
+     Regenerate(usize),
+     AddNew,
+     CurrentWorldChange(WorldChange),
++    /// my-veloren dev.8: add a shipped ready-made world (index in `PREGEN`)
++    AddPregenerated(usize),
++    /// my-veloren dev.8: export / import every world (Android)
++    Export,
++    Import,
+ }
+ 
+ pub enum Event {
+@@ -801,7 +812,8 @@ impl MainMenuUi {
+             .as_init()
+             .unwrap_or(&worlds_default);
+ 
+-        let (messages, _) = self.ui.maintain(
++        #[allow(unused_mut)]
++        let (mut messages, _) = self.ui.maintain(
+             self.controls.view(
+                 &global_state.settings,
+                 dt.as_secs_f32(),
+@@ -813,6 +825,46 @@ impl MainMenuUi {
+             &mut global_state.clipboard,
+         );
+ 
++        // my-veloren dev.8 (8.2): world name and seed are typed in the Android
++        // text dialog (dev.6 pattern), like the character name.
++        #[cfg(all(target_os = "android", feature = "singleplayer"))]
++        {
++            use crate::android::{TextTarget, request_text, take_text, text_dialog_open};
++            if let Screen::WorldSelector { screen } = &mut self.controls.screen
++                && !text_dialog_open()
++                && let Some(f) = screen.take_focused_field()
++            {
++                let cur = worlds.current();
++                match f {
++                    world_selector::FocusedField::Name => request_text(
++                        TextTarget::WorldName,
++                        "World name",
++                        cur.map_or("", |w| w.name.as_str()),
++                    ),
++                    world_selector::FocusedField::Seed => request_text(
++                        TextTarget::WorldSeed,
++                        "Seed (number)",
++                        &cur.map_or(0, |w| w.seed).to_string(),
++                    ),
++                }
++            }
++            if let Some(Some(t)) = take_text(TextTarget::WorldName) {
++                let t = t.trim();
++                if !t.is_empty() {
++                    messages.push(Message::WorldChanged(WorldsChange::CurrentWorldChange(
++                        WorldChange::Name(t.to_owned()),
++                    )));
++                }
++            }
++            if let Some(Some(t)) = take_text(TextTarget::WorldSeed)
++                && let Ok(seed) = t.trim().parse::<u32>()
++            {
++                messages.push(Message::WorldChanged(WorldsChange::CurrentWorldChange(
++                    WorldChange::Seed(seed),
++                )));
++            }
++        }
++
+         messages.into_iter().for_each(|message| {
+             self.controls
+                 .update(message, &mut events, &global_state.settings, &mut self.ui)
+diff --git a/voxygen/src/menu/main/ui/world_selector.rs b/voxygen/src/menu/main/ui/world_selector.rs
+index 7685734..606ecf5 100644
+--- a/voxygen/src/menu/main/ui/world_selector.rs
++++ b/voxygen/src/menu/main/ui/world_selector.rs
+@@ -61,6 +61,33 @@ pub struct Screen {
+     generate_map: button::State,
+ 
+     pub confirmation: Option<Confirmation>,
++
++    /// my-veloren dev.8: ready-made worlds, export / import (touch only)
++    pregen_buttons: [button::State; crate::singleplayer::phone_worlds::PREGEN.len()],
++    export_button: button::State,
++    import_button: button::State,
++}
++
++/// my-veloren dev.8: which text field asks for the Android text dialog.
++pub enum FocusedField {
++    Name,
++    Seed,
++}
++
++impl Screen {
++    /// A focused text field on a phone opens the Android text dialog instead
++    /// (dev.6 pattern); the field is unfocused right away.
++    pub fn take_focused_field(&mut self) -> Option<FocusedField> {
++        if self.world_name.is_focused() {
++            self.world_name = text_input::State::new();
++            Some(FocusedField::Name)
++        } else if self.map_seed.is_focused() {
++            self.map_seed = text_input::State::new();
++            Some(FocusedField::Seed)
++        } else {
++            None
++        }
++    }
+ }
+ 
+ impl Screen {
+@@ -154,12 +181,57 @@ impl Screen {
+         .center_x()
+         .max_width(200);
+ 
+-        let content = Column::with_children(vec![
+-            title.into(),
+-            list.into(),
+-            new_button.into(),
+-            back_button.into(),
+-        ])
++        let touch = crate::touch::active();
++        let mut column = vec![title.into(), list.into(), new_button.into()];
++        if touch {
++            // dev.8 (8.2): ready-made small worlds (generated on the build
++            // machine), and moving saves to / from another phone (8.4).
++            use crate::singleplayer::phone_worlds::PREGEN;
++            for (state, p) in self.pregen_buttons.iter_mut().zip(PREGEN.iter()) {
++                column.push(
++                    Container::new(neat_button(
++                        state,
++                        i18n.get_msg_ctx("main-singleplayer-ready_world", &i18n::fluent_args! {
++                            "name" => p.name,
++                        }),
++                        FILL_FRAC_TWO,
++                        button_style,
++                        Some(Message::WorldChanged(super::WorldsChange::AddPregenerated(
++                            PREGEN.iter().position(|q| q.asset == p.asset).unwrap_or(0),
++                        ))),
++                    ))
++                    .center_x()
++                    .max_width(260)
++                    .into(),
++                );
++            }
++            column.push(
++                Container::new(neat_button(
++                    &mut self.export_button,
++                    i18n.get_msg("main-singleplayer-export"),
++                    FILL_FRAC_TWO,
++                    button_style,
++                    Some(Message::WorldChanged(super::WorldsChange::Export)),
++                ))
++                .center_x()
++                .max_width(200)
++                .into(),
++            );
++            column.push(
++                Container::new(neat_button(
++                    &mut self.import_button,
++                    i18n.get_msg("main-singleplayer-import"),
++                    FILL_FRAC_TWO,
++                    button_style,
++                    Some(Message::WorldChanged(super::WorldsChange::Import)),
++                ))
++                .center_x()
++                .max_width(200)
++                .into(),
++            );
++        }
++        column.push(back_button.into());
++        let content = Column::with_children(column)
+         .spacing(8)
+         .width(Length::Fill)
+         .height(Length::FillPortion(38))
+@@ -200,6 +272,12 @@ impl Screen {
+             // Day length slider values
+             pub const DAY_LENGTH_MIN: f64 = 10.0;
+             pub const DAY_LENGTH_MAX: f64 = 60.0;
++            // dev.8 (8.2): a phone cannot generate the big worlds in reasonable time
++            let max_lg = if crate::touch::active() {
++                crate::singleplayer::phone_worlds::PHONE_MAX_LG
++            } else {
++                13
++            };
+ 
+             let mut gen_content = vec![
+                 BackgroundContainer::new(
+@@ -335,7 +413,7 @@ impl Screen {
+                 if can_edit {
+                     gen_content.push(
+                         Row::with_children(vec![
+-                            Slider::new(&mut self.world_size_x, 4..=13, gen_opts.x_lg, move |s| {
++                            Slider::new(&mut self.world_size_x, 4..=max_lg, gen_opts.x_lg.min(max_lg), move |s| {
+                                 message(WorldChange::SizeX(s))
+                             })
+                             .height(SLIDER_HEIGHT)
+@@ -347,7 +425,7 @@ impl Screen {
+                                 SLIDER_BAR_HEIGHT,
+                             ))
+                             .into(),
+-                            Slider::new(&mut self.world_size_y, 4..=13, gen_opts.y_lg, move |s| {
++                            Slider::new(&mut self.world_size_y, 4..=max_lg, gen_opts.y_lg.min(max_lg), move |s| {
+                                 message(WorldChange::SizeY(s))
+                             })
+                             .height(SLIDER_HEIGHT)
+diff --git a/voxygen/src/session/mod.rs b/voxygen/src/session/mod.rs
+index 16e4951..082453e 100644
+--- a/voxygen/src/session/mod.rs
++++ b/voxygen/src/session/mod.rs
+@@ -430,6 +430,19 @@ impl SessionState {
+                     if let Some(t) = m.content().as_plain() {
+                         crate::android::note_chat(t);
+                     }
++                    // my-veloren dev.8: command answers for the content audit log.
++                    #[cfg(target_os = "android")]
++                    if matches!(
++                        m.chat_type,
++                        comp::ChatType::CommandError | comp::ChatType::CommandInfo
++                    ) {
++                        let t = m
++                            .content()
++                            .as_plain()
++                            .map(|s| s.to_owned())
++                            .unwrap_or_else(|| format!("{:?}", m.content()));
++                        crate::content_audit::note_server_msg(&t);
++                    }
+                     self.hud.new_message(m);
+                 },
+                 client::Event::GroupInventoryUpdate(item, uid) => {
+@@ -886,6 +899,8 @@ impl PlayState for SessionState {
+                 }
+             }
+ 
++            #[cfg(target_os = "android")]
++            crate::content_audit::set_mine_target(mine_target.is_some());
+             // Set break_block_pos based on currently selected block
+             self.inputs.break_block_pos = if let Some(mt) = mine_target {
+                 self.scene.set_select_pos(Some(mt.position_int()));
+@@ -1766,6 +1781,16 @@ impl PlayState for SessionState {
+                 self.publish_touch_context(global_state);
+             }
+ 
++            // my-veloren dev.8: content audit requests + probe (Test Lab scenario 10).
++            #[cfg(target_os = "android")]
++            if crate::android::autostart_enabled() {
++                crate::content_audit::session_tick(
++                    &mut self.client.borrow_mut(),
++                    self.walk_forward_dir,
++                    self.walk_right_dir,
++                );
++            }
++
+             // my-veloren dev.5: Test Lab autosave check drops one inventory stack.
+             #[cfg(target_os = "android")]
+             if crate::android::take_drop_request() {
+diff --git a/voxygen/src/singleplayer/mod.rs b/voxygen/src/singleplayer/mod.rs
+index b01080c..3e0f609 100644
+--- a/voxygen/src/singleplayer/mod.rs
++++ b/voxygen/src/singleplayer/mod.rs
+@@ -20,6 +20,8 @@ use tokio::runtime::Runtime;
+ use tracing::{error, info, trace, warn};
+ 
+ mod singleplayer_world;
++/// my-veloren dev.8: ready-made small worlds, phone limits, export/import.
++pub mod phone_worlds;
+ pub use singleplayer_world::{SingleplayerWorld, SingleplayerWorlds};
+ 
+ const TPS: u64 = 30;
+diff --git a/voxygen/src/singleplayer/phone_worlds.rs b/voxygen/src/singleplayer/phone_worlds.rs
+new file mode 100644
+index 0000000..35fbef0
+--- /dev/null
++++ b/voxygen/src/singleplayer/phone_worlds.rs
+@@ -0,0 +1,207 @@
++//! my-veloren dev.8 (8.2 / 8.4): several singleplayer worlds on a phone.
++//!
++//! * Ready-made small worlds: maps generated on the build machine (seed + size
++//!   below, see `tools/pregen_worlds.sh` in my-veloren) and shipped as assets,
++//!   because generating a full 1024×1024-chunk world on a phone takes far too
++//!   long. Installing one only copies its map file into a new world folder.
++//! * Worlds generated on the phone are limited to small sizes.
++//! * Export / import of every world (map, characters, server data) as one tar
++//!   file (Android only; the Java side moves it to/from Downloads).
++
++use std::{
++    fs,
++    path::{Path, PathBuf},
++};
++
++use common::{assets::ASSETS_PATH, consts::DAY_LENGTH_DEFAULT, resources::MapKind};
++use server::GenOpts;
++use tracing::{error, info};
++
++use super::{SingleplayerWorld, SingleplayerWorlds};
++
++/// A map generated on the build machine and shipped with the game.
++pub struct Pregen {
++    /// asset specifier of the map (`assets/world/map/<name>.bin`)
++    pub asset: &'static str,
++    pub name: &'static str,
++    pub seed: u32,
++    pub x_lg: u32,
++    pub y_lg: u32,
++    pub map_kind: MapKind,
++}
++
++pub const PREGEN: [Pregen; 2] = [
++    // 128×128 chunks (4 km): 1 town, 2 gnarling fortifications, 1 sahagin dungeon
++    Pregen {
++        asset: "world.map.my_veloren_small_7",
++        name: "Small land",
++        seed: 1337,
++        x_lg: 7,
++        y_lg: 7,
++        map_kind: MapKind::Square,
++    },
++    // 256×256 chunks (8 km): 3 towns, cultist + vampire castle + gnarling
++    // dungeons, dwarven mine, jungle ruin, pirate hideout, troll caves
++    Pregen {
++        asset: "world.map.my_veloren_island_8",
++        name: "Island",
++        seed: 1337,
++        x_lg: 8,
++        y_lg: 8,
++        map_kind: MapKind::Circle,
++    },
++];
++
++/// Largest world (log2 of chunks per side) the phone build lets you generate.
++/// 8 = 256×256 chunks ≈ 8×8 km; the official world is 10 (1024×1024).
++pub const PHONE_MAX_LG: u32 = 8;
++
++/// Defaults for "Create custom" on a phone: small enough to generate there.
++pub fn phone_gen_opts() -> GenOpts {
++    GenOpts {
++        x_lg: 7,
++        y_lg: 7,
++        ..GenOpts::default()
++    }
++}
++
++pub fn pregen_map_path(p: &Pregen) -> PathBuf {
++    let mut s = p.asset.replace('.', "/");
++    s.push_str(".bin");
++    ASSETS_PATH.join(s)
++}
++
++impl SingleplayerWorlds {
++    pub fn worlds_folder(&self) -> &Path { &self.worlds_folder }
++
++    /// Add a world from a shipped ready-made map. Returns its index.
++    pub fn add_pregenerated(&mut self, idx: usize) -> Option<usize> {
++        let p = PREGEN.get(idx)?;
++        let src = pregen_map_path(p);
++        let folder_name = self.world_folder_name();
++        let path = self.worlds_folder.join(folder_name);
++        if let Err(e) = fs::create_dir_all(&path) {
++            error!("pregen world: cannot create folder: {e}");
++            return None;
++        }
++        let map_path = path.join("map.bin");
++        if let Err(e) = fs::copy(&src, &map_path) {
++            error!("pregen world: cannot copy {}: {e}", src.display());
++            let _ = fs::remove_dir_all(&path);
++            return None;
++        }
++        let world = SingleplayerWorld {
++            name: p.name.to_string(),
++            gen_opts: Some(GenOpts {
++                x_lg: p.x_lg,
++                y_lg: p.y_lg,
++                map_kind: p.map_kind,
++                ..GenOpts::default()
++            }),
++            day_length: DAY_LENGTH_DEFAULT,
++            seed: p.seed,
++            is_generated: true,
++            map_path,
++            path,
++        };
++        super::singleplayer_world::write_world_meta(&world);
++        info!("pregen world '{}' added", p.name);
++        self.worlds.push(world);
++        Some(self.worlds.len() - 1)
++    }
++
++    /// Re-read the worlds folder (after an import).
++    pub fn reload(&mut self) {
++        self.worlds = super::singleplayer_world::load_worlds(&self.worlds_folder);
++        self.current = None;
++    }
++}
++
++#[cfg(target_os = "android")]
++pub mod transfer {
++    //! Export / import of all singleplayer worlds as one `.tar`.
++    use super::*;
++    use std::io;
++
++    /// Folder for files handed to / received from Java.
++    pub fn exchange_dir(worlds_folder: &Path) -> PathBuf {
++        worlds_folder
++            .parent()
++            .unwrap_or(worlds_folder)
++            .join("exchange")
++    }
++
++    pub fn export_name() -> String {
++        format!("my-veloren-saves-{}.tar", chrono::Local::now().format("%Y%m%d-%H%M%S"))
++    }
++
++    /// Write every world folder into `<exchange>/<name>` and return the path.
++    pub fn export_all(worlds: &SingleplayerWorlds) -> io::Result<PathBuf> {
++        let dir = exchange_dir(&worlds.worlds_folder);
++        fs::create_dir_all(&dir)?;
++        // only keep the newest export around
++        if let Ok(rd) = fs::read_dir(&dir) {
++            for e in rd.flatten() {
++                if e.file_name().to_string_lossy().starts_with("my-veloren-saves-") {
++                    let _ = fs::remove_file(e.path());
++                }
++            }
++        }
++        let out = dir.join(export_name());
++        let f = fs::File::create(&out)?;
++        let mut b = tar::Builder::new(io::BufWriter::new(f));
++        b.follow_symlinks(false);
++        let mut n = 0;
++        for w in &worlds.worlds {
++            if let Some(name) = w.path.file_name() {
++                b.append_dir_all(Path::new("singleplayer_worlds").join(name), &w.path)?;
++                n += 1;
++            }
++        }
++        b.into_inner()?.into_inner().map_err(|e| e.into_error())?.sync_all()?;
++        info!("export: {n} worlds -> {}", out.display());
++        Ok(out)
++    }
++
++    /// Import worlds from a tar made by `export_all`. Existing worlds are never
++    /// overwritten: an imported world whose folder name exists gets a suffix.
++    /// Returns the number of worlds added.
++    pub fn import_tar(worlds: &mut SingleplayerWorlds, tar_path: &Path) -> Result<usize, String> {
++        let dir = exchange_dir(&worlds.worlds_folder);
++        let tmp = dir.join("import-tmp");
++        let _ = fs::remove_dir_all(&tmp);
++        fs::create_dir_all(&tmp).map_err(|e| e.to_string())?;
++        let f = fs::File::open(tar_path).map_err(|e| format!("open: {e}"))?;
++        let mut a = tar::Archive::new(io::BufReader::new(f));
++        // `unpack` refuses entries that would escape `tmp` (.. / absolute paths)
++        a.unpack(&tmp).map_err(|e| format!("not a saves file: {e}"))?;
++        let src_root = tmp.join("singleplayer_worlds");
++        let rd = fs::read_dir(&src_root).map_err(|_| "no singleplayer_worlds in the file".to_string())?;
++        let mut added = 0;
++        for e in rd.flatten() {
++            let p = e.path();
++            if !p.join("meta.ron").is_file() {
++                continue;
++            }
++            let base = e.file_name().to_string_lossy().to_string();
++            let mut name = base.clone();
++            let mut i = 1;
++            while worlds.worlds_folder.join(&name).exists() {
++                name = format!("{base}_import{i}");
++                i += 1;
++            }
++            let dst = worlds.worlds_folder.join(&name);
++            if fs::rename(&p, &dst).is_ok() {
++                added += 1;
++            }
++        }
++        let _ = fs::remove_dir_all(&tmp);
++        worlds.reload();
++        info!("import: {added} worlds from {}", tar_path.display());
++        if added == 0 {
++            Err("no world found in the file".into())
++        } else {
++            Ok(added)
++        }
++    }
++}
+diff --git a/voxygen/src/singleplayer/singleplayer_world.rs b/voxygen/src/singleplayer/singleplayer_world.rs
+index dee98ad..6a18858 100644
+--- a/voxygen/src/singleplayer/singleplayer_world.rs
++++ b/voxygen/src/singleplayer/singleplayer_world.rs
+@@ -45,7 +45,7 @@ fn load_map(path: &Path) -> Option<SingleplayerWorld> {
+     version::try_load(std::io::Cursor::new(bytes), path)
+ }
+ 
+-fn write_world_meta(world: &SingleplayerWorld) {
++pub(super) fn write_world_meta(world: &SingleplayerWorld) {
+     let path = &world.path;
+ 
+     if let Err(e) = fs::create_dir_all(path) {
+@@ -120,7 +120,7 @@ fn migrate_old_singleplayer(from: &Path, to: &Path) {
+     }
+ }
+ 
+-fn load_worlds(path: &Path) -> Vec<SingleplayerWorld> {
++pub(super) fn load_worlds(path: &Path) -> Vec<SingleplayerWorld> {
+     let Ok(paths) = fs::read_dir(path) else {
+         let _ = fs::create_dir_all(path);
+         return Vec::new();
+@@ -143,7 +143,7 @@ fn load_worlds(path: &Path) -> Vec<SingleplayerWorld> {
+ pub struct SingleplayerWorlds {
+     pub worlds: Vec<SingleplayerWorld>,
+     pub current: Option<usize>,
+-    worlds_folder: PathBuf,
++    pub(super) worlds_folder: PathBuf,
+ }
+ 
+ impl SingleplayerWorlds {
+@@ -189,7 +189,7 @@ impl SingleplayerWorlds {
+         self.worlds.remove(idx);
+     }
+ 
+-    fn world_folder_name(&self) -> String {
++    pub(super) fn world_folder_name(&self) -> String {
+         use chrono::{Datelike, Timelike};
+         let now = chrono::Local::now().naive_local();
+         let name = format!(
+diff --git a/voxygen/src/touch.rs b/voxygen/src/touch.rs
+index f5b8fc2..740a600 100644
+--- a/voxygen/src/touch.rs
++++ b/voxygen/src/touch.rs
+@@ -1499,7 +1499,19 @@ pub fn set_typing(t: bool) { TYPING.store(t, std::sync::atomic::Ordering::Relaxe
+ pub fn typing() -> bool { TYPING.load(std::sync::atomic::Ordering::Relaxed) }
+ 
+ /// Whether the touch overlay is active on this platform.
+-pub fn active() -> bool { cfg!(target_os = "android") }
++pub fn active() -> bool {
++    // my-veloren dev.8: the desktop harness (Xvfb) can show the phone layout of
++    // the menus with MY_VELOREN_TOUCH_UI=1 (screenshots without a device).
++    #[cfg(not(target_os = "android"))]
++    {
++        static HARNESS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
++        *HARNESS.get_or_init(|| std::env::var_os("MY_VELOREN_TOUCH_UI").is_some())
++    }
++    #[cfg(target_os = "android")]
++    {
++        true
++    }
++}
+ 
+ pub fn with_layer<R>(f: impl FnOnce(&mut TouchLayer) -> R) -> R {
+     let mut g = LAYER.lock().unwrap_or_else(|e| e.into_inner());
