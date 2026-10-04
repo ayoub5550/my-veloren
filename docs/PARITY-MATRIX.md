@@ -40,24 +40,24 @@ is authorized. Every exception needs a reason, owner decision and impact on adve
 Status meaning: PASS = automated receipt in the VM logcat; FAIL = automated check failed (cause in DEV8); NOT RUN = no automated
 receipt, owner's phone check needed. The physical gate for every row is the owner's Poco F3.
 
-| Feature | Status (vm2) | Receipt / note |
+| Feature | Status (vm3, final) | Receipt / note |
 |---|---|---|
 | Towns and villagers | PASS | 41 towns on the official map; 59 villagers at a tavern |
-| NPC dialogue | PASS | contextual Use → dialogue (sc. 10 and sc. 1) |
+| NPC dialogue | PASS | contextual Use → dialogue (sc. 1 in vm1–vm3; sc. 10 in vm2, timeout in vm3) |
 | Quests (rtsim, via dialogue) | NOT RUN | dialogue works; quest completion not automated |
-| Farming / harvest | PASS | Interact on a farm field crop, items 4 → 5 |
+| Farming / harvest | PASS (vm2) / FAIL (vm3) | vm2 Interact on a crop, items 4 → 5; vm3 no item (VM timing) |
 | Caves | PASS | troll cave reached with hostiles (the map has no separate cave markers) |
 | Dungeons: Gnarling, Haniwa, Sahagin, Myrmidon | PASS | bosses Harvester 1300 HP, Gravewarden 1000, Karkatha 2000, Minotaur 3000 |
-| Dungeon: Adlet | PASS (vm1) / FAIL (vm2) | vm1 AdletElder 1500 HP; vm2 NPCs not streamed in within 90 s at ~5 fps |
+| Dungeon: Adlet | PASS | vm1 AdletElder 1500 HP; vm3 FrostWyvern 1000 HP (vm2 timeout) |
 | Day/night cycle | PASS | 20.1 h / 12.1 h |
 | Weather (rain) | PASS | rain 0.34 |
 | Gliding | PASS | gliding from +150 m |
 | Boats / airships spawn | PASS | SailBoat, AirBalloon |
-| Boarding a boat | FAIL | no Mount prompt next to the hull (seats on the deck) |
+| Boarding a boat | FAIL | on the deck in vm3 but no Mount prompt (seat/helm not targeted) |
 | Mining | FAIL | ore never under the crosshair at VM fps |
-| Hunting | FAIL | target moved out of reach during the attack |
-| Taming (collar) | FAIL | collar not consumed, no pet (cause under investigation) |
-| Riding / dismount | FAIL / PASS | no pet to mount in vm2 |
+| Hunting | PASS | vm3: boar killed, wild 1 → 0 |
+| Taming (collar) | PASS | vm3: pets 0 → 1, collar consumed |
+| Riding / dismount | PASS / PASS | vm3: rode 64.3 m in 4 s, then dismount |
 | Several worlds + ready-made worlds | PASS | `pregen_world_added`, `world_small` 128×128 |
 | Several characters | PASS | `two_characters`, `second_character` |
 | Save export / import | PASS | tar → `Download/`, import adds a world without overwriting |

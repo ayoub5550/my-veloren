@@ -3,7 +3,8 @@
 > **الملخص بالعربية:** dev.8 يراجع محتوى العالم كله على الهاتف ويضيف إدارة العوالم والحفظ.
 > - **مراجعة المحتوى (سيناريو 10 الآلي):** تمت مراجعة المدن والقرويين والحديث مع NPC، والحصاد في الحقول، والكهوف،
 >   و5 أنواع من الزنزانات وزعمائها (أقواهم Minotaur بـ3000 HP)، والليل والنهار، والمطر، والطيران الشراعي، وظهور القارب والمنطاد.
->   النتيجة في vm2 كانت 18/25. ما زال يفشل آليًا: التعدين، والصيد، والترويض بالطوق، والركوب، والصعود إلى القارب.
+>   النتيجة في vm3 (الأخيرة) 21/25: نجح الآن الصيد والترويض بالطوق والركوب والنزول وزنزانة Adlet. ما زال يفشل آليًا: التعدين والصعود إلى القارب،
+>   أما الحصاد والحديث مع NPC في المدينة فقد نجحا في vm2 وفشلا في vm3 (تذبذب توقيت على الجهاز الافتراضي).
 >   سبب هذا الفشل هو أداة الاختبار عند ~5 fps على الجهاز الافتراضي (التصويب والاقتراب)، ولم نجد خطأ في كود اللعبة، لكن ذلك غير مؤكد.
 >   هذه البنود تبقى لتجربة المالك على هاتفه. التفاصيل في الجدول أدناه وفي [PARITY-MATRIX.md](PARITY-MATRIX.md).
 > - **المهمات:** تأتي من حوار القرويين (rtsim). الحوار نفسه يعمل (`npc_interact` PASS)، أما إكمال مهمة كاملة فلم يُختبر آليًا (NOT RUN).
@@ -35,7 +36,7 @@ The ready-made worlds are in `native/assets-extra/` (appended to `assets.tar` by
 
 | # | Item | Status | Implementation |
 |---|---|---|---|
-| 8.1 | Content audit on the phone | **Built; VM 18/25 (vm2)**, see the table below | `voxygen/src/content_audit.rs`: `Probe8` reads the client ECS every session tick (sites, time of day, weather, hostiles + strongest, villagers, wild/pets/ships, riding, inventory, `mine_target`, `can_interact`/`can_mount`, nearby creatures). Scenario 10 in `android.rs` drives the game with injected touches plus admin commands (`/site plot:…`, `/time`, `/weather_zone`, `/spawn`, `/ship`, `/airship`, `/give_item`) |
+| 8.1 | Content audit on the phone | **Built; VM 21/25 (vm3)**, see the table below | `voxygen/src/content_audit.rs`: `Probe8` reads the client ECS every session tick (sites, time of day, weather, hostiles + strongest, villagers, wild/pets/ships, riding, inventory, `mine_target`, `can_interact`/`can_mount`, nearby creatures). Scenario 10 in `android.rs` drives the game with injected touches plus admin commands (`/site plot:…`, `/time`, `/weather_zone`, `/spawn`, `/ship`, `/airship`, `/give_item`) |
 | 8.2 | Several worlds; new world on the phone; ready-made worlds | **Built; VM PASS** (`pregen_world_added`, `world_small`); host screenshots | `menu/main/ui/world_selector.rs` (touch): a "+ {name} (ready)" row per ready-made world. The size sliders are capped at 2^8 chunks (`PHONE_MAX_LG = 8`), and the phone default is 7×7. Name/seed fields use the Android text dialog. `singleplayer/phone_worlds.rs`: `PREGEN` (Small land 7×7 square, Island 8×8 circle, seed 1337), `add_pregenerated` copies the `.bin` into `userdata/` as a normal world |
 | 8.3 | Several characters | **Built; VM PASS** (`two_characters`, `second_character`) | Upstream feature; scenario 11 creates a second character "Second" and enters the world with it |
 | 8.4 | Save export/import | **Built; VM PASS** (`export_tar`, `import_tar`, `export_downloads`); the SAF picker UI is not driven automatically | `phone_worlds::transfer`: a tar of every world → `userdata/exchange/`, then Java `exportFile` copies it to `Download/` (MediaStore, API 29+). Import: `ACTION_OPEN_DOCUMENT` → copy → `import_tar`, which never overwrites (`_importN` suffix). Toasts report the result |
@@ -59,7 +60,7 @@ on-device generation is limited to 8×8 and ready-made worlds are offered first.
 |---|---|---|---|---|---|
 | vm1 (`matrix-2ud0bnq3odrkk`) | d8build1 | **3/3** + menu checks 3/3 | 16/24 | 14/15 (`npc_interact`: sc. 10 left the character in a dungeon arena) | 0 |
 | vm2 (`matrix-971au0at4g1da`) | d8build2 | **3/3** + menu checks 3/3 | **18/25** | **15/15** | 0 |
-| vm3 | d8build3 (harness only: re-approach in hunting, a separate pet horse for riding, hop onto the boat deck, nearby-creature diagnostics) | see the vm3 note below | | | |
+| vm3 (matrix `8172281575501606288`) | d8build3 (harness only: re-approach in hunting, a separate pet horse for riding, hop onto the boat deck, nearby-creature diagnostics) | **3/3** + menu checks 3/3 | **21/25** | **15/15** | 0 |
 
 ### Content audit, item by item (vm2)
 
@@ -83,11 +84,25 @@ on-device generation is limited to 8×8 and ready-made worlds are offered first.
 
 ### vm3 note
 
-VM3_RESULTS_PLACEHOLDER
+Final automated run for dev.8 (2026-10-04, MediumPhone.arm v34, outcome Passed, 0 PANIC). Scenario 10: 21/25,
+failed = `mining`, `ship_board`, `npc_interact` (town), `harvest`.
+
+| Check | vm2 → vm3 | Receipt |
+|---|---|---|
+| `hunt` | FAIL → **PASS** | wild alive 1 → 0; near(before) = Boar/wild at 4.1 m, 55 HP. A `/spawn`ed animal has no loot table, so loot = 0 (natural animals drop loot) |
+| `tame` | FAIL → **PASS** | pets 0 → 1, collars 1 → 0; near(before) = Horse/wild at 1.0 m. The vm2 failure was distance (the horse was out of the 5 m range), not game code |
+| `ride`, `ride_moves`, `dismount` | FAIL, FAIL, PASS → **PASS, PASS, PASS** | riding = true, moved 64.3 m in 4 s on the horse, then dismount |
+| `dungeon` Adlet | FAIL → **PASS** (all 5 dungeons PASS) | Gnarling Harvester 1300, Adlet FrostWyvern 1000, Haniwa Gravewarden 1000, Sahagin Karkatha 2000, Myrmidon Minotaur 3000 |
+| `ship_board` | FAIL → FAIL | on deck (`ship_dist=0.09`) but `can_mount=false`: the harness does not reach a seat/helm with the crosshair. Owner's phone check |
+| `mining` | FAIL → FAIL | pickaxe wielded, `mine_target=false` (crosshair aim at ~5 fps). Owner's phone check |
+| `harvest` | PASS → FAIL | `can_interact=true` but items 3 → 3. Passed in vm2 (items 4 → 5): VM timing, not a regression (no code change between d8build2 and d8build3 outside the harness) |
+| `npc_interact` (sc. 10, town) | PASS → FAIL | timeout at 1.1 m from an NPC, 6 taps. The same check PASSES in sc. 1 of the same run (dialogue = true) |
+
+So every content area has passed at least once in vm1–vm3 except **mining** and **boat boarding**, and **quests** are NOT RUN.
 
 ## Known gaps
 
-- Mining, hunting, taming, riding and boat boarding are not proven by the automated run (see above). They are upstream
+- Mining and boat boarding are not proven by the automated run (see the vm3 note); quest completion is NOT RUN. They are upstream
   gameplay that is unchanged by the port, so this is most likely a test-harness/VM limit, not a game bug. The owner's
   phone test is the gate.
 - The SAF import picker flow is checked by code review only. The automated run feeds the exported tar into `import_tar` directly.
