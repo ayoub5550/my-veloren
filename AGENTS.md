@@ -15,6 +15,11 @@
 > floating stick, touch-only Controls tab, Singleplayer-only main menu, adaptive launcher icon). See [docs/DEV7.md](docs/DEV7.md).
 > Not merged without owner approval.
 >
+> **2026-10-04 (dev.8):** owner «ابدأ dev.8» (13:01 UTC) with a Firebase key; VM-only automated testing to save quota.
+> Branch `feat/dev8-content` stacked on the unmerged dev.7 (PR #8), patch 0007 (content audit scenario 10, worlds/chars/saves
+> scenario 11, ready-made worlds in `native/assets-extra`, export/import). Owner: no prerelease for dev.8. New signing key
+> (old one lost with the previous build environment). See [docs/DEV8.md](docs/DEV8.md). Not merged without owner approval.
+>
 > **2026-10-04:** dev.5 + dev.6 merged (PR #6, #7). Owner tested dev.6 on his Poco F3 and his fixes became
 > **dev.7** in [docs/ROADMAP.md](docs/ROADMAP.md) (Ultra heat, button redesign/no overlap, smoother joystick,
 > touch-consistent menus, touch-only controls settings, crashes). Owner: the pending Firebase physical runs

@@ -29,6 +29,13 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
+import android.widget.Toast;
+import android.content.ContentValues;
+import android.content.ContentResolver;
+import android.net.Uri;
+import android.provider.MediaStore;
+import android.os.Environment;
+import java.io.OutputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -455,6 +462,127 @@ public class VelorenActivity extends NativeActivity {
                 finish();
             }
         });
+    }
+
+    // ------------------------------------------------- dev.8 save export / import (8.4) ---
+
+    /** Registered from Rust with RegisterNatives (see android.rs native_file).
+     *  op 1 = export finished, op 2 = import file picked (text = local copy path). */
+    private static native void nativeFile(int op, String text, boolean ok);
+
+    private static final int REQ_IMPORT = 4711;
+    private String importDest;
+
+    /** Called from Rust: show a short message. */
+    public void toast(final String msg) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(VelorenActivity.this, msg, Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    /**
+     * Called from Rust: copy the saves file made by the game (all singleplayer worlds,
+     * their maps and characters) into the public Download folder, so it can be moved to
+     * another phone or kept as a backup. API 29+: MediaStore (no permission needed);
+     * API 26-28: app-specific external Download folder.
+     */
+    public void exportFile(final String path, final String name) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String where;
+                boolean ok = false;
+                try {
+                    File src = new File(path);
+                    if (Build.VERSION.SDK_INT >= 29) {
+                        ContentValues v = new ContentValues();
+                        v.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+                        v.put(MediaStore.MediaColumns.MIME_TYPE, "application/x-tar");
+                        v.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+                        ContentResolver cr = getContentResolver();
+                        Uri uri = cr.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
+                        if (uri == null) throw new Exception("MediaStore insert failed");
+                        try (InputStream in = new FileInputStream(src);
+                             OutputStream out = cr.openOutputStream(uri)) {
+                            copy(in, out);
+                        }
+                        where = "Download/" + name;
+                    } else {
+                        File dir = getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+                        File dst = new File(dir, name);
+                        try (InputStream in = new FileInputStream(src);
+                             OutputStream out = new FileOutputStream(dst)) {
+                            copy(in, out);
+                        }
+                        where = dst.getAbsolutePath();
+                    }
+                    ok = true;
+                    toast("Saves exported / تم تصدير الحفظ: " + where);
+                } catch (Throwable e) {
+                    where = "export failed: " + e;
+                    toast("Export failed / فشل التصدير: " + e.getMessage());
+                }
+                Log.i(TAG, "dev8 export ok=" + ok + " " + where);
+                try { nativeFile(1, where, ok); } catch (Throwable ignored) { }
+            }
+        }).start();
+    }
+
+    /** Called from Rust: let the player choose a saves file (system file picker). */
+    public void pickImport(final String dest) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    importDest = dest;
+                    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType("*/*");
+                    startActivityForResult(i, REQ_IMPORT);
+                } catch (Throwable e) {
+                    try { nativeFile(2, "no file picker: " + e.getMessage(), false); } catch (Throwable ignored) { }
+                }
+            }
+        });
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, final Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQ_IMPORT) return;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null || importDest == null) {
+            try { nativeFile(2, "", false); } catch (Throwable ignored) { }
+            return;
+        }
+        final Uri uri = data.getData();
+        final String dest = importDest;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    File dst = new File(dest);
+                    dst.getParentFile().mkdirs();
+                    try (InputStream in = getContentResolver().openInputStream(uri);
+                         OutputStream out = new FileOutputStream(dst)) {
+                        copy(in, out);
+                    }
+                    Log.i(TAG, "dev8 import copied to " + dest);
+                    nativeFile(2, dest, true);
+                } catch (Throwable e) {
+                    try { nativeFile(2, "import failed: " + e.getMessage(), false); } catch (Throwable ignored) { }
+                }
+            }
+        }).start();
+    }
+
+    private static void copy(InputStream in, OutputStream out) throws Exception {
+        byte[] buf = new byte[1 << 16];
+        int n;
+        while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        out.flush();
     }
 
     // ---------------------------------------------------------------------- helpers ---

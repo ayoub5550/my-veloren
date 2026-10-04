@@ -3,7 +3,7 @@
 **dev3 status (2026-10-03, native port):** Camera/movement (touch stick/camera/pinch/glide) and
 UI touch (menu bar, context buttons, layout editor) are **IMPLEMENTED for touch** with Test Lab evidence:
 [DEV3.md](DEV3.md). Under the native port (ADR-002), gameplay rows run the upstream code as-is;
-Android-specific gaps are performance (dev4: mobile tiers done, physical 30 fps gate NOT RUN, see [DEV4](DEV4.md)) and lifecycle (dev5: pause/resume, autosave, Back, crash report PASS on VM, see [DEV5](DEV5.md)) and touch UI (dev6: window gestures, Android keyboard for chat/name, DPI UI scale, Arabic display: 7/7 + 1/1 PASS on VM, physical NOT RUN; see [DEV6](DEV6.md)) and the owner's phone fixes (dev7: phone-safe Ultra + thermal guard, icon buttons without overlap, floating stick, touch-only controls settings, new launcher icon: VM 9/9 + 15/15 + 3/3, 0 PANIC (vm13), owner's Poco F3 is the physical gate; see [DEV7](DEV7.md)).
+Android-specific gaps are performance (dev4: mobile tiers done, physical 30 fps gate NOT RUN, see [DEV4](DEV4.md)) and lifecycle (dev5: pause/resume, autosave, Back, crash report PASS on VM, see [DEV5](DEV5.md)) and touch UI (dev6: window gestures, Android keyboard for chat/name, DPI UI scale, Arabic display: 7/7 + 1/1 PASS on VM, physical NOT RUN; see [DEV6](DEV6.md)) and the owner's phone fixes (dev7: phone-safe Ultra + thermal guard, icon buttons without overlap, floating stick, touch-only controls settings, new launcher icon: VM 9/9 + 15/15 + 3/3, 0 PANIC (vm13), owner's Poco F3 is the physical gate; see [DEV7](DEV7.md)) and the content audit (dev8: per-feature table below, see [DEV8](DEV8.md)).
 
 **dev1 status (2026-10-03, archived Unity slice):** Voxel geometry, Character creation, Equipment visuals, Procedural
 animation, Camera/movement, World generation/rendering and Android robustness are **STARTED**
@@ -34,6 +34,33 @@ is authorized. Every exception needs a reason, owner decision and impact on adve
 | Offline distribution | Fresh complete install launches in airplane mode | All core paths work with no first-run download/account | dev5–8 |
 | Android robustness | ARM64/IL2CPP artifact and real-device smoke | Lifecycle/thermal/memory/page-size/upgrade matrix | dev1–8 |
 | Provenance/distribution | Original attribution and component map | Release obligations and engine integration resolved | dev1–8 |
+
+## dev.8 content audit on the phone (Test Lab VM MediumPhone.arm v34, scenario 10/11; see [DEV8](DEV8.md))
+
+Status meaning: PASS = automated receipt in the VM logcat; FAIL = automated check failed (cause in DEV8); NOT RUN = no automated
+receipt, owner's phone check needed. The physical gate for every row is the owner's Poco F3.
+
+| Feature | Status (vm2) | Receipt / note |
+|---|---|---|
+| Towns and villagers | PASS | 41 towns on the official map; 59 villagers at a tavern |
+| NPC dialogue | PASS | contextual Use → dialogue (sc. 10 and sc. 1) |
+| Quests (rtsim, via dialogue) | NOT RUN | dialogue works; quest completion not automated |
+| Farming / harvest | PASS | Interact on a farm field crop, items 4 → 5 |
+| Caves | PASS | troll cave reached with hostiles (the map has no separate cave markers) |
+| Dungeons: Gnarling, Haniwa, Sahagin, Myrmidon | PASS | bosses Harvester 1300 HP, Gravewarden 1000, Karkatha 2000, Minotaur 3000 |
+| Dungeon: Adlet | PASS (vm1) / FAIL (vm2) | vm1 AdletElder 1500 HP; vm2 NPCs not streamed in within 90 s at ~5 fps |
+| Day/night cycle | PASS | 20.1 h / 12.1 h |
+| Weather (rain) | PASS | rain 0.34 |
+| Gliding | PASS | gliding from +150 m |
+| Boats / airships spawn | PASS | SailBoat, AirBalloon |
+| Boarding a boat | FAIL | no Mount prompt next to the hull (seats on the deck) |
+| Mining | FAIL | ore never under the crosshair at VM fps |
+| Hunting | FAIL | target moved out of reach during the attack |
+| Taming (collar) | FAIL | collar not consumed, no pet (cause under investigation) |
+| Riding / dismount | FAIL / PASS | no pet to mount in vm2 |
+| Several worlds + ready-made worlds | PASS | `pregen_world_added`, `world_small` 128×128 |
+| Several characters | PASS | `two_characters`, `second_character` |
+| Save export / import | PASS | tar → `Download/`, import adds a world without overwriting |
 
 ## Explicit exclusions or separate decisions
 
